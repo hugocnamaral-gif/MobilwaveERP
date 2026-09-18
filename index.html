@@ -147,7 +147,7 @@ var R="#2E8C93",G="#C98F34",GD="#C98F34",GRN="#3E9E7A",BLU="#4E86B0",PUR="#37506
 var STAGES=["lead","proposta","ganho","projeto","concluido"];
 var SL2={lead:"Lead",proposta:"Proposta",projeto:"Projeto",ganho:"Ganho",concluido:"Concluído",perdido:"Perdido"};
 var SC={lead:R,proposta:G,projeto:PUR,ganho:GRN,concluido:"#2E8C93",perdido:"#7E8892"};
-var SPECS=["Gastro","Pneumo","Filestream","Integração"];
+var SPECS=["Gastro","Pneumo","ORL","Cardio","Uro","Ginecologia","Dermatologia","Oftalmologia","Neurologia","Anatomia Patológica","Imagem","Filestream","Integração"];
 var REGS=["Andaluzia","Aragão","Astúrias","Baleares","Canárias","Cantábria","Castela-Mancha","Castela e Leão","Catalunha","Ceuta","Estremadura","Galiza","La Rioja","Madrid","Melilla","Múrcia","Navarra","País Basco","Valencia","Andorra"];
 var MO=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 
@@ -2148,7 +2148,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   async function loadFromSB(){
     ready=false;
     try{
-      var r=await sb.from("app_state").select("data").eq("id",stateId()).single();
+      var r=await sb.from("app_state").select("data").eq("id",stateId()).maybeSingle();
       if(r.error)throw r.error;
       var d=r.data&&r.data.data;
       if(d&&Object.keys(d).length){D=d;}
