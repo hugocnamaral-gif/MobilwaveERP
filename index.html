@@ -264,6 +264,8 @@ function clRowsHtml(){
     if(ctF.channel!=="Todos"&&cl.channel!==ctF.channel)return false;
     if(ctF.cloud==="Cloud"&&!cl.cloud)return false;
     if(ctF.cloud==="Não"&&cl.cloud)return false;
+    if(ctF.saas==="SaaS"&&!cl.saas)return false;
+    if(ctF.saas==="Não"&&cl.saas)return false;
     if(q&&cl.name.toLowerCase().indexOf(q)<0)return false;
     var specs=D.clientSpecs.filter(function(s){return s.clientId===cl.id});
     if(ctF.spec!=="Todos"&&!specs.some(function(s){return s.specialty===ctF.spec}))return false;
@@ -273,7 +275,19 @@ function clRowsHtml(){
   }).sort(function(a,b){return a.name.localeCompare(b.name)});
   if(ctList.length===0)return '<tr><td colspan="6" style="text-align:center;padding:24px;color:#7E8892;font-size:13px">Sem clientes para estes filtros</td></tr>';
   var h="";
-  ctList.forEach(function(cl){
+  var holdMap={},stand=[];
+  ctList.forEach(function(cl){ if(cl.holding){(holdMap[cl.holding]=holdMap[cl.holding]||[]).push(cl);} else stand.push(cl); });
+  var items=stand.map(function(cl){return{k:"c",name:cl.name,cl:cl};});
+  Object.keys(holdMap).forEach(function(hn){items.push({k:"h",name:hn,cos:holdMap[hn]});});
+  items.sort(function(a,b){return a.name.localeCompare(b.name);});
+  items.forEach(function(it){
+    if(it.k==="h"){
+      var cos=it.cos,anyC=cos.some(function(c){return c.cloud;}),anyS=cos.some(function(c){return c.saas;});
+      var reg=cos[0].region||"—",allR=cos.every(function(c){return c.region===reg;});
+      h+='<tr style="background:'+rgba(R,.03)+'"><td><a onclick="openHolding(\''+it.name+'\')" style="font-weight:700;color:'+R+';cursor:pointer;text-decoration:none;border-bottom:1px dotted '+rgba(R,.4)+'" title="Ver empresas do grupo">🏢 '+esc(it.name)+'</a> <span style="font-size:9px;color:#fff;background:'+SL+';border-radius:20px;padding:1px 7px;vertical-align:middle">HOLDING</span></td><td>'+(allR?reg:"Vários")+'</td><td>Grupo</td><td>'+(anyC?'<span style="background:'+rgba(BLU,.12)+';color:'+BLU+';border-radius:5px;padding:2px 7px;font-size:10px;font-weight:600">☁ Cloud</span>':'')+(anyS?' <span style="background:'+rgba(PUR,.12)+';color:'+PUR+';border-radius:5px;padding:2px 7px;font-size:10px;font-weight:600">SaaS</span>':'')+'</td><td><span style="font-size:12px;color:#7E8892">'+cos.length+' empresas — <a onclick="openHolding(\''+it.name+'\')" style="color:'+R+';cursor:pointer;font-weight:600">ver detalhe</a></span></td><td></td></tr>';
+      return;
+    }
+    var cl=it.cl;
     var specs=D.clientSpecs.filter(function(s){return s.clientId===cl.id});
     h+='<tr><td><a onclick="openClient(\''+cl.id+'\')" style="font-weight:600;color:'+R+';cursor:pointer;text-decoration:none;border-bottom:1px dotted '+rgba(R,.4)+'" title="Ver ficha, morada e contactos">'+esc(cl.name)+'</a>'+((D.contacts||[]).filter(function(x){return x.clientId===cl.id}).length?' <span style="font-size:9px;color:#A6AEB6">\ud83d\udc64'+(D.contacts||[]).filter(function(x){return x.clientId===cl.id}).length+'</span>':'')+'</td><td>'+cl.region+'</td><td>'+cl.channel+'</td><td>'+(cl.cloud?'<span style="background:'+rgba(BLU,.12)+';color:'+BLU+';border-radius:5px;padding:2px 7px;font-size:10px;font-weight:600;white-space:nowrap">☁ Cloud</span>':'')+(cl.saas?' <span style="background:'+rgba(PUR,.12)+';color:'+PUR+';border-radius:5px;padding:2px 7px;font-size:10px;font-weight:600">SaaS</span>':'')+'</td><td>';
     if(specs.length===0){h+='<span style="font-size:11px;color:#A6AEB6">Sem especialidades registadas</span>'}
@@ -283,9 +297,9 @@ function clRowsHtml(){
   });
   return h;
 }
-function clFilter(v){if(!window._ctF)window._ctF={region:"Todos",channel:"Todos",spec:"Todos",at:"Todos",cloud:"Todos"};window._ctF.name=v;var el=document.getElementById("clRows");if(el)el.innerHTML=clRowsHtml();}
-function setCTF(k,v){window._ctF=window._ctF||{region:"Todos",channel:"Todos",spec:"Todos",at:"Todos",cloud:"Todos"};window._ctF[k]=v;ren()}
-function clrCTF(){window._ctF={region:"Todos",channel:"Todos",spec:"Todos",at:"Todos",cloud:"Todos"};ren()}
+function clFilter(v){if(!window._ctF)window._ctF={region:"Todos",channel:"Todos",spec:"Todos",at:"Todos",cloud:"Todos",saas:"Todos"};window._ctF.name=v;var el=document.getElementById("clRows");if(el)el.innerHTML=clRowsHtml();}
+function setCTF(k,v){window._ctF=window._ctF||{region:"Todos",channel:"Todos",spec:"Todos",at:"Todos",cloud:"Todos",saas:"Todos"};window._ctF[k]=v;ren()}
+function clrCTF(){window._ctF={region:"Todos",channel:"Todos",spec:"Todos",at:"Todos",cloud:"Todos",saas:"Todos"};ren()}
 function dTodayStr(){return new Date().toISOString().slice(0,10)}
 function isOverdue(d){return d.nextDate&&d.nextDate<dTodayStr()&&!isClosed(d)}
 function daysLate(d){return d.nextDate?Math.floor((new Date(dTodayStr())-new Date(d.nextDate))/86400000):0}
@@ -791,6 +805,22 @@ function openClient(clientId){
     b+='<div style="padding:9px 0;border-bottom:1px solid #f8f7f5"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><div style="flex:1"><div style="font-size:13px;font-weight:600">'+c.name+'</div>'+(c.role?'<div style="font-size:11px;color:#7E8892">'+c.role+'</div>':'')+'<div style="font-size:11.5px;margin-top:3px">'+(c.phone?'<a href="tel:'+c.phone.replace(/\s/g,"")+'" style="color:'+BLU+';text-decoration:none">📞 '+c.phone+'</a>&nbsp;&nbsp;':'')+(c.email?'<a href="mailto:'+c.email+'" style="color:'+BLU+';text-decoration:none">✉️ '+c.email+'</a>':'')+'</div>'+(c.notes?'<div style="font-size:11px;color:#A6AEB6;margin-top:3px">'+c.notes+'</div>':'')+'</div><div style="white-space:nowrap"><button style="background:none;border:none;font-size:12px;cursor:pointer;color:#C6CDD4" onclick="editCt(\''+c.id+'\')">✎</button><button style="background:none;border:none;font-size:12px;cursor:pointer;color:#C6CDD4" onclick="delCt(\''+c.id+'\')">✕</button></div></div></div>'});
   b+='</div>';
   document.getElementById("mArea").innerHTML=mWrap(cl.name,b);}
+function openHolding(name){
+  var cos=D.clients.filter(function(c){return c.holding===name;}).sort(function(a,b){return a.name.localeCompare(b.name);});
+  if(!cos.length)return;
+  function debtOf(cl){var ds=D.deals.filter(function(d){return d.clientId===cl.id;});return D.invoices.filter(function(i){return !i.collected&&ds.some(function(d){return d.id===i.dealId;});}).reduce(function(a,i){return a+ivC(i);},0);}
+  function wonOf(cl){return D.deals.filter(function(d){return d.clientId===cl.id&&isWon(d);}).reduce(function(a,d){return a+(Number(d.value)||0);},0);}
+  var totDebt=cos.reduce(function(a,c){return a+debtOf(c);},0),totWon=cos.reduce(function(a,c){return a+wonOf(c);},0);
+  var b='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+bdg(cos.length+" empresas",SL)+bdg("Dívida acumulada "+fmt(totDebt),totDebt>0?DNG:GRN)+bdg("Vendas "+fmt(totWon),GD)+'</div>';
+  b+='<div style="font-size:12px;color:#7E8892;margin-bottom:6px">Empresas do grupo — clica numa para abrir a ficha.</div><div style="border-top:1px solid #EFF1F4">';
+  cos.forEach(function(c){var dv=debtOf(c);
+    b+='<div onclick="openClient(\''+c.id+'\')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid #f8f7f5;cursor:pointer">'
+      +'<div style="font-size:13px;font-weight:600;color:'+R+'">'+esc(c.name)+(c.cloud?' <span style="font-size:9px;color:'+BLU+'">☁</span>':'')+(c.saas?' <span style="font-size:9px;color:'+PUR+'">SaaS</span>':'')+'</div>'
+      +'<div style="font-size:12px;color:'+(dv>0?DNG:"#A6AEB6")+';font-weight:600;white-space:nowrap">'+(dv>0?fmt(dv)+" em dívida":"sem dívida")+'</div></div>';
+  });
+  b+='</div>';
+  document.getElementById("mArea").innerHTML=mWrap("🏢 "+esc(name)+" — Grupo",b);}
+window.openHolding=openHolding;
 function saveSettings(){var b=Number(document.getElementById("setBudget").value)||D.budget;var t=Number(document.getElementById("setTime").value)||0;var bk=Number(document.getElementById("setBk").value);if(isNaN(bk))bk=7;D.budget=b;D.timeCostMonth=t;D.autoBackupDays=bk;logAct("Nota","Definições actualizadas: objectivo "+fmt(b)+", custo tempo "+fmt(t)+"/mês, backup cada "+bk+" dias");save();ren()}
 function daysSinceBackup(){if(!D.lastBackup)return null;return Math.floor((new Date()-new Date(D.lastBackup))/86400000)}
 function integrityCheck(){var p=[];
@@ -1066,13 +1096,14 @@ if(cTab==="dashboard"){
     h+='<tr><td style="font-weight:600">'+cn(d.clientId)+'</td><td style="color:#7E8892">'+d.product.slice(0,45)+'</td><td>'+(d.lostDate?fmtD(d.lostDate):"—")+'</td><td style="text-align:right;font-weight:700">'+fmt(d.value)+'</td><td style="font-size:11px;color:#7E8892;max-width:200px">'+(d.lostReason||"—")+'</td><td style="text-align:right;white-space:nowrap"><button style="background:'+rgba(SL,.15)+';color:'+SL+';border:none;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:600;cursor:pointer;margin-right:4px" onclick="editDl(\''+d.id+'\')" title="Editar (datas, razão)">✎ Editar</button><button style="background:'+rgba(BLU,.1)+';color:'+BLU+';border:none;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:600;cursor:pointer;margin-right:4px" onclick="openAttM(\''+d.id+'\',\'proposta\')" title="Ficheiros da proposta">📎'+(dealAtts(d.id).length?' '+dealAtts(d.id).length:'')+'</button><button style="background:#edf8f3;color:'+GRN+';border:none;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:600;cursor:pointer" onclick="reopenDl(\''+d.id+'\')">↩ Reabrir</button></td></tr>'});
   h+='</table></div></div>';
 } else if(cTab==="clientesTotais"){
-  window._ctF=window._ctF||{region:"Todos",channel:"Todos",spec:"Todos",at:"Todos",cloud:"Todos"};
-  var ctF=window._ctF; if(ctF.cloud===undefined)ctF.cloud="Todos";
+  window._ctF=window._ctF||{region:"Todos",channel:"Todos",spec:"Todos",at:"Todos",cloud:"Todos",saas:"Todos"};
+  var ctF=window._ctF; if(ctF.cloud===undefined)ctF.cloud="Todos"; if(ctF.saas===undefined)ctF.saas="Todos";
   var chans=["Todos"].concat([...new Set(D.clients.map(function(c){return c.channel}))]);
   var regs=["Todos"].concat([...new Set(D.clients.map(function(c){return c.region}).filter(Boolean))].sort());
   var specOpts=["Todos"].concat(SPECS);
   var atOpts=["Todos","Com AT","Sem AT"];
   var cloudOpts=["Todos","Cloud","Não"];
+  var saasOpts=["Todos","SaaS","Não"];
   h=pgHead("📇","Clientes Totais — Especialidades Activas",'<button class="btn" style="background:'+R+'" onclick="openCM()">+ Cliente Novo</button>');
   h+='<div class="cd" style="padding:14px;margin-bottom:14px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">';
   h+=selF("Região",regs,ctF.region,"setCTF('region',this.value)");
@@ -1080,6 +1111,7 @@ if(cTab==="dashboard"){
   h+=selF("Especialidade",specOpts,ctF.spec,"setCTF('spec',this.value)");
   h+=selF("AT",atOpts,ctF.at,"setCTF('at',this.value)");
   h+=selF("Cloud",cloudOpts,ctF.cloud,"setCTF('cloud',this.value)");
+  h+=selF("SaaS",saasOpts,ctF.saas,"setCTF('saas',this.value)");
   h+='<div style="display:flex;flex-direction:column;gap:3px"><label style="font-size:10px;color:#7E8892;font-weight:600">Nome do cliente</label><input id="clSearch" placeholder="Procurar…" value="'+String(ctF.name||"").replace(/"/g,"&quot;")+'" oninput="clFilter(this.value)" style="border:1px solid #E4E8EB;border-radius:6px;padding:6px 9px;font-size:12px;font-family:inherit;outline:none;min-width:150px"></div>';
   h+='<button style="background:#f8f7f5;border:1px solid #E4E8EB;color:#7E8892;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer" onclick="clrCTF()">Limpar filtros</button>';
   h+='</div></div>';
@@ -1157,13 +1189,13 @@ if(cTab==="dashboard"){
   }
 } else if(cTab==="vendasPais"||cTab==="vendasVend"){
   var _byP=(cTab==="vendasPais");
-  var _wd=D.deals.filter(function(d){return isWon(d)&&!d.preERP;});
+  var _wd=D.deals.filter(function(d){return isWon(d)&&!d.preERP&&inYear(d.date);});
   var _g={};_wd.forEach(function(d){var k=_byP?(d.pais||"—"):((d.vendedor&&String(d.vendedor).trim())?d.vendedor:"Por atribuir");if(!_g[k])_g[k]={v:0,n:0,at:0};_g[k].v+=Number(d.value)||0;_g[k].n++;if(d.type==="AT")_g[k].at+=Number(d.value)||0;});
   var _rows=Object.keys(_g).map(function(k){return[k,_g[k]];}).sort(function(a,b){return b[1].v-a[1].v;});
   var _tot=_rows.reduce(function(a,e){return a+e[1].v;},0);
   var _atT=_rows.reduce(function(a,e){return a+e[1].at;},0);
   var _mx=Math.max.apply(null,_rows.map(function(e){return e[1].v;}).concat([1]));
-  h=pgHead(_byP?"🌍":"👤",_byP?"Vendas por País":"Vendas por Vendedor");
+  h=pgHead(_byP?"🌍":"👤",_byP?"Vendas por País":"Vendas por Vendedor",yearPicker());
   h+='<div class="kr">'+kpi("Total vendas",fmt(_tot),_wd.length+" vendas ganhas",GD,G)+kpi(_byP?"Países":"Vendedores",String(_rows.length),"",BLU,BLU)+kpi("Dos quais ARR",fmt(_atT),_tot?Math.round(_atT/_tot*100)+"% do total":"",TEAL,TEAL)+'</div>';
   h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">'+(_byP?"DISTRIBUIÇÃO POR PAÍS":"DISTRIBUIÇÃO POR VENDEDOR")+'</div>';
   if(!_rows.length)h+='<div style="font-size:13px;color:#A6AEB6">Sem vendas registadas.</div>';
@@ -1173,7 +1205,7 @@ if(cTab==="dashboard"){
   _rows.forEach(function(e){h+='<tr><td style="font-weight:600">'+esc(e[0])+'</td><td style="text-align:right;font-weight:700">'+fmt(e[1].v)+'</td><td style="text-align:right">'+e[1].n+'</td><td style="text-align:right">'+(e[1].at?fmt(e[1].at):"—")+'</td><td style="text-align:right">'+(_tot?Math.round(e[1].v/_tot*100):0)+'%</td></tr>';});
   h+='<tr style="border-top:2px solid #E4E8EB;font-weight:700"><td>TOTAL</td><td style="text-align:right">'+fmt(_tot)+'</td><td style="text-align:right">'+_wd.length+'</td><td style="text-align:right">'+fmt(_atT)+'</td><td style="text-align:right">100%</td></tr>';
   h+='</table></div></div>';
-  h+='<div class="ins"><div style="font-size:12px;color:#7E8892">Vendas ganhas, valores <b>sem IVA</b>. Exclui registos anteriores a 2023. "Por atribuir" = vendas sem vendedor identificado (RE/CP simples e históricos).</div></div>';
+  h+='<div class="ins"><div style="font-size:12px;color:#7E8892">Vendas ganhas adjudicadas em <b>'+activeYear()+'</b>, valores <b>sem IVA</b>. "Por atribuir" = vendas sem vendedor identificado (RE/CP simples e históricos).</div></div>';
 } else if(cTab==="prospeccao"){
   h=pgHead("🗺️","Prospeção")+'<div class="kr">'+kpi("Hospitais",""+D.clients.length,"",GD,G)+kpi("Regiões",""+[...new Set(D.clients.map(function(c){return c.region}))].length,"",BLU,BLU)+kpi("Propostas",""+S.pN,fmt(D.deals.filter(function(d){return d.stage==="proposta"&&inYear(d.date)}).reduce(function(s,d){return s+d.value},0)),GD,G)+'</div>';
   h+='<div class="cd"><div style="overflow-x:auto"><table><tr><th>Hospital</th><th>Produto</th><th>Especialidade</th><th>Etapa (sincronizada c/ Pipeline)</th><th>Valor</th><th>Região</th></tr>';
