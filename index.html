@@ -502,7 +502,7 @@ function genReport(){
   var adjT=adj.reduce(function(a,d){return a+d.value},0);
   var term=Number(D.paymentTermDays)||30;
   var risky=D.invoices.filter(function(i){return!i.collected&&Math.floor((now-new Date(i.date))/86400000)>=180});
-  var riskyT=risky.reduce(function(a,i){return a+i.amount},0);
+  var riskyT=risky.reduce(function(a,i){return a+ivC(i)},0);
   var WT={projeto:0.75,proposta:0.4,lead:0.1};
   var wProj=0,wProp=0,wLead=0;openD.forEach(function(d){if(d.stage==="projeto")wProj+=d.value*WT.projeto;else if(d.stage==="proposta")wProp+=d.value*WT.proposta;else wLead+=d.value*WT.lead});
   var forecast=S.inv+adjT+wProj+wProp+wLead;
@@ -889,8 +889,8 @@ function openCorrecoes(){cTab="correcoes";rTabs();rPnl()}
 
 function dashTodos(S){var todos=[];
   D.invoices.filter(function(i){return!i.collected}).forEach(function(i){var dd=Math.floor((new Date()-new Date(i.date))/86400000);var dl=D.deals.find(function(x){return x.id===i.dealId});
-    if(dd>=180)todos.push({p:1,ic:"🔴",t:"Cobrança em risco ("+dd+" dias)",s:(dl?cn(dl.clientId):"—")+" — "+fmt(i.amount)+" · considerar provisão para incobrável",go:"financeiro",sub:"faturas"});
-    else if(dd>=90)todos.push({p:2,ic:"🟠",t:"Cobrança vencida ("+dd+" dias)",s:(dl?cn(dl.clientId):"—")+" — "+fmt(i.amount),go:"financeiro",sub:"faturas"})});
+    if(dd>=180)todos.push({p:1,ic:"🔴",t:"Cobrança em risco ("+dd+" dias)",s:(dl?cn(dl.clientId):"—")+" — "+fmt(ivC(i))+" · considerar provisão para incobrável",go:"financeiro",sub:"faturas"});
+    else if(dd>=90)todos.push({p:2,ic:"🟠",t:"Cobrança vencida ("+dd+" dias)",s:(dl?cn(dl.clientId):"—")+" — "+fmt(ivC(i)),go:"financeiro",sub:"faturas"})});
   D.deals.filter(isOverdue).forEach(function(d){todos.push({p:2,ic:"⏰",t:"Follow-up em atraso ("+daysLate(d)+" dias)",s:cn(d.clientId)+" — "+(d.nextAction||"sem acção definida")+" · "+fmt(d.value),go:"pipeline"})});
   D.deals.filter(function(d){return(d.stage==="proposta")&&inYear(d.date)&&!d.nextDate}).forEach(function(d){todos.push({p:3,ic:"📌",t:"Proposta sem próxima acção definida",s:cn(d.clientId)+" — "+fmt(d.value),go:"pipeline"})});
   D.deals.filter(function(d){return isWon(d)&&inYear(d.date)&&!D.invoices.find(function(i){return i.dealId===d.id})}).forEach(function(d){todos.push({p:2,ic:"🧾",t:"Adjudicado por facturar",s:cn(d.clientId)+" — "+fmt(d.value),go:"financeiro",sub:"faturas"})});
@@ -4094,7 +4094,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   function execAlerts(){
     var today=todayISO();
     var cobr=(D.invoices||[]).filter(function(i){return !i.collected&&i.date&&i.date<today;});
-    var cobrVal=cobr.reduce(function(a,i){return a+(Number(i.amount)||0);},0);
+    var cobrVal=cobr.reduce(function(a,i){return a+ivC(i);},0);
     var projRisco=(D.deals||[]).filter(function(d){return d.stage==="projeto";}).filter(function(d){try{return projHealth(projRec(d.id)).k==="risco";}catch(e){return false;}}).length;
     var slaVenc=(D.tickets||[]).filter(function(t){try{return tkSla(t).vencido;}catch(e){return false;}}).length;
     var ferPend=(D.absences||[]).filter(function(r){return r.status==="pendente";}).length;
