@@ -850,13 +850,13 @@ function st(){
 
 var NAV=[
 {id:"dashboard",i:"📊",l:"Dashboard"},
-{group:"Financeiro",i:"💶",items:[{id:"pl",l:"P&L"},{id:"financeiro",sub:"orcamento",l:"Orçamento"},{id:"financeiro",sub:"cobrancas",l:"Cobranças"},{id:"financeiro",sub:"faturas",l:"Movimentos"}]},
+{group:"Financeiro",i:"💶",items:[{id:"pl",l:"P&L"},{id:"caractfat",l:"Caracterização"},{id:"financeiro",sub:"orcamento",l:"Orçamento"},{id:"financeiro",sub:"cobrancas",l:"Cobranças"},{id:"financeiro",sub:"faturas",l:"Movimentos"}]},
 {group:"Comercial",i:"🏥",items:[{id:"clientes",l:"Vendas"},{id:"pipeline",l:"Pipeline"},{id:"prospeccao",l:"Prospeção"},{id:"ganhas",l:"Ganhas"},{id:"concluidas",l:"Concluídas"},{id:"perdidas",l:"Perdidas"},{id:"vendasPais",l:"Por país"},{id:"vendasVend",l:"Por vendedor"},{id:"mapa",l:"Mapa"}]},
 {group:"Clientes",i:"🏢",items:[{id:"clientesTotais",l:"Clientes Totais"},{id:"contactos",l:"Contactos"}]},
 {group:"Estratégia & Planeamento",i:"🧭",items:[{id:"estrategia",l:"Estratégia & Insights"},{id:"arr",l:"ARR"},{id:"orc2027",l:"Orçamento 2027"},{id:"historico",l:"Histórico"}]},
 {id:"actividades",i:"📋",l:"Atividades"}
 ];
-var TABS=[{id:"dashboard"},{id:"pl"},{id:"financeiro"},{id:"arr"},{id:"orc2027"},{id:"clientesTotais"},{id:"contactos"},{id:"actividades"},{id:"pipeline"},{id:"prospeccao"},{id:"ganhas"},{id:"concluidas"},{id:"perdidas"},{id:"clientes"},{id:"vendasPais"},{id:"vendasVend"},{id:"mapa"},{id:"estrategia"},{id:"historico"},{id:"correcoes"}];
+var TABS=[{id:"dashboard"},{id:"pl"},{id:"caractfat"},{id:"financeiro"},{id:"arr"},{id:"orc2027"},{id:"clientesTotais"},{id:"contactos"},{id:"actividades"},{id:"pipeline"},{id:"prospeccao"},{id:"ganhas"},{id:"concluidas"},{id:"perdidas"},{id:"clientes"},{id:"vendasPais"},{id:"vendasVend"},{id:"mapa"},{id:"estrategia"},{id:"historico"},{id:"correcoes"}];
 var openGroups={"Financeiro":true,"Comercial":true,"Clientes":true,"Estratégia & Planeamento":true};
 function tglGroup(g){openGroups[g]=!openGroups[g];rTabs()}
 window.__NAVSVG={
@@ -1187,6 +1187,35 @@ if(cTab==="dashboard"){
     h+='</tbody></table></div>';}
   h+='</div>';
   }
+} else if(cTab==="caractfat"){
+  var _Y=activeYear();
+  var _dl={}; D.deals.forEach(function(d){_dl[d.id]=d;});
+  function _ft(types,yr){var t=0;D.invoices.forEach(function(i){if(String((i.date||"").slice(0,4))!==String(yr)||i.preERP)return;var d=_dl[i.dealId];if(d&&types.indexOf(d.type)>=0)t+=Number(i.amount)||0;});return t;}
+  function _fc(cond,yr){var t=0;D.invoices.forEach(function(i){if(String((i.date||"").slice(0,4))!==String(yr)||i.preERP)return;var d=_dl[i.dealId];if(d&&cond(d))t+=Number(i.amount)||0;});return t;}
+  var NVt=["SV","EV","DV","HV","SUV","SMV"];
+  var dvF=_ft(["DV"],_Y),evF=_ft(["EV"],_Y),svF=_ft(["SV"],_Y),hvF=_ft(["HV"],_Y),nvF=_ft(NVt,_Y),atF=_ft(["AT"],_Y),totF=nvF+atF;
+  var py=_Y-1,dvP=_ft(["DV"],py),evP=_ft(["EV"],py),svP=_ft(["SV"],py),hvP=_ft(["HV"],py),totP=dvP+evP+svP+hvP;
+  var orc=D.orc||{total:(D.budget||0),nv:0,at:0};
+  var saasLic=_fc(function(d){return d.saas&&NVt.indexOf(d.type)>=0;},_Y),cloudF=_fc(function(d){return d.cloud;},_Y),dirServ=svF,dirLic=nvF-saasLic-svF;
+  var moNV=[],moNVp=[];for(var _m=0;_m<12;_m++){moNV.push(0);moNVp.push(0);}
+  D.deals.forEach(function(d){if(NVt.indexOf(d.type)<0)return;var yy=String((d.date||"").slice(0,4)),mm=parseInt((d.date||"").slice(5,7),10)-1;if(mm<0||mm>11)return;if(yy===String(_Y))moNV[mm]+=Number(d.value)||0;else if(yy===String(py))moNVp[mm]+=Number(d.value)||0;});
+  var moTot=moNV.reduce(function(a,b){return a+b;},0);
+  function pctS(v,t){return t?Math.round(v/t*100)+"%":"—";}
+  var RA=' style="text-align:right"';
+  h=pgHead("📊","Caracterização de Faturação",yearPicker());
+  var exec=orc.total?Math.round(totF/orc.total*100):0;
+  h+='<div class="kr">'+kpi("Realizado faturação",fmt(totF),exec+"% do orçamento",GD,G)+kpi("Novas vendas",fmt(nvF),pctS(nvF,totF)+" do total",BLU,BLU)+kpi("AT (recorrente)",fmt(atF),pctS(atF,totF)+" do total",TEAL,TEAL)+'</div>';
+  function rowC(l,v,p){return '<tr><td>'+l+'</td><td'+RA+'>'+fmt(v)+'</td><td'+RA+'>'+pctS(v,nvF)+'</td><td'+RA+' style="text-align:right;color:#7E8892">'+(p?fmt(p):"—")+'</td><td'+RA+' style="text-align:right;color:#7E8892">'+pctS(p,totP)+'</td></tr>';}
+  h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">CARACTERIZAÇÃO DE FATURAÇÃO ('+_Y+')</div><div style="overflow-x:auto"><table><tr><th>Tipo</th><th'+RA+'>Realizado</th><th'+RA+'>%</th><th'+RA+'>'+py+'</th><th'+RA+'>%</th></tr>'+rowC("DOCbase",dvF,dvP)+rowC("Especialidades",evF,evP)+rowC("Serviços",svF,svP)+rowC("Equipamentos",hvF,hvP)+'<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>TOTAL</td><td'+RA+'>'+fmt(nvF)+'</td><td'+RA+'>100%</td><td'+RA+'>'+fmt(totP)+'</td><td'+RA+'></td></tr></table></div></div>';
+  var lvsTot=dirServ+dirLic+saasLic;
+  function rowL(l,v,sp){return '<tr><td>'+l+'</td><td'+RA+'>'+fmt(v)+'</td><td'+RA+'>'+(sp?pctS(v,lvsTot):"")+'</td></tr>';}
+  h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">LICENÇAS vs SERVIÇOS ('+_Y+')</div><div style="overflow-x:auto"><table><tr><th>Rubrica</th><th'+RA+'>Valor</th><th'+RA+'>%</th></tr>'+rowL("Directas Serviços",dirServ,1)+rowL("Directas Licenças",dirLic,1)+rowL("SaaS Licenças",saasLic,1)+rowL("Cloud",cloudF,0)+rowL("AT",atF,0)+'</table></div></div>';
+  h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">ORÇAMENTO FATURAÇÃO '+_Y+'</div><div style="overflow-x:auto"><table><tr><th>Rubrica</th><th'+RA+'>Orçamento</th><th'+RA+'>Realizado</th><th'+RA+'>Execução</th></tr><tr><td>Novas vendas</td><td'+RA+'>'+fmt(orc.nv)+'</td><td'+RA+'>'+fmt(nvF)+'</td><td'+RA+'>'+pctS(nvF,orc.nv)+'</td></tr><tr><td>AT</td><td'+RA+'>'+fmt(orc.at)+'</td><td'+RA+'>'+fmt(atF)+'</td><td'+RA+'>'+pctS(atF,orc.at)+'</td></tr><tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>TOTAL</td><td'+RA+'>'+fmt(orc.total)+'</td><td'+RA+'>'+fmt(totF)+'</td><td'+RA+'>'+pctS(totF,orc.total)+'</td></tr></table></div></div>';
+  var MOn=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  var sal=0,rowsM="";
+  for(var mm2=0;mm2<12;mm2++){sal+=moNV[mm2];rowsM+='<tr><td>'+MOn[mm2]+'</td><td'+RA+' style="text-align:right;color:#7E8892">'+(moNVp[mm2]?fmt(moNVp[mm2]):"—")+'</td><td'+RA+'>'+(moNV[mm2]?fmt(moNV[mm2]):"—")+'</td><td'+RA+' style="text-align:right;font-weight:600">'+fmt(sal)+'</td></tr>';}
+  h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">NOVAS VENDAS '+_Y+' (por adjudicação)</div><div style="overflow-x:auto"><table><tr><th>Mês</th><th'+RA+'>'+py+'</th><th'+RA+'>'+_Y+'</th><th'+RA+'>Saldo acumulado</th></tr>'+rowsM+'<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>Média mensal orçamento</td><td'+RA+'></td><td'+RA+'></td><td'+RA+'>'+fmt(orc.nv/12)+'</td></tr><tr style="font-weight:700"><td>Média mensal realizada</td><td'+RA+'></td><td'+RA+'></td><td'+RA+'>'+fmt(moTot/12)+'</td></tr></table></div></div>';
+  h+='<div class="ins"><div style="font-size:12px;color:#7E8892">Valores <b>sem IVA</b>, calculados da app para o ano selecionado. Novas vendas mensais por <b>data de adjudicação</b>; caracterização e licenças por <b>data de fatura</b>.</div></div>';
 } else if(cTab==="vendasPais"||cTab==="vendasVend"){
   var _byP=(cTab==="vendasPais");
   var _wd=D.deals.filter(function(d){return isWon(d)&&!d.preERP&&inYear(d.date);});
@@ -8950,7 +8979,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     {group:"Direção",i:"🧭",dept:"direcao",items:[
       {id:"dashboard",l:"Visão geral"},{id:"estrategia",l:"Análise & insights"},{id:"roicomercial",l:"Retorno comercial"},{id:"mapahoras",l:"Mapa de horas"}]},
     {group:"Financeiro",i:"💶",dept:"financeiro",items:[
-      {id:"pl",l:"P&L"},{id:"financeiro",sub:"orcamento",l:"Orçamento"},{id:"rentabcli",l:"Rentabilidade"},{id:"tesouraria",l:"Tesouraria"},{id:"historico",l:"Histórico"}]},
+      {id:"pl",l:"P&L"},{id:"caractfat",l:"Caracterização"},{id:"financeiro",sub:"orcamento",l:"Orçamento"},{id:"rentabcli",l:"Rentabilidade"},{id:"tesouraria",l:"Tesouraria"},{id:"historico",l:"Histórico"}]},
     {group:"Faturação & Cobranças",i:"🧾",dept:"financeiro",items:[
       {id:"financeiro",sub:"faturas",l:"Faturas / Movimentos"},{id:"faturacao",l:"Faturação legal"},{id:"financeiro",sub:"cobrancas",l:"Cobranças pendentes"},{id:"dunning",l:"Cobrança de vencidos"},{id:"financeiro",sub:"despesas",l:"Despesas"}]},
     {group:"Orçamento & ARR",i:"🎯",dept:"orcamento",items:[
