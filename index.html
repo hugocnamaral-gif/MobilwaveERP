@@ -648,7 +648,7 @@ function genReport(){
   w.document.write(H);w.document.close();
 }
 
-function expData(){var b=new Blob([JSON.stringify(D,null,2)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="espanha2026_backup_"+new Date().toISOString().slice(0,10)+".json";a.click();D.lastBackup=new Date().toISOString().slice(0,10);save();ren()}
+function expData(){var b=new Blob([JSON.stringify(D,null,2)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="mobilwave_backup_"+new Date().toISOString().slice(0,10)+".json";a.click();D.lastBackup=new Date().toISOString().slice(0,10);save();ren()}
 function impData(ev){var f=ev.target.files[0];if(!f)return;var r=new FileReader();
   r.onload=function(e){try{var o=JSON.parse(e.target.result);
     if(!o||!Array.isArray(o.clients)||!Array.isArray(o.deals)){toast("Ficheiro inválido — não parece um backup desta app.",{type:"error"});return}
@@ -768,7 +768,7 @@ function openClient(clientId){
   var ds=D.deals.filter(function(d){return d.clientId===clientId});
   var won=ds.filter(function(d){return isWon(d)}).reduce(function(a,d){return a+d.value},0);
   var open2=ds.filter(function(d){return !isClosed(d)}).reduce(function(a,d){return a+d.value},0);
-  var pend=D.invoices.filter(function(i){return!i.collected&&ds.some(function(d){return d.id===i.dealId})}).reduce(function(a,i){return a+i.amount},0);
+  var pend=D.invoices.filter(function(i){return!i.collected&&ds.some(function(d){return d.id===i.dealId})}).reduce(function(a,i){return a+ivC(i)},0);
   var b='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+bdg(cl.region,BLU)+bdg(cl.channel,SL)+specs.map(function(sp){return bdg(sp.specialty+(sp.at?" · AT":""),sp.at?GRN:GD)}).join("")+'</div>';
   b+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">';
   [["Ganho",fmt(won),GRN],["Em aberto",fmt(open2),GD],["Por cobrar",fmt(pend),pend>0?DNG:SL]].forEach(function(k){
@@ -799,12 +799,13 @@ function integrityCheck(){var p=[];
   ["clients","deals","invoices","expenses"].forEach(function(k){var seen={};(D[k]||[]).forEach(function(x){if(seen[x.id])p.push("ID duplicado em "+k+": "+x.id);seen[x.id]=1})});
   return p}
 
+function ivC(i){return (i&&i.amountCiva!=null)?(Number(i.amountCiva)||0):(Number(i&&i.amount)||0);}
 function st(){
   var inv=0,col=0,exp=0,pend=0,pendPrev=0,cash=0;
-  D.invoices.forEach(function(i){if(inYear(i.date)){inv+=i.amount}var _cd=i.collDate||i.date;if(i.collected&&inYear(_cd)){col+=i.amount;cash+=i.amount}if(!i.collected){pend+=i.amount;if(beforeYear(i.date))pendPrev+=i.amount}});
+  D.invoices.forEach(function(i){if(inYear(i.date)){inv+=i.amount}var _cd=i.collDate||i.date;if(i.collected&&inYear(_cd)){col+=i.amount;cash+=i.amount}if(!i.collected){pend+=ivC(i);if(beforeYear(i.date))pendPrev+=ivC(i)}});
   D.expenses.forEach(function(e){if(inYear(e.date))exp+=e.amount});
   var pipe=0;D.deals.forEach(function(d){if(!isClosed(d)&&inYear(d.date)){pipe+=d.value}});
-  var debtCh={};D.invoices.forEach(function(i){if(i.collected)return;var d=D.deals.find(function(x){return x.id===i.dealId});var c=d?D.clients.find(function(x){return x.id===d.clientId}):null;var ch=c?c.channel:"Outro";debtCh[ch]=(debtCh[ch]||0)+i.amount});
+  var debtCh={};D.invoices.forEach(function(i){if(i.collected)return;var d=D.deals.find(function(x){return x.id===i.dealId});var c=d?D.clients.find(function(x){return x.id===d.clientId}):null;var ch=c?c.channel:"Outro";debtCh[ch]=(debtCh[ch]||0)+ivC(i)});
   var debt=pend;
   var mo={};D.expenses.forEach(function(e){if(!inYear(e.date))return;var m=new Date(e.date).getMonth();mo[m]=(mo[m]||0)-e.amount});
   D.invoices.forEach(function(i){var _cd=i.collDate||i.date;if(i.collected&&_cd&&inYear(_cd)){var m=new Date(_cd).getMonth();mo[m]=(mo[m]||0)+i.amount}});
@@ -1095,11 +1096,11 @@ if(cTab==="dashboard"){
     h+='</div></div>';
     var mNow=Math.max(1,new Date().getMonth()+1);var tCost=(D.timeCostMonth||0)*mNow;
     if(tCost>0){h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">CUSTO TOTAL DO PROJETO (incl. tempo)</div><table><tr><th>Rubrica</th><th style="text-align:right">Valor</th></tr><tr><td>Custos diretos (viagens, marketing)</td><td style="text-align:right">'+fmt(S.exp)+'</td></tr><tr><td>Custo nocional do tempo ('+fmt(D.timeCostMonth)+'/mês × '+mNow+')</td><td style="text-align:right">'+fmt(tCost)+'</td></tr><tr style="border-top:2px solid #E4E8EB"><td style="font-weight:700">Custo total real</td><td style="text-align:right;font-weight:700">'+fmt(S.exp+tCost)+'</td></tr><tr><td style="font-weight:700">Break-even (facturação necessária)</td><td style="text-align:right;font-weight:700;color:'+(S.inv>=S.exp+tCost?GRN:DNG)+'">'+fmt(S.exp+tCost)+' → '+(S.inv>=S.exp+tCost?"atingido":"faltam "+fmt(S.exp+tCost-S.inv))+'</td></tr></table><div style="font-size:11px;color:#A6AEB6;margin-top:8px">Define o custo mensal do teu tempo em Correções › definições para ajustar este cálculo.</div></div>'}
-    h+='<div class="ins"><div style="font-size:12px;color:#7E8892"><b>Nota sobre IVA:</b> todos os valores de facturação, pendente e pipeline nesta app são apresentados <b>sem IVA</b> (é o que conta como receita/facturação). As despesas vêm de extractos bancários, logo <b>incluem IVA</b> — o Cashflow mistura receita líquida com custo bruto, pelo que o resultado real é ligeiramente melhor do que o apresentado. Não há dados de saldos bancários reais para a Mobilwave nesta app.</div></div>';
+    h+='<div class="ins"><div style="font-size:12px;color:#7E8892"><b>Nota sobre IVA:</b> a <b>facturação</b>, o pipeline e os resultados são apresentados <b>sem IVA</b> (receita); a <b>dívida a receber</b> (pendente, por cobrar, em risco) é apresentada <b>com IVA</b>, que é o valor real que o cliente deve. Restante nota: sem IVA</b> (é o que conta como receita/facturação). As despesas vêm de extractos bancários, logo <b>incluem IVA</b> — o Cashflow mistura receita líquida com custo bruto, pelo que o resultado real é ligeiramente melhor do que o apresentado. Não há dados de saldos bancários reais para a Mobilwave nesta app.</div></div>';
   } else if(finSub==="cobrancas"){
     var adjDeals=D.deals.filter(function(d){return isWon(d)&&!D.invoices.find(function(i){return i.dealId===d.id})});
     var adjTotal=adjDeals.reduce(function(a,d){return a+d.value},0);
-    var pendInvs=D.invoices.filter(function(i){return!i.collected}).map(function(i){var d=D.deals.find(function(x){return x.id===i.dealId});return{iv:i,name:d?cn(d.clientId):"—",amount:i.amount,days:Math.floor((new Date()-new Date(i.date))/86400000),date:i.date}}).sort(function(a,b){return b.days-a.days});
+    var pendInvs=D.invoices.filter(function(i){return!i.collected}).map(function(i){var d=D.deals.find(function(x){return x.id===i.dealId});return{iv:i,name:d?cn(d.clientId):"—",amount:ivC(i),days:Math.floor((new Date()-new Date(i.date))/86400000),date:i.date}}).sort(function(a,b){return b.days-a.days});
     var risky=pendInvs.filter(function(p){return p.days>=180});
     var rTot=risky.reduce(function(a,p){return a+p.amount},0);
     h+='<div class="kr">'+kpi("Por facturar",fmt(adjTotal),adjDeals.length+" adjudicados",GD,GD)+kpi("Por cobrar",fmt(S.pend),pendInvs.length+" facturas",R,R)+kpi("Em risco (>180d)",fmt(rTot),risky.length+" facturas",R,R)+kpi("Total a receber",fmt(adjTotal+S.pend),"",PUR,PUR)+'</div>';
@@ -1541,26 +1542,14 @@ function confirmImport(){var added=0;
 }
 
 // ══════ HISTÓRICO ══════
-var HIST=[
-{yr:2015,tot:18000,nv:18000,at:0,nc:0,obj:75000,ncli:1,note:"DOCbase gastro — H. exemplo"},
-{yr:2016,tot:21803,nv:21803,at:0,nc:-1350,obj:75000,ncli:4,note:"Cádiz, Coruña, Múrcia, exemplo"},
-{yr:2017,tot:2546,nv:2100,at:446,nc:0,obj:50000,ncli:2,note:"Medical 7: Sermeva + San Roque"},
-{yr:2018,tot:6763,nv:3375,at:3760,nc:-371,obj:30000,ncli:3,note:"CLINSA Madrid. Medical 7 AT"},
-{yr:2019,tot:1352,nv:1008,at:344,nc:0,obj:10000,ncli:3,note:"Mapfre + exemplo. Ano fraco"},
-{yr:2020,tot:5270,nv:6235,at:0,nc:-965,obj:0,ncli:4,note:"Los Belgas. Tinabana. NC San Roque"},
-{yr:2021,tot:73480,nv:73480,at:0,nc:0,obj:0,ncli:4,note:"RECORDE. Almería 55K"},
-{yr:2022,tot:15788,nv:15788,at:0,nc:0,obj:0,ncli:4,note:"exemplo Andorra. São José LPA"},
-{yr:2023,tot:19541,nv:23101,at:0,nc:-3560,obj:0,ncli:5,note:"exemplo pneumo. exemplo Madrid"},
-{yr:2024,tot:11904,nv:9340,at:2564,nc:0,obj:30000,ncli:4,note:"exemplo, exemplo, Valles SaaS"},
-{yr:2025,tot:16858,nv:14094,at:2764,nc:-3830,obj:10000,ncli:6,note:"exemplo. exemplo. Andorra pneumo (duplicado removido)"}
-];
+var HIST=[]; // histórico curado (Espanha) removido — passa a ser dinâmico a partir de 2023
 
 // Anos do histórico: anos com faturas são calculados dinamicamente (faturação, split NV/AT);
 // anos antigos sem dados na app ficam com o registo histórico curado (HIST).
 function histYears(){
   var by={};
   (D.invoices||[]).forEach(function(i){
-    var y=+String(i.date||"").slice(0,4); if(!y)return;
+    var y=+String(i.date||"").slice(0,4); if(!y||y<2023||i.preERP)return;
     if(!by[y])by[y]={tot:0,nv:0,at:0,cli:{}};
     var dl=(D.deals||[]).find(function(x){return x.id===i.dealId});
     var isAT=dl&&dl.type==="AT";
@@ -1582,9 +1571,9 @@ function rHist(S){
   var allY=histYears();
   var d26=allY.filter(function(x){return x.yr===activeYear();})[0]||{yr:activeYear(),tot:Math.round(S.inv),obj:D.budget||1};
   var maxT=Math.max.apply(null,allY.map(function(d){return d.tot}));
-  var acum=allY.filter(function(d){return d.yr>=2015&&d.yr<activeYear();}).reduce(function(s,d){return s+d.tot},0);
-  var h=pgHead("📜","Histórico 2015–"+activeYear());
-  h+='<div class="kr">'+kpi("Acum. 15–"+String(activeYear()-1).slice(-2),"€"+Math.round(acum/1000)+"K","",GD,G)+kpi("Melhor",(function(){var bt=allY.reduce(function(a,d){return(!a||d.tot>a.tot)?d:a;},null);return bt?bt.yr+" — €"+Math.round(bt.tot/1000)+"K":"—";})(),"",BLU,BLU)+kpi(activeYear()+" YTD",fmt(d26.tot),Math.round(d26.tot/(d26.obj||1)*100)+"% obj.",d26.tot>=d26.obj?GRN:DNG,d26.tot>=d26.obj?GRN:DNG)+'</div>';
+  var acum=allY.filter(function(d){return d.yr>=2023&&d.yr<activeYear();}).reduce(function(s,d){return s+d.tot},0);
+  var h=pgHead("📜","Histórico 2023–"+activeYear());
+  h+='<div class="kr">'+kpi("Acum. 23–"+String(activeYear()-1).slice(-2),"€"+Math.round(acum/1000)+"K","",GD,G)+kpi("Melhor",(function(){var bt=allY.reduce(function(a,d){return(!a||d.tot>a.tot)?d:a;},null);return bt?bt.yr+" — €"+Math.round(bt.tot/1000)+"K":"—";})(),"",BLU,BLU)+kpi(activeYear()+" YTD",fmt(d26.tot),Math.round(d26.tot/(d26.obj||1)*100)+"% obj.",d26.tot>=d26.obj?GRN:DNG,d26.tot>=d26.obj?GRN:DNG)+'</div>';
   h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">FATURAÇÃO ANUAL</div><div style="height:260px"><canvas id="cHist"></canvas></div></div>';
   h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">DETALHE</div><div style="overflow-x:auto"><table><tr><th>Ano</th><th style="text-align:right">Total</th><th style="text-align:right">NV</th><th style="text-align:right">AT</th><th style="text-align:right">NC</th><th style="text-align:right">Δ YoY</th><th style="text-align:right">Obj.</th><th style="text-align:right">% Exec</th><th style="text-align:right">Cli.</th><th style="text-align:left">Notas</th></tr>';
   allY.forEach(function(d,i){
@@ -1625,7 +1614,7 @@ function autoBackup(){try{
   var today=new Date();var todayStr=today.toISOString().slice(0,10);
   if(last){var diff=Math.floor((today-new Date(last))/86400000);if(diff<days)return}
   var b=new Blob([JSON.stringify(D,null,2)],{type:"application/json"});
-  var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="espanha2026_backup_auto_"+todayStr+".json";a.click();
+  var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="mobilwave_backup_auto_"+todayStr+".json";a.click();
   localStorage.setItem("mw26bk",todayStr);D.lastBackup=todayStr;save();
 }catch(e){}}
 function enterApp(){var s=document.getElementById("splash");if(s){s.style.transition="opacity .3s";s.style.opacity="0";setTimeout(function(){s.style.display="none"},300);}}
