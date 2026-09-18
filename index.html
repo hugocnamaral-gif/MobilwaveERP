@@ -802,13 +802,13 @@ function integrityCheck(){var p=[];
 function ivC(i){return (i&&i.amountCiva!=null)?(Number(i.amountCiva)||0):(Number(i&&i.amount)||0);}
 function st(){
   var inv=0,col=0,exp=0,pend=0,pendPrev=0,cash=0;
-  D.invoices.forEach(function(i){if(inYear(i.date)){inv+=i.amount}var _cd=i.collDate||i.date;if(i.collected&&inYear(_cd)){col+=i.amount;cash+=i.amount}if(!i.collected){pend+=ivC(i);if(beforeYear(i.date))pendPrev+=ivC(i)}});
+  D.invoices.forEach(function(i){if(inYear(i.date)){inv+=i.amount}var _cd=i.collDate||i.date;if(i.collected&&inYear(_cd)){col+=ivC(i);cash+=ivC(i)}if(!i.collected){pend+=ivC(i);if(beforeYear(i.date))pendPrev+=ivC(i)}});
   D.expenses.forEach(function(e){if(inYear(e.date))exp+=e.amount});
   var pipe=0;D.deals.forEach(function(d){if(!isClosed(d)&&inYear(d.date)){pipe+=d.value}});
   var debtCh={};D.invoices.forEach(function(i){if(i.collected)return;var d=D.deals.find(function(x){return x.id===i.dealId});var c=d?D.clients.find(function(x){return x.id===d.clientId}):null;var ch=c?c.channel:"Outro";debtCh[ch]=(debtCh[ch]||0)+ivC(i)});
   var debt=pend;
   var mo={};D.expenses.forEach(function(e){if(!inYear(e.date))return;var m=new Date(e.date).getMonth();mo[m]=(mo[m]||0)-e.amount});
-  D.invoices.forEach(function(i){var _cd=i.collDate||i.date;if(i.collected&&_cd&&inYear(_cd)){var m=new Date(_cd).getMonth();mo[m]=(mo[m]||0)+i.amount}});
+  D.invoices.forEach(function(i){var _cd=i.collDate||i.date;if(i.collected&&_cd&&inYear(_cd)){var m=new Date(_cd).getMonth();mo[m]=(mo[m]||0)+ivC(i)}});
   var cf=[];for(var m=0;m<12;m++){cf.push({m:MO[m],v:Math.round(mo[m]||0)})}
   var bs={},eb={},bc={};
   D.invoices.forEach(function(i){if(!inYear(i.date)){return}var d=D.deals.find(function(x){return x.id===i.dealId});if(d){bs[d.specialty]=(bs[d.specialty]||0)+i.amount;var c=D.clients.find(function(x){return x.id===d.clientId});if(c){bc[c.channel]=(bc[c.channel]||0)+i.amount}}});
@@ -1096,7 +1096,7 @@ if(cTab==="dashboard"){
     h+='</div></div>';
     var mNow=Math.max(1,new Date().getMonth()+1);var tCost=(D.timeCostMonth||0)*mNow;
     if(tCost>0){h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">CUSTO TOTAL DO PROJETO (incl. tempo)</div><table><tr><th>Rubrica</th><th style="text-align:right">Valor</th></tr><tr><td>Custos diretos (viagens, marketing)</td><td style="text-align:right">'+fmt(S.exp)+'</td></tr><tr><td>Custo nocional do tempo ('+fmt(D.timeCostMonth)+'/mês × '+mNow+')</td><td style="text-align:right">'+fmt(tCost)+'</td></tr><tr style="border-top:2px solid #E4E8EB"><td style="font-weight:700">Custo total real</td><td style="text-align:right;font-weight:700">'+fmt(S.exp+tCost)+'</td></tr><tr><td style="font-weight:700">Break-even (facturação necessária)</td><td style="text-align:right;font-weight:700;color:'+(S.inv>=S.exp+tCost?GRN:DNG)+'">'+fmt(S.exp+tCost)+' → '+(S.inv>=S.exp+tCost?"atingido":"faltam "+fmt(S.exp+tCost-S.inv))+'</td></tr></table><div style="font-size:11px;color:#A6AEB6;margin-top:8px">Define o custo mensal do teu tempo em Correções › definições para ajustar este cálculo.</div></div>'}
-    h+='<div class="ins"><div style="font-size:12px;color:#7E8892"><b>Nota sobre IVA:</b> a <b>facturação</b>, o pipeline e os resultados são apresentados <b>sem IVA</b> (receita); a <b>dívida a receber</b> (pendente, por cobrar, em risco) é apresentada <b>com IVA</b>, que é o valor real que o cliente deve. Restante nota: sem IVA</b> (é o que conta como receita/facturação). As despesas vêm de extractos bancários, logo <b>incluem IVA</b> — o Cashflow mistura receita líquida com custo bruto, pelo que o resultado real é ligeiramente melhor do que o apresentado. Não há dados de saldos bancários reais para a Mobilwave nesta app.</div></div>';
+    h+='<div class="ins"><div style="font-size:12px;color:#7E8892"><b>Nota sobre IVA:</b> a <b>facturação</b>, o pipeline e a margem são <b>sem IVA</b> (receita); o <b>cobrado</b>, o <b>cashflow</b> e a <b>dívida a receber</b> (pendente, por cobrar, em risco) são <b>com IVA</b> — o dinheiro real recebido e em falta. Restante nota: sem IVA</b> (é o que conta como receita/facturação). As despesas vêm de extractos bancários, logo <b>incluem IVA</b> — o Cashflow mistura receita líquida com custo bruto, pelo que o resultado real é ligeiramente melhor do que o apresentado. Não há dados de saldos bancários reais para a Mobilwave nesta app.</div></div>';
   } else if(finSub==="cobrancas"){
     var adjDeals=D.deals.filter(function(d){return isWon(d)&&!D.invoices.find(function(i){return i.dealId===d.id})});
     var adjTotal=adjDeals.reduce(function(a,d){return a+d.value},0);
