@@ -832,6 +832,26 @@ function integrityCheck(){var p=[];
   return p}
 
 function ivC(i){return (i&&i.amountCiva!=null)?(Number(i.amountCiva)||0):(Number(i&&i.amount)||0);}
+/* ===== TOC: IVA dedutível por categoria (CIVA) — valor no P&L = valor contabilístico líquido ===== */
+var IVA_RATE=0.23;
+var IVADED_DEFAULT={
+  /* Dedução total (100% — ligadas à actividade, taxa normal 23%) */
+  "Stock":1,"Hardware":1,"Software":1,"Artelecom":1,"MEO":1,"Marketing":1,"SMS":1,
+  "Escritório":1,"TOC":1,"Jurídico":1,"Qualidade e Segurança":1,"Fornecedores":1,
+  "CTT e Estafetas":1,"Renda":1,"EDP":1,
+  /* Dedução parcial (50% — gasóleo, art.21º nº2 CIVA) */
+  "Gasóleo":0.5,
+  /* Sem dedução — sem IVA, isento (art.9º) ou excluído (art.21º): fica pelo bruto */
+  "Vencimentos":0,"Gratificações Tickets":0,"Gratificações Outras":0,"Ref. Célebre":0,
+  "Seguro Saúde":0,"Seguro Trabalho":0,"Outros Seguros":0,"Comissões Banco":0,"SIFIDE":0,
+  "Carros Rendas":0,"Carros Consumos":0,"Viagens":0,"Uber":0,"Despesas Outras":0,
+  "Despesas Comerciais":0,"VV":0,"Estado":0,"Não Identificadas":0,"Clientes":0,"IVA":0,"IRC":0
+};
+function ivaDedFrac(cat){var m=(typeof D!=="undefined"&&D&&D.ivaDed)||IVADED_DEFAULT;var k=(cat||"").trim();var f=m[k];return (f==null?0:f);}
+function isTaxCat(k){var K=(k||"").toUpperCase();return K==="IVA"||K==="IRC";}
+function expCat(e){return ((e&&(e.type||e.client))||"").trim();}
+function expNetPL(e){var g=Math.abs(Number(e&&e.amount)||0);var f=ivaDedFrac(expCat(e));if(f<=0)return g;var base=g/(1+IVA_RATE);return g-(g-base)*f;}
+function expDedIVA(e){var g=Math.abs(Number(e&&e.amount)||0);var f=ivaDedFrac(expCat(e));if(f<=0)return 0;var base=g/(1+IVA_RATE);return (g-base)*f;}
 function st(){
   var inv=0,col=0,exp=0,pend=0,pendPrev=0,cash=0;
   D.invoices.forEach(function(i){if(inYear(i.date)&&!i.preERP){inv+=i.amount}var _cd=i.collDate||i.date;if(i.collected&&inYear(_cd)){col+=ivC(i);cash+=ivC(i)}if(!i.collected){pend+=ivC(i);if(beforeYear(i.date))pendPrev+=ivC(i)}});
@@ -844,8 +864,12 @@ function st(){
   var cf=[];for(var m=0;m<12;m++){cf.push({m:MO[m],v:Math.round(mo[m]||0)})}
   var bs={},eb={},bc={};
   D.invoices.forEach(function(i){if(!inYear(i.date)||i.preERP){return}var d=D.deals.find(function(x){return x.id===i.dealId});if(d){bs[d.specialty]=(bs[d.specialty]||0)+i.amount;var c=D.clients.find(function(x){return x.id===d.clientId});if(c){bc[c.channel]=(bc[c.channel]||0)+i.amount}}});
-  D.expenses.forEach(function(e){if(!inYear(e.date))return;var k=e.client||e.type;eb[k]=(eb[k]||0)+e.amount});
-  return{inv:inv,col:col,pend:pend,pendPrev:pendPrev,exp:exp,cf2:cash-exp,pipe:pipe,debt:debt,debtCh:debtCh,cfd:cf,bs:bs,eb:eb,bc:bc,pB:pc(inv,D.budget),cR:pc(col,col+pend),pN:D.deals.filter(function(d){return d.stage==="proposta"&&inYear(d.date)}).length};
+  var ebNet={},expPL=0,ivaTax=0,ircTax=0,ivaDedTot=0;
+  D.expenses.forEach(function(e){if(!inYear(e.date))return;var k=e.client||e.type;eb[k]=(eb[k]||0)+e.amount;
+    var K=expCat(e);
+    if(isTaxCat(K)){if(K.toUpperCase()==="IVA")ivaTax+=Math.abs(e.amount);else ircTax+=Math.abs(e.amount);return;}
+    var nv=expNetPL(e);ebNet[k]=(ebNet[k]||0)+nv;expPL+=nv;ivaDedTot+=expDedIVA(e);});
+  return{inv:inv,col:col,pend:pend,pendPrev:pendPrev,exp:exp,expPL:expPL,ivaTax:ivaTax,ircTax:ircTax,ivaDed:ivaDedTot,cf2:cash-exp,pipe:pipe,debt:debt,debtCh:debtCh,cfd:cf,bs:bs,eb:eb,ebNet:ebNet,bc:bc,pB:pc(inv,D.budget),cR:pc(col,col+pend),pN:D.deals.filter(function(d){return d.stage==="proposta"&&inYear(d.date)}).length};
 }
 
 var NAV=[
@@ -951,14 +975,16 @@ if(cTab==="dashboard"){
   SPECS.forEach(function(sp){h+=barH(sp,S.bs[sp]||0,S.inv,spc[sp]||G)});
   h+='</div></div>';
 } else if(cTab==="pl"){
-  var _ivaT=(S.eb&&S.eb["IVA"])||0,_ircT=(S.eb&&S.eb["IRC"])||0;
-  var _expPL=S.exp-_ivaT-_ircT;var _res=S.inv-_expPL;var _marg=S.inv?Math.round(_res/S.inv*100):0;
-  h=pgHead("📈","P&L "+yearLabel(),yearPicker()+' <button class="btn bs" style="background:'+SL+'" onclick="relatorioMensal()">📄 Relatório</button>')+'<div class="kr">'+kpi("Proveitos",fmt(S.inv),"faturação s/IVA",GRN,GRN)+kpi("Custos","-"+fmt(_expPL),"sem IVA/IRC",R,R)+kpi("Resultado",fmt(_res),"",_res<0?DNG:GRN,_res<0?DNG:GRN)+kpi("Margem",_marg+"%","",_res<0?DNG:BLU,_res<0?DNG:BLU)+'</div><div class="g2"><div class="cd"><div class="ct2" style="margin-bottom:12px">RECEITAS POR CLIENTE</div>';
+  var _ivaT=S.ivaTax||0,_ircT=S.ircTax||0,_ded=S.ivaDed||0;
+  var _expPL=S.expPL;var _res=S.inv-_expPL;var _marg=S.inv?Math.round(_res/S.inv*100):0;
+  h=pgHead("📈","P&L "+yearLabel(),yearPicker()+' <button class="btn bs" style="background:'+SL+'" onclick="relatorioMensal()">📄 Relatório</button>')+'<div class="kr">'+kpi("Proveitos",fmt(S.inv),"faturação s/IVA",GRN,GRN)+kpi("Custos","-"+fmt(_expPL),"líq. IVA dedutível",R,R)+kpi("Resultado",fmt(_res),"",_res<0?DNG:GRN,_res<0?DNG:GRN)+kpi("Margem",_marg+"%","",_res<0?DNG:BLU,_res<0?DNG:BLU)+'</div><div class="g2"><div class="cd"><div class="ct2" style="margin-bottom:12px">RECEITAS POR CLIENTE</div>';
   var byC={};D.invoices.forEach(function(i){if(beforeYear(i.date)||i.preERP)return;var d=D.deals.find(function(x){return x.id===i.dealId});if(d){var n=cn(d.clientId);byC[n]=(byC[n]||0)+i.amount}});
   Object.entries(byC).sort(function(a,b){return b[1]-a[1]}).slice(0,30).forEach(function(e){h+=barH(e[0],e[1],S.inv,GRN)});
-  h+='</div><div class="cd"><div class="ct2" style="margin-bottom:12px">CUSTOS POR DESTINO</div>';
-  Object.entries(S.eb).filter(function(e){var k=(e[0]||"").toUpperCase();return k!=="IVA"&&k!=="IRC";}).sort(function(a,b){return b[1]-a[1]}).forEach(function(e){h+=barH(e[0]||"Outros",e[1],_expPL||1,R)});
-  if(_ivaT>0||_ircT>0){h+='<div style="border-top:2px solid #E4E8EB;margin-top:12px;padding-top:10px"><div style="font-size:11px;color:#A6AEB6;text-transform:uppercase;letter-spacing:.4px;font-weight:700;margin-bottom:6px">Fora do resultado (não são custos operacionais)</div><div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>IVA</span><b>'+fmt(_ivaT)+'</b></div><div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>IRC</span><b>'+fmt(_ircT)+'</b></div></div>';}
+  h+='</div><div class="cd"><div class="ct2" style="margin-bottom:12px">CUSTOS POR DESTINO <span style="font-size:10px;color:#A6AEB6;font-weight:600">(valor contabilístico, líq. IVA ded.)</span></div>';
+  Object.entries(S.ebNet).sort(function(a,b){return b[1]-a[1]}).forEach(function(e){h+=barH(e[0]||"Outros",e[1],_expPL||1,R)});
+  h+='<div style="border-top:2px solid #E4E8EB;margin-top:12px;padding-top:10px"><div style="font-size:11px;color:#A6AEB6;text-transform:uppercase;letter-spacing:.4px;font-weight:700;margin-bottom:6px">Fora do resultado (não são custos operacionais)</div>';
+  if(_ded>0)h+='<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:'+GRN+'"><span>IVA dedutível recuperado</span><b>'+fmt(_ded)+'</b></div>';
+  h+='<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>IVA (entregue ao Estado)</span><b>'+fmt(_ivaT)+'</b></div><div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>IRC</span><b>'+fmt(_ircT)+'</b></div></div>';
   h+='</div></div>';
 } else if(cTab==="pipeline"){
   h=pgHead("🎯","Pipeline",'<button class="btn" style="background:'+R+'" onclick="openDM()">+ Deal</button>')+'<div class="kan">';
@@ -1125,8 +1151,9 @@ if(cTab==="dashboard"){
     D.invoices.forEach(function(i){if(beforeYear(i.date)||i.preERP)return;var d=D.deals.find(function(x){return x.id===i.dealId});if(d&&d.type==="AT")fVendasAT+=i.amount;else fVendasNV+=i.amount});
     function orcRow(label,fact,orc){var pctv=orc>0?pc(fact,orc):null;return'<tr><td style="font-weight:600">'+label+'</td><td style="text-align:right">'+(orc>0?fmt(orc):'—')+'</td><td style="font-weight:700;text-align:right">'+fmt(fact)+'</td><td style="text-align:right">'+(pctv!==null?bdg(pctv+"%",pctv>=70?GRN:(pctv>=40?GD:DNG)):'—')+'</td></tr>'}
     h+='<div class="cd"><div class="ct2" style="margin-bottom:14px">ORÇAMENTO '+activeYear()+' vs REALIZADO (S/IVA)</div><table><thead><tr><th>Rubrica</th><th style="text-align:right">Orçamento</th><th style="text-align:right">Facturado</th><th style="text-align:right">% Exec.</th></tr></thead><tbody>';
-    h+=orcRow("Vendas (NV)",fVendasNV,0)+orcRow("AT/SaaS",fVendasAT,0)+orcRow("TOTAL RECEITA",S.inv,D.budget)+orcRow("Custos",S.exp,0)+orcRow("Margem",S.inv-S.exp,0);
-    h+='</tbody></table></div>';
+    h+=orcRow("Vendas (NV)",fVendasNV,0)+orcRow("AT/SaaS",fVendasAT,0)+orcRow("TOTAL RECEITA",S.inv,D.budget)+orcRow("Custos (P&L, líq. IVA ded.)",S.expPL,0)+orcRow("Margem (P&L, s/ impostos)",S.inv-S.expPL,0);
+    h+='</tbody></table>';
+    h+='<div style="border-top:1px dashed #E4E8EB;margin-top:6px;padding-top:8px;font-size:11px;color:#A6AEB6">Fora da margem (não são custos operacionais): IVA '+fmt(S.ivaTax||0)+' · IRC '+fmt(S.ircTax||0)+'</div></div>';
     var moInv={};D.invoices.forEach(function(i){if(beforeYear(i.date)||i.preERP)return;var m=new Date(i.date).getMonth();moInv[m]=(moInv[m]||0)+i.amount});
     var mxInv=Math.max.apply(null,Object.values(moInv).concat([1]));
     h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">FACTURAÇÃO MENSAL — '+activeYear()+' (S/IVA)</div><div class="wfc">';
@@ -1218,6 +1245,34 @@ if(cTab==="dashboard"){
   for(var mm2=0;mm2<12;mm2++){sal+=moNV[mm2];rowsM+='<tr><td>'+MOn[mm2]+'</td><td'+RA+' style="text-align:right;color:#7E8892">'+(moNVp[mm2]?fmt(moNVp[mm2]):"—")+'</td><td'+RA+'>'+(moNV[mm2]?fmt(moNV[mm2]):"—")+'</td><td'+RA+' style="text-align:right;font-weight:600">'+fmt(sal)+'</td></tr>';}
   h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">NOVAS VENDAS '+_Y+' (por adjudicação)</div><div style="overflow-x:auto"><table><tr><th>Mês</th><th'+RA+'>'+py+'</th><th'+RA+'>'+_Y+'</th><th'+RA+'>Saldo acumulado</th></tr>'+rowsM+'<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>Média mensal orçamento</td><td'+RA+'></td><td'+RA+'></td><td'+RA+'>'+fmt(orc.nv/12)+'</td></tr><tr style="font-weight:700"><td>Média mensal realizada</td><td'+RA+'></td><td'+RA+'></td><td'+RA+'>'+fmt(moTot/12)+'</td></tr></table></div></div>';
   h+='<div class="ins"><div style="font-size:12px;color:#7E8892">Valores <b>sem IVA</b>, calculados da app para o ano selecionado. Novas vendas mensais por <b>data de adjudicação</b>; caracterização e licenças por <b>data de fatura</b>.</div></div>';
+  /* ===== Reconciliação com o Estado (SAF-T + e-Fatura) ===== */
+  if(D.fatOficial&&Number(D.fatOficial.ano)===Number(_Y)){
+    var FO=D.fatOficial;
+    var appMo=[];for(var _am=0;_am<12;_am++)appMo.push(0);
+    var appTot=0;D.invoices.forEach(function(i){if(String((i.date||"").slice(0,4))!==String(_Y)||i.preERP)return;var mm3=parseInt((i.date||"").slice(5,7),10)-1;if(mm3<0||mm3>11)return;appMo[mm3]+=Number(i.amount)||0;appTot+=Number(i.amount)||0;});
+    var difTot=appTot-(FO.totalBase||0);
+    var MOr=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:6px">🏛️ RECONCILIAÇÃO COM O ESTADO — Faturação '+_Y+' (s/IVA)</div>';
+    h+='<div style="font-size:11px;color:#A6AEB6;margin-bottom:12px">'+esc(FO.fonte||"")+'</div>';
+    var _recOK=Math.abs(difTot)<0.01*(FO.totalBase||1);
+    h+='<div class="kr">'+kpi("Registado no Estado",fmt(FO.totalBase||0),(FO.nDocsAtivos||0)+" docs · "+(FO.nAnulados||0)+" anulados",TEAL,TEAL)+kpi("Faturação na app",fmt(appTot),"",GD,G)+kpi("Diferença",(difTot>=0?"+":"")+fmt(difTot),_recOK?"reconciliado ("+(FO.totalBase?(Math.abs(difTot)/FO.totalBase*100).toFixed(2):"0")+"%)":"a rever",_recOK?GRN:DNG,_recOK?GRN:DNG)+'</div>';
+    h+='<div style="overflow-x:auto"><table><tr><th>Mês</th><th style="text-align:right">Estado (s/IVA)</th><th style="text-align:right">App (s/IVA)</th><th style="text-align:right">Δ</th></tr>';
+    for(var _mm=0;_mm<12;_mm++){var of=FO.mesesBase[_mm]||0,ap=appMo[_mm]||0,dd=ap-of;h+='<tr><td>'+MOr[_mm]+'</td><td style="text-align:right">'+fmt(of)+'</td><td style="text-align:right">'+fmt(ap)+'</td><td style="text-align:right;color:'+(Math.abs(dd)<1?"#7E8892":(dd<0?DNG:GD))+'">'+(dd>=0?"+":"")+fmt(dd)+'</td></tr>';}
+    h+='<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>TOTAL</td><td style="text-align:right">'+fmt(FO.totalBase||0)+'</td><td style="text-align:right">'+fmt(appTot)+'</td><td style="text-align:right;color:'+(Math.abs(difTot)<1?"#7E8892":DNG)+'">'+(difTot>=0?"+":"")+fmt(difTot)+'</td></tr></table></div>';
+    var dsc=(FO.discrepancias||[]);
+    if(dsc.length){
+      var nAn=dsc.filter(function(x){return x.tipo==="anulado_estado";}).length;
+      var nVl=dsc.filter(function(x){return x.tipo==="valor";}).length;
+      var nFl=dsc.filter(function(x){return x.tipo==="em_falta";}).length;
+      h+='<div style="margin-top:16px"><div class="ct2" style="margin-bottom:8px">DOCUMENTOS A REVER ('+dsc.length+')</div>';
+      h+='<div style="font-size:11px;color:#7E8892;margin-bottom:8px">'+nAn+' anulados no Estado · '+nVl+' com valor diferente · '+nFl+' em falta na app</div>';
+      h+='<div style="overflow-x:auto"><table><tr><th>Fatura</th><th>Situação</th><th>Cliente</th><th style="text-align:right">App</th><th style="text-align:right">Estado</th></tr>';
+      dsc.forEach(function(x){var tg=x.tipo==="anulado_estado"?'<span style="color:'+DNG+'">Anulado no Estado</span>':(x.tipo==="em_falta"?'<span style="color:'+DNG+'">Em falta na app</span>':'<span style="color:'+GD+'">'+esc(x.nota||"valor")+'</span>');h+='<tr><td>FT '+_Y+'/'+x.ft+'</td><td>'+tg+'</td><td style="font-size:11px;color:#7E8892">'+esc(x.cliente||"")+'</td><td style="text-align:right">'+fmt(x.app||0)+'</td><td style="text-align:right">'+fmt(x.oficial||0)+'</td></tr>';});
+      h+='</table></div></div>';
+    }
+    h+='<div class="ins" style="margin-top:12px"><div style="font-size:12px;color:#7E8892">Fonte oficial de vendas: <b>SAF-T</b> (SalesInvoices) + <b>e-Fatura</b> emitidas, série 2023A. As <b>faturas (FT) reconciliam a 99,9%</b> com o Estado; a diferença residual do total resulta da <b>imputação de notas de crédito</b> na fronteira 2022/2023. Os documentos anulados no Estado devem ser anulados também na app.</div></div>';
+    h+='</div>';
+  }
 } else if(cTab==="vendasPais"||cTab==="vendasVend"){
   var _byP=(cTab==="vendasPais");
   var _wd=D.deals.filter(function(d){return isWon(d)&&!d.preERP&&inYear(d.date);});
@@ -2065,8 +2120,8 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   function buildPLtable(){
     var fatM=new Array(12).fill(0);
     D.invoices.forEach(function(i){if(inYear(i.date)){fatM[new Date(i.date).getMonth()]+=i.amount;}});
-    var types={};
-    D.expenses.forEach(function(e){if(!inYear(e.date))return;var k=e.type||"Outros";if(!types[k])types[k]=new Array(12).fill(0);types[k][new Date(e.date).getMonth()]+=e.amount;});
+    var types={};var dedM=new Array(12).fill(0);
+    D.expenses.forEach(function(e){if(!inYear(e.date))return;var k=e.type||"Outros";if(!types[k])types[k]=new Array(12).fill(0);var mm=new Date(e.date).getMonth();types[k][mm]+=isTaxCat(k)?Math.abs(e.amount):expNetPL(e);dedM[mm]+=expDedIVA(e);});
     var LBL={Viagem:"Viagens",Combustível:"Combustível",Telecomunicações:"Telecomunicações",Eletricidade:"Eletricidade",Software:"Software",Serviços:"Serviços",Marketing:"Marketing",Equipamento:"Equipamento",Stock:"Stock / Inventário",Outro:"Outros",Outros:"Outros"};
     var order=["Viagem","Combustível","Telecomunicações","Eletricidade","Software","Serviços","Marketing","Equipamento","Stock","Outro","Outros"];
     var _isTax=function(k){var K=(k||"").toUpperCase();return K==="IVA"||K==="IRC";};
@@ -2097,6 +2152,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     h+=monthHdr("Fora do P&amp;L — não são custos operacionais");
     h+='<tr>'+lead()+rowLabel("IVA",false);for(var mv=0;mv<12;mv++)h+=cell(-ivaM[mv],{color:"#7E8892"});h+=cell(-sum(ivaM),{color:"#7E8892"})+'</tr>';
     h+='<tr>'+lead()+rowLabel("IRC",false);for(var mc=0;mc<12;mc++)h+=cell(-ircM[mc],{color:"#7E8892"});h+=cell(-sum(ircM),{color:"#7E8892"})+'</tr>';
+    if(sum(dedM)>0){h+='<tr>'+lead()+rowLabel("IVA dedutível recuperado",false);for(var md=0;md<12;md++)h+=cell(dedM[md],{color:GRN});h+=cell(sum(dedM),{color:GRN})+'</tr>';}
     h+='</table></div></div>';
     return h;
   }
