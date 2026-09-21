@@ -994,7 +994,33 @@ if(cTab==="dashboard"){
 } else if(cTab==="pl"){
   var _ivaT=S.ivaTax||0,_ircT=S.ircTax||0,_ded=S.ivaDed||0;
   var _expPL=S.expPL;var _res=S.inv-_expPL;var _marg=S.inv?Math.round(_res/S.inv*100):0;
-  h=pgHead("📈","P&L "+yearLabel(),yearPicker()+' <button class="btn bs" style="background:'+SL+'" onclick="relatorioMensal()">📄 Relatório</button>')+'<div class="kr">'+kpi("Proveitos",fmt(S.inv),"faturação s/IVA",GRN,GRN)+kpi("Custos","-"+fmt(_expPL),"líq. IVA dedutível",R,R)+kpi("Resultado",fmt(_res),"",_res<0?DNG:GRN,_res<0?DNG:GRN)+kpi("Margem",_marg+"%","",_res<0?DNG:BLU,_res<0?DNG:BLU)+'</div><div class="g2"><div class="cd"><div class="ct2" style="margin-bottom:12px">RECEITAS POR CLIENTE</div>';
+  var _Yp=String(activeYear());var _dr=(D.drOficial&&D.drOficial[_Yp])||null;
+  h=pgHead("📈","P&L "+yearLabel(),yearPicker()+' <button class="btn bs" style="background:'+SL+'" onclick="relatorioMensal()">📄 Relatório</button>');
+  if(_dr){
+    // reclassificação gestão: gratificações pagas por vias FSE que internamente são vencimento
+    var _rec=0;if(D.gratificacoes&&D.gratificacoes.byAcc&&D.gratificacoes.byAcc[_Yp]){var _ba=D.gratificacoes.byAcc[_Yp];["FSE·Coverflex","FSE·Viaturas","FSE·Deslocações","FSE·Seguros"].forEach(function(k){_rec+=_ba[k]||0;});}
+    _rec=Math.round(_rec*100)/100;
+    var _fseG=Math.abs(_dr.fse)-_rec, _vencG=Math.abs(_dr.pessoal)+_rec;
+    var _ofCusto=Math.abs(_dr.fse)+Math.abs(_dr.pessoal)+Math.abs(_dr.cmvmc)+Math.abs(_dr.outros);
+    var _ofMarg=_dr.vendas?Math.round(_dr.ebitda/_dr.vendas*100):0;
+    h+='<div class="kr">'+kpi("Proveitos",fmt(_dr.vendas),"vendas e serviços",GRN,GRN)+kpi("Vencimentos (gestão)","-"+fmt(_vencG),"inclui IRS+SS+gratificações",R,R)+kpi("EBITDA",fmt(_dr.ebitda),_ofMarg+"% margem",_dr.ebitda<0?DNG:GRN,_dr.ebitda<0?DNG:GRN)+kpi("Resultado líquido",fmt(_dr.resultLiq),"após amort., juros e IRC",_dr.resultLiq<0?DNG:BLU,_dr.resultLiq<0?DNG:BLU)+'</div>';
+    // P&L visão de gestão (mesmos totais da DR, custos re-agrupados à Mobilwave)
+    h+='<div class="cd" style="margin-bottom:16px"><div class="ct2" style="margin-bottom:10px">📊 P&L — VISÃO MOBILWAVE '+_Yp+' <span style="font-size:10px;color:#A6AEB6;font-weight:600">(totais idênticos à DR oficial)</span></div>';
+    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
+    var _mrow=function(l,v,b,sub){return '<tr'+(b?' style="font-weight:700;background:#F7F9FA"':'')+'><td style="padding:6px 8px">'+l+(sub?' <span style="font-size:10px;color:#A6AEB6">'+sub+'</span>':'')+'</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:'+(v<0?DNG:(b?"#1B2733":GRN))+'">'+fmt(v)+'</td></tr>';};
+    h+=_mrow("Proveitos (vendas e serviços)",_dr.vendas,true)+_mrow("Custo mercadorias (CMVMC)",_dr.cmvmc)+_mrow("Vencimentos",-_vencG,false,"salários + IRS/SS + gratificações + Coverflex")+_mrow("Fornecimentos e serviços externos (FSE)",-_fseG,false,"líq. de gratificações reclassificadas")+_mrow("Outros gastos",_dr.outros)+_mrow("EBITDA",_dr.ebitda,true)+_mrow("Depreciações e amortizações",_dr.amort)+_mrow("Resultado operacional",_dr.resultOp,true)+_mrow("Juros e financiamento",_dr.juros)+_mrow("Imposto sobre o rendimento (IRC)",_dr.imposto)+_mrow("RESULTADO LÍQUIDO",_dr.resultLiq,true);
+    h+='</table></div>';
+    if(_rec>0)h+='<div class="ins" style="margin-top:10px"><div style="font-size:11.5px;color:#7E8892">Reclassificados <b>'+fmt(_rec)+'</b> de FSE para Vencimentos — gratificações a colaboradores pagas via Coverflex, viaturas, deslocações e seguros (ver Direção › Gratificações). O EBITDA e o resultado são <b>idênticos</b> à DR oficial; muda só a arrumação dos custos para a vossa leitura de gestão.</div></div>';
+    h+='</div>';
+    // referência: DR oficial (contabilidade)
+    h+='<div class="cd" style="margin-bottom:16px"><div class="ct2" style="margin-bottom:10px">🏛️ DR oficial (contabilidade SNC) — referência</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
+    var _drow=function(l,v,b){return '<tr'+(b?' style="font-weight:700"':'')+'><td style="padding:5px 8px;color:#7E8892">'+l+'</td><td style="padding:5px 8px;text-align:right;font-variant-numeric:tabular-nums;color:'+(v<0?DNG:"#7E8892")+'">'+fmt(v)+'</td></tr>';};
+    h+=_drow("Fornecimentos e serviços externos",_dr.fse)+_drow("Gastos com o pessoal",_dr.pessoal)+_drow("(EBITDA)",_dr.ebitda,true);
+    h+='</table></div><div style="font-size:11px;color:#A6AEB6;margin-top:6px">'+esc(D.drFonte||"")+'. Proveitos batem ao cêntimo com o SAF-T.</div></div>';
+  }else{
+    h+='<div class="kr">'+kpi("Proveitos",fmt(S.inv),"faturação s/IVA",GRN,GRN)+kpi("Custos","-"+fmt(_expPL),"líq. IVA dedutível",R,R)+kpi("Resultado",fmt(_res),"",_res<0?DNG:GRN,_res<0?DNG:GRN)+kpi("Margem",_marg+"%","",_res<0?DNG:BLU,_res<0?DNG:BLU)+'</div>';
+  }
+  h+='<div class="g2"><div class="cd"><div class="ct2" style="margin-bottom:12px">RECEITAS POR CLIENTE</div>';
   var byC={};D.invoices.forEach(function(i){if(beforeYear(i.date)||i.preERP)return;var d=D.deals.find(function(x){return x.id===i.dealId});if(d){var n=cn(d.clientId);byC[n]=(byC[n]||0)+i.amount}});
   Object.entries(byC).sort(function(a,b){return b[1]-a[1]}).slice(0,30).forEach(function(e){h+=barH(e[0],e[1],S.inv,GRN)});
   h+='</div><div class="cd"><div class="ct2" style="margin-bottom:12px">CUSTOS POR DESTINO <span style="font-size:10px;color:#A6AEB6;font-weight:600">(valor contabilístico, líq. IVA ded.)</span></div>';
@@ -1004,9 +1030,27 @@ if(cTab==="dashboard"){
   h+='<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>IVA (entregue ao Estado)</span><b>'+fmt(_ivaT)+'</b></div><div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>IRC</span><b>'+fmt(_ircT)+'</b></div></div>';
   h+='</div></div>';
 } else if(cTab==="pipeline"){
-  h=pgHead("🎯","Pipeline",'<button class="btn" style="background:'+R+'" onclick="openDM()">+ Deal</button>')+'<div class="kan">';
+  if(!window.__pipeF)window.__pipeF={type:"",spec:"",q:""};
+  var _pf=window.__pipeF;
+  h=pgHead("🎯","Pipeline",yearPicker()+' <button class="btn" style="background:'+R+'" onclick="openDM()">+ Deal</button>');
+  // barra de filtros
+  var _tipos=[];D.deals.forEach(function(d){var t=(d.type||"").trim();if(t&&_tipos.indexOf(t)<0)_tipos.push(t)});_tipos.sort();
+  var _specs=[];D.deals.forEach(function(d){var s=(d.specialty||"").trim();if(s&&_specs.indexOf(s)<0)_specs.push(s)});_specs.sort();
+  var _topt=function(v,cur){return '<option value="'+esc(v)+'"'+(cur===v?" selected":"")+'>'+esc(v||"—")+'</option>'};
+  h+='<div class="cd" style="padding:10px 12px;margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
+  h+='<span style="font-size:11px;color:#7E8892;font-weight:600">Filtrar:</span>';
+  h+='<select onchange="setPipeF(\'type\',this.value)" style="padding:6px 10px;border:1px solid #E4E8EB;border-radius:8px;font-size:12px"><option value="">Todos os tipos</option>'+_tipos.map(function(t){return _topt(t,_pf.type)}).join("")+'</select>';
+  h+='<select onchange="setPipeF(\'spec\',this.value)" style="padding:6px 10px;border:1px solid #E4E8EB;border-radius:8px;font-size:12px"><option value="">Todas as especialidades</option>'+_specs.map(function(s){return _topt(s,_pf.spec)}).join("")+'</select>';
+  h+='<input value="'+esc(_pf.q||"")+'" oninput="setPipeF(\'q\',this.value)" placeholder="Procurar cliente/produto..." style="padding:6px 10px;border:1px solid #E4E8EB;border-radius:8px;font-size:12px;flex:1;min-width:150px">';
+  if(_pf.type||_pf.spec||_pf.q)h+='<button onclick="setPipeF(\'clear\')" style="background:#EFF1F4;color:#7E8892;border:none;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer">✕ Limpar</button>';
+  h+='</div><div class="kan">';
+  var _pfMatch=function(d){
+    if(_pf.type&&(d.type||"").trim()!==_pf.type)return false;
+    if(_pf.spec&&(d.specialty||"").trim()!==_pf.spec)return false;
+    if(_pf.q){var q=_pf.q.toLowerCase();var hay=(cn(d.clientId)+" "+(d.product||"")).toLowerCase();if(hay.indexOf(q)<0)return false}
+    return true};
   STAGES.forEach(function(sg){
-    var colDeals=D.deals.filter(function(d){return d.stage===sg&&inYear(d.date)}).sort(function(a,b){return b.value-a.value});
+    var colDeals=D.deals.filter(function(d){return d.stage===sg&&inYear(d.date)&&_pfMatch(d)}).sort(function(a,b){return b.value-a.value});
     var colTotal=colDeals.reduce(function(a,d){return a+d.value},0);
     h+='<div ondragover="mwDragOver(event)" ondragleave="mwDragLeave(event)" ondrop="mwDrop(event,\'pipeline\',\''+sg+'\')"><div style="text-align:center;margin-bottom:4px">'+bdg(SL2[sg],SC[sg])+'</div><div style="text-align:center;font-size:10px;color:#A6AEB6;margin-bottom:10px">'+colDeals.length+' · '+fmt(colTotal)+'</div>';
     if(colDeals.length===0){h+='<div style="text-align:center;padding:24px 10px;color:#C6CDD4;font-size:11px;border:1.5px dashed #E4E8EB;border-radius:10px">Sem oportunidades</div>'}
@@ -1426,6 +1470,7 @@ if(cTab==="dashboard"){
 }
 document.getElementById("app").innerHTML=h}
 
+function setPipeF(k,v){if(!window.__pipeF)window.__pipeF={type:"",spec:"",q:""};if(k==="clear"){window.__pipeF={type:"",spec:"",q:""}}else{window.__pipeF[k]=v}rPnl();}
 function mvDl(id,sg){D.deals.forEach(function(d){if(d.id===id)d.stage=sg});var dl=D.deals.find(function(d){return d.id===id});if(dl)logAct(sg==="ganho"?"Adjudicação":"Pipeline",cn(dl.clientId)+" movido para "+SL2[sg]+(dl.value>0?" — "+fmt(dl.value):""));if(sg==="ganho"&&dl&&dl.value>0&&!D.invoices.find(function(i){return i.dealId===id})){D.invoices.push({id:uid(),dealId:id,amount:dl.value,date:new Date().toISOString().slice(0,10),collected:false,collDate:""});logAct("Factura","Factura criada automaticamente — "+cn(dl.clientId)+" "+fmt(dl.value))}save();ren()}
 function tgCl(id){D.invoices.forEach(function(i){if(i.id===id){i.collected=!i.collected;i.collDate=i.collected?new Date().toISOString().slice(0,10):"";var d=D.deals.find(function(x){return x.id===i.dealId});logAct("Cobrança",(i.collected?"Recebido: ":"Revertido para pendente: ")+(d?cn(d.clientId):"—")+" — "+fmt(i.amount))}});save();ren()}
 function quickNext(id){var dl=D.deals.find(function(x){return x.id===id});if(!dl)return;
@@ -8818,6 +8863,30 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     app.innerHTML=h;
   }
   window.renderMapaHoras=renderMapaHoras;
+  function renderGratificacoes(){
+    var g=D.gratificacoes;var app=document.getElementById("app");
+    if(!g||!g.persons){app.innerHTML=pgHead("🎁","Gratificações")+'<div class="cd">Sem dados de gratificações carregados.</div>';return;}
+    var Y=g.years;var cats=["FSE·Coverflex","FSE·Viaturas","FSE·Deslocações","FSE·Seguros","Pessoal·Tickets","Pessoal·Numerário"];
+    var fseTot={},pesTot={},pagTot={};
+    Y.forEach(function(y){var f=0,p=0;cats.forEach(function(c){var v=(g.byAcc[y]||{})[c]||0;if(c.indexOf("FSE")===0)f+=v;else p+=v;});fseTot[y]=f;pesTot[y]=p;pagTot[y]=f+p;});
+    var h=pgHead("🎁","Gratificações — Direção");
+    h+='<div class="ins" style="margin-bottom:14px"><div style="font-size:12px;color:#7E8892">Vista de gestão das gratificações a colaboradores (conta-corrente por pessoa). Serve para <b>perceber a ponte</b> com a contabilidade: uma parte das gratificações é paga por vias que a contabilidade regista como <b>FSE</b> (Coverflex, viaturas, deslocações, seguros) mas que internamente contam como <b>vencimento</b>. Não altera o P&L — o resultado continua ancorado na DR oficial.</div></div>';
+    var lastY=Y[Y.length-1];
+    h+='<div class="kr">'+kpi("Gratificações pagas "+lastY,fmt(pagTot[lastY]),Y.length+" anos em vista",PUR,PUR)+kpi("Pago via FSE "+lastY,fmt(fseTot[lastY]),"internamente = vencimento",GD,GD)+kpi("Pago via Pessoal "+lastY,fmt(pesTot[lastY]),"numerário/tickets",BLU,BLU)+kpi("Colaboradores",String(Object.keys(g.persons).length),"com conta de gratificações",TEAL,TEAL)+'</div>';
+    // bridge table
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">PONTE CONTABILÍSTICA — como são pagas as gratificações</div><div style="overflow-x:auto"><table><tr><th>Via de pagamento (classificação contabilística)</th>'+Y.map(function(y){return '<th style="text-align:right">'+y+'</th>';}).join("")+'</tr>';
+    cats.forEach(function(c){h+='<tr><td>'+esc(c)+'</td>'+Y.map(function(y){return '<td style="text-align:right">'+fmt((g.byAcc[y]||{})[c]||0)+'</td>';}).join("")+'</tr>';});
+    h+='<tr style="font-weight:700;border-top:2px solid #E4E8EB;color:'+GD+'"><td>FSE que é internamente vencimento</td>'+Y.map(function(y){return '<td style="text-align:right">'+fmt(fseTot[y])+'</td>';}).join("")+'</tr>';
+    h+='<tr style="font-weight:700"><td>TOTAL pago</td>'+Y.map(function(y){return '<td style="text-align:right">'+fmt(pagTot[y])+'</td>';}).join("")+'</tr>';
+    h+='</table></div></div>';
+    // per person
+    var ppl=Object.keys(g.persons).map(function(k){var pp=g.persons[k];var tc=0,td=0;Y.forEach(function(y){var e=pp.y[y]||{};tc+=e.cred||0;td+=e.deb||0;});return{k:k,nome:pp.nome||k,y:pp.y,tc:tc,td:td};}).filter(function(x){return x.tc||x.td;}).sort(function(a,b){return b.tc-a.tc;});
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">POR COLABORADOR — atribuído (crédito) vs pago (débito)</div><div style="overflow-x:auto"><table><tr><th>Colaborador</th>'+Y.map(function(y){return '<th style="text-align:right">'+y+' atrib.</th><th style="text-align:right">'+y+' pago</th>';}).join("")+'<th style="text-align:right">Saldo aprox.</th></tr>';
+    ppl.forEach(function(x){h+='<tr><td style="font-size:12px">'+esc(x.nome)+'</td>'+Y.map(function(y){var e=x.y[y]||{};return '<td style="text-align:right;color:'+GRN+'">'+(e.cred?fmt(e.cred):"—")+'</td><td style="text-align:right;color:#7E8892">'+(e.deb?fmt(e.deb):"—")+'</td>';}).join("")+'<td style="text-align:right;font-weight:600">'+fmt(x.tc-x.td)+'</td></tr>';});
+    h+='</table></div><div style="font-size:11px;color:#A6AEB6;margin-top:8px">Crédito = gratificação atribuída no ano (custo). Débito = pago no ano. Saldo aprox. = por liquidar no período em vista.</div></div>';
+    app.innerHTML=h;
+  }
+  window.renderGratificacoes=renderGratificacoes;
   // ===================== C1 · Unir subscrições (renovações) =====================
   window.openUnirSub=function(){
     if(typeof isReadOnlyNow==="function"&&isReadOnlyNow()){toastSafe("Sem permissão.");return;}
@@ -9058,6 +9127,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
       if(typeof cTab!=="undefined"&&cTab==="portalacessos"){try{renderPortalAcessos();}catch(e){}try{applyRoleGating();}catch(e){}return;}
       if(typeof cTab!=="undefined"&&cTab==="bolsahoras"){try{renderBolsas();}catch(e){}try{applyRoleGating();}catch(e){}return;}
       if(typeof cTab!=="undefined"&&cTab==="mapahoras"){try{renderMapaHoras();}catch(e){}try{applyRoleGating();}catch(e){}return;}
+      if(typeof cTab!=="undefined"&&cTab==="gratificacoes"){try{renderGratificacoes();}catch(e){}try{applyRoleGating();}catch(e){}return;}
       if(typeof cTab!=="undefined"&&cTab==="importar"){try{renderImportar();}catch(e){}try{applyRoleGating();}catch(e){}return;}
       if(typeof cTab!=="undefined"&&cTab==="subscricoes"){try{renderSubscricoes();}catch(e){}try{applyRoleGating();}catch(e){}return;}
       var x=_r.apply(this,arguments);try{applyRoleGating();}catch(e){}
@@ -9173,7 +9243,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
   // ===================== ACESSO POR DEPARTAMENTO (Fase 1) =====================
   var DEPT_GROUPS=[
     {group:"Direção",i:"🧭",dept:"direcao",items:[
-      {id:"dashboard",l:"Visão geral"},{id:"estrategia",l:"Análise & insights"},{id:"roicomercial",l:"Retorno comercial"},{id:"mapahoras",l:"Mapa de horas"}]},
+      {id:"dashboard",l:"Visão geral"},{id:"estrategia",l:"Análise & insights"},{id:"roicomercial",l:"Retorno comercial"},{id:"mapahoras",l:"Mapa de horas"},{id:"gratificacoes",l:"Gratificações"}]},
     {group:"Financeiro",i:"💶",dept:"financeiro",items:[
       {id:"pl",l:"P&L"},{id:"caractfat",l:"Caracterização"},{id:"financeiro",sub:"orcamento",l:"Orçamento"},{id:"rentabcli",l:"Rentabilidade"},{id:"tesouraria",l:"Tesouraria"},{id:"historico",l:"Histórico"}]},
     {group:"Faturação & Cobranças",i:"🧾",dept:"financeiro",items:[
@@ -9243,7 +9313,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
   }
   // reconstrói o menu por departamentos (substitui o NAV antigo)
   if(typeof NAV!=="undefined"){NAV.length=0;DEPT_GROUPS.forEach(function(g){NAV.push({group:g.group,i:g.i,always:g.always,items:g.items});});}
-  if(typeof TABS!=="undefined"){["followup","logs","colaboradores","projetos","suporte","ferias","agenda","rh","minhaarea","forecast","tesouraria","carteira","rentabilidade","faturacao","rgpd","seguranca","horas","dunning","contratos","propostas","pesquisa","reembolsos","kb","cronograma","inventario","comparacao","salarios2024","salarios2025","salarios2026","vendasproj","horasTodas","horasCustos","vencimentos","manual"].forEach(function(id){if(!TABS.some(function(t){return t.id===id;}))TABS.push({id:id});});}
+  if(typeof TABS!=="undefined"){["followup","logs","colaboradores","projetos","suporte","ferias","agenda","rh","minhaarea","forecast","tesouraria","carteira","rentabilidade","faturacao","rgpd","seguranca","horas","dunning","contratos","propostas","pesquisa","reembolsos","kb","cronograma","inventario","comparacao","salarios2024","salarios2025","salarios2026","vendasproj","horasTodas","horasCustos","vencimentos","manual","gratificacoes"].forEach(function(id){if(!TABS.some(function(t){return t.id===id;}))TABS.push({id:id});});}
 
   // menu: admin vê tudo; membro vê os seus departamentos + os grupos de acesso geral (Férias)
   if(typeof rTabs==="function"){
