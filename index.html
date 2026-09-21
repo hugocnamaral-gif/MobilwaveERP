@@ -592,7 +592,7 @@ function genReport(optYr,optMo){
   // ORÇAMENTO
   var orc=(D.orcamento&&D.orcamento[String(yr)])||null;
   P.orcamento='<div class="metric-grid">'+mc("Proveitos real",euro(S.inv),(orc?pctv(S.inv,orc.totalProv)+"% do orç.":""),orc&&S.inv>=orc.totalProv?"pos":"neu","blue")+mc("Custos real",euro(custoRealTot),(orc?pctv(custoRealTot,orc.totalCusto)+"% do orç.":""),orc&&custoRealTot<=orc.totalCusto?"pos":"neg","red")+mc("Margem real",euro(margem),"","pos","green")+mc("Margem objetivo",euro(orc?orc.totalProv-orc.totalCusto:0),"","neu","amber")+'</div>';
-  if(orc){var fNV=0,fAT=0;D.invoices.forEach(function(iv){if((iv.date||"").slice(0,4)!=String(yr))return;var dl=dealById(iv.dealId);if(dl&&dl.type=="AT")fAT+=Number(iv.amount)||0;else fNV+=Number(iv.amount)||0;});
+  if(orc){var fNV=(typeof nvFatAno==="function"?nvFatAno(yr):0),fAT=(typeof atFatAno==="function"?atFatAno(yr):0);
     P.orcamento+='<div class="card"><div class="card-header"><div class="card-title">Proveitos — orçamento vs realizado</div></div><table><tr><th>Rubrica</th><th class="r">Orçamento</th><th class="r">Realizado</th><th class="r">Execução</th></tr>'+
     '<tr><td>Novas vendas</td><td class="r">'+euro(orc.vendas)+'</td><td class="r">'+euro(fNV)+'</td><td class="r"><span class="pill '+(pctv(fNV,orc.vendas)>=90?"pos":"neg")+'">'+pctv(fNV,orc.vendas)+'%</span></td></tr>'+
     '<tr><td>AT / recorrente</td><td class="r">'+euro(orc.at)+'</td><td class="r">'+euro(fAT)+'</td><td class="r"><span class="pill '+(pctv(fAT,orc.at)>=90?"pos":"neg")+'">'+pctv(fAT,orc.at)+'%</span></td></tr>'+
