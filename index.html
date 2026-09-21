@@ -428,7 +428,7 @@ function migrate(){var changed=false;
   try{window.__migrateChanged=changed;}catch(e){}
   if(changed)save();
 }
-function save(){try{localStorage.setItem("mw26v3",JSON.stringify(D));return true}catch(e){if(typeof toast==="function")toast("⚠️ Não foi possível guardar — o armazenamento do navegador está cheio (provavelmente por causa de anexos grandes). Os dados em memória continuam, mas NÃO foram gravados. Remove alguns anexos ou exporta um backup já.",{type:"error"});return false}}
+function save(){try{window.__ahCache=null;}catch(e){}try{localStorage.setItem("mw26v3",JSON.stringify(D));return true}catch(e){if(typeof toast==="function")toast("⚠️ Não foi possível guardar — o armazenamento do navegador está cheio (provavelmente por causa de anexos grandes). Os dados em memória continuam, mas NÃO foram gravados. Remove alguns anexos ou exporta um backup já.",{type:"error"});return false}}
 function rstData(){confirmM("Repor dados iniciais?\n\nISTO APAGA todos os teus dados e volta ao estado de fábrica. Exporta um backup primeiro se tiveres dúvidas.",function(){D=JSON.parse(JSON.stringify(INIT));save();ren()},{yesLabel:"Repor tudo"})}
 function reimportarDados(){
   var log=[]; var errs=[];
@@ -1749,7 +1749,7 @@ function initHC(){
 
 function syncPayload(){var d={};for(var k in D){if(k==="_log"||k==="_redo")continue;d[k]=D[k];}return d;}
 function tombDel(cat,id){if(!D._tomb)D._tomb={cli:[],deal:[],inv:[],exp:[],spec:[]};if(!D._tomb[cat])D._tomb[cat]=[];if(D._tomb[cat].indexOf(id)<0)D._tomb[cat].push(id);}
-function ren(){rTabs();rPnl()}
+function ren(){try{window.__ahCache=null;}catch(e){}rTabs();rPnl()}
 function autoBackup(){try{
   var days=(D.autoBackupDays===undefined?7:D.autoBackupDays);
   if(!days||days<=0)return;
@@ -5153,19 +5153,24 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   function tsProjeto(t){var d=tsDeal(t);if(d)return d.product||("Projeto "+d.id);if(t.ticketId){var tk=(D.tickets||[]).filter(function(x){return x.id===t.ticketId;})[0];return tk?("Ticket: "+(tk.titulo||tk.id)):"Suporte";}return "—";}
   function tsTarefa(t){if(t.descricao)return t.descricao;if(t.taskId){var d=tsDeal(t);var pr=d?(D.projectos||[]).filter(function(p){return p.dealId===d.id;})[0]:null;var tk=pr?(pr.tarefas||[]).filter(function(x){return x.id===t.taskId;})[0]:null;if(tk)return tk.titulo;}return "—";}
   function allHours(){
+    if(window.__ahCache)return window.__ahCache;
     var out=[];
+    var _dealById={};(Array.isArray(D.deals)?D.deals:[]).forEach(function(d){_dealById[d.id]=d;});
     (Array.isArray(D.timesheets)?D.timesheets:[]).forEach(function(t){
       var _em=t.email||"";var _nm=t.nome||(typeof emailToNome==="function"?emailToNome(_em):"")||_em;out.push({_src:"ts",_id:t.id,_deal:t.dealId||"",data:t.data||"",horas:Number(t.horas)||0,vh:tsRate(t),pessoa:_nm||_em||"—",_email:_em,_nome:_nm,cliente:tsCliente(t),projeto:tsProjeto(t),tarefa:tsTarefa(t),_bolsa:t.bolsaId||"",_modulo:(t.interfaceId?"Integração":(t.ticketId?"Suporte":(t.reuniaoId?"Visitas":(t.dealId?"Projetos":"Outro")))),_client:(function(){if(t.clientId)return t.clientId;var d=tsDeal(t);if(d)return d.clientId||"";if(t.ticketId){var tk=(D.tickets||[]).filter(function(x){return x.id===t.ticketId;})[0];return tk?(tk.clientId||""):"";}if(t.reuniaoId){var rr=(D.reunioes||[]).filter(function(x){return x.id===t.reuniaoId;})[0];return rr?(rr.clientId||""):"";}return "";})()});
     });
+    var _dfltVH=(typeof hrRate==="function"?hrRate():0);
     (Array.isArray(D.projectos)?D.projectos:[]).forEach(function(p){
-      var dl=(D.deals||[]).filter(function(d){return d.id===p.dealId;})[0]||null;
+      var dl=_dealById[p.dealId]||null;
       var cli=dl?cn(dl.clientId):"—";var proj=dl?(dl.product||("Projeto "+(p.dealId||""))):"(projeto)";
+      var _cid=dl?(dl.clientId||""):"";
+      var _tkById=null;
       (p.horas||[]).forEach(function(x){
-        var tk=(p.tarefas||[]).filter(function(tt){return tt.id===x.tarefaId;})[0];
-        var _nm2=x.colaborador||"";var _em2=x.email||(typeof nomeToEmail==="function"?nomeToEmail(_nm2):"")||"";out.push({_src:"proj",_id:x.id,_deal:p.dealId||"",data:x.data||"",horas:Number(x.horas)||0,vh:(x.valorHora!=null&&x.valorHora!=="")?Number(x.valorHora):(typeof hrRate==="function"?hrRate():0),pessoa:_nm2||"—",_email:_em2,_nome:_nm2,cliente:cli,projeto:proj,tarefa:x.nota||(tk?tk.titulo:"")||"—",_bolsa:x.bolsaId||"",_modulo:"Projetos",_client:(dl?(dl.clientId||""):"")});
+        var tkTit="";if(x.tarefaId){if(!_tkById){_tkById={};(p.tarefas||[]).forEach(function(tt){_tkById[tt.id]=tt;});}var tk=_tkById[x.tarefaId];tkTit=tk?tk.titulo:"";}
+        var _nm2=x.colaborador||"";var _em2=x.email||(typeof nomeToEmail==="function"?nomeToEmail(_nm2):"")||"";out.push({_src:"proj",_id:x.id,_deal:p.dealId||"",data:x.data||"",horas:Number(x.horas)||0,vh:(x.valorHora!=null&&x.valorHora!=="")?Number(x.valorHora):_dfltVH,pessoa:_nm2||"—",_email:_em2,_nome:_nm2,cliente:cli,projeto:proj,tarefa:x.nota||tkTit||"—",_bolsa:x.bolsaId||"",_modulo:"Projetos",_client:_cid});
       });
     });
-    return out;
+    window.__ahCache=out;return out;
   }
   function ahCusto(e){return (Number(e.horas)||0)*(Number(e.vh)||0);}
   window.allHours=allHours;
