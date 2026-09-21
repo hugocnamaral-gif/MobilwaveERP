@@ -528,7 +528,7 @@ function genReport(){
   var adj=ganhas.filter(function(d){return!D.invoices.find(function(i){return i.dealId===d.id})});
   var adjT=adj.reduce(function(a,d){return a+d.value},0);
   var term=Number(D.paymentTermDays)||30;
-  var risky=D.invoices.filter(function(i){return!i.collected&&Math.floor((now-new Date(i.date))/86400000)>=180});
+  var risky=D.invoices.filter(function(i){return!i.collected&&!i.fromSAFT&&Math.floor((now-new Date(i.date))/86400000)>=180});
   var riskyT=risky.reduce(function(a,i){return a+ivC(i)},0);
   var WT={projeto:0.75,proposta:0.4,lead:0.1};
   var wProj=0,wProp=0,wLead=0;openD.forEach(function(d){if(d.stage==="projeto")wProj+=d.value*WT.projeto;else if(d.stage==="proposta")wProp+=d.value*WT.proposta;else wLead+=d.value*WT.lead});
@@ -539,7 +539,7 @@ function genReport(){
   // pipeline por fase (aberto)
   var pipe={lead:0,proposta:0,projeto:0};openD.forEach(function(d){if(pipe[d.stage]!=null)pipe[d.stage]+=d.value;else pipe.lead+=d.value;});
   // aging
-  var aging=[0,0,0,0,0];D.invoices.filter(function(i){return!i.collected;}).forEach(function(i){var od=Math.floor((now-new Date(i.date))/86400000)-term;var b=od<=0?0:od<=30?1:od<=60?2:od<=90?3:4;aging[b]+=Number(i.amount)||0;});
+  var aging=[0,0,0,0,0];D.invoices.filter(function(i){return!i.collected&&!i.fromSAFT;}).forEach(function(i){var od=Math.floor((now-new Date(i.date))/86400000)-term;var b=od<=0?0:od<=30?1:od<=60?2:od<=90?3:4;aging[b]+=Number(i.amount)||0;});
   // por especialidade / canal
   var bs=S.bs||{},bc=S.bc||{};
   // top clientes por faturação
@@ -839,7 +839,7 @@ function daysSinceBackup(){if(!D.lastBackup)return null;return Math.floor((new D
 function integrityCheck(){var p=[];
   (D.attachments||[]).forEach(function(a){if(!D.deals.find(function(d){return d.id===a.dealId}))p.push("Anexo \""+a.name+"\" sem deal válido")});
   D.deals.forEach(function(d){if(!D.clients.find(function(c){return c.id===d.clientId}))p.push("Deal "+d.id+" sem cliente válido")});
-  D.invoices.forEach(function(i){if(!D.deals.find(function(d){return d.id===i.dealId}))p.push("Factura "+i.id+" sem deal válido")});
+  D.invoices.forEach(function(i){if(i.fromSAFT)return;if(!D.deals.find(function(d){return d.id===i.dealId}))p.push("Factura "+i.id+" sem deal válido")});
   D.clientSpecs.forEach(function(sp){if(!D.clients.find(function(c){return c.id===sp.clientId}))p.push("Especialidade "+sp.id+" sem cliente válido")});
   ["clients","deals","invoices","expenses"].forEach(function(k){var seen={};(D[k]||[]).forEach(function(x){if(seen[x.id])p.push("ID duplicado em "+k+": "+x.id);seen[x.id]=1})});
   return p}
@@ -863,14 +863,18 @@ var IVADED_DEFAULT={
 function ivaDedFrac(cat){var m=(typeof D!=="undefined"&&D&&D.ivaDed)||IVADED_DEFAULT;var k=(cat||"").trim();var f=m[k];return (f==null?0:f);}
 function isTaxCat(k){var K=(k||"").toUpperCase();return K==="IVA"||K==="IRC";}
 function expCat(e){return ((e&&(e.type||e.client))||"").trim();}
-function expNetPL(e){var g=Math.abs(Number(e&&e.amount)||0);var f=ivaDedFrac(expCat(e));if(f<=0)return g;var base=g/(1+IVA_RATE);return g-(g-base)*f;}
-function expDedIVA(e){var g=Math.abs(Number(e&&e.amount)||0);var f=ivaDedFrac(expCat(e));if(f<=0)return 0;var base=g/(1+IVA_RATE);return (g-base)*f;}
+function expNetPL(e){/* custo P&L = base + IVA não dedutível */
+  if(e&&e.base!=null&&e.ivaVal!=null){var f0=(e.ivaDedF!=null?Number(e.ivaDedF):ivaDedFrac(expCat(e)));return (Number(e.base)||0)+(Number(e.ivaVal)||0)*(1-f0);}
+  var g=Math.abs(Number(e&&e.amount)||0);var f=ivaDedFrac(expCat(e));if(f<=0)return g;var base=g/(1+IVA_RATE);return g-(g-base)*f;}
+function expDedIVA(e){/* IVA dedutível recuperado */
+  if(e&&e.ivaVal!=null){var f0=(e.ivaDedF!=null?Number(e.ivaDedF):ivaDedFrac(expCat(e)));return (Number(e.ivaVal)||0)*f0;}
+  var g=Math.abs(Number(e&&e.amount)||0);var f=ivaDedFrac(expCat(e));if(f<=0)return 0;var base=g/(1+IVA_RATE);return (g-base)*f;}
 function st(){
   var inv=0,col=0,exp=0,pend=0,pendPrev=0,cash=0;
-  D.invoices.forEach(function(i){if(inYear(i.date)&&!i.preERP){inv+=i.amount}var _cd=i.collDate||i.date;if(i.collected&&inYear(_cd)){col+=ivC(i);cash+=ivC(i)}if(!i.collected){pend+=ivC(i);if(beforeYear(i.date))pendPrev+=ivC(i)}});
+  D.invoices.forEach(function(i){if(inYear(i.date)&&!i.preERP){inv+=i.amount}var _cd=i.collDate||i.date;if(i.collected&&inYear(_cd)){col+=ivC(i);cash+=ivC(i)}if(!i.collected&&!i.fromSAFT){pend+=ivC(i);if(beforeYear(i.date))pendPrev+=ivC(i)}});
   D.expenses.forEach(function(e){if(inYear(e.date))exp+=e.amount});
   var pipe=0;D.deals.forEach(function(d){if(!isClosed(d)&&inYear(d.date)){pipe+=d.value}});
-  var debtCh={};D.invoices.forEach(function(i){if(i.collected)return;var d=D.deals.find(function(x){return x.id===i.dealId});var c=d?D.clients.find(function(x){return x.id===d.clientId}):null;var ch=c?c.channel:"Outro";debtCh[ch]=(debtCh[ch]||0)+ivC(i)});
+  var debtCh={};D.invoices.forEach(function(i){if(i.collected||i.fromSAFT)return;var d=D.deals.find(function(x){return x.id===i.dealId});var c=d?D.clients.find(function(x){return x.id===d.clientId}):null;var ch=c?c.channel:"Outro";debtCh[ch]=(debtCh[ch]||0)+ivC(i)});
   var debt=pend;
   var mo={};D.expenses.forEach(function(e){if(!inYear(e.date))return;var m=new Date(e.date).getMonth();mo[m]=(mo[m]||0)-e.amount});
   D.invoices.forEach(function(i){var _cd=i.collDate||i.date;if(i.collected&&_cd&&inYear(_cd)){var m=new Date(_cd).getMonth();mo[m]=(mo[m]||0)+ivC(i)}});
@@ -955,7 +959,7 @@ function sTab(id,sub){cTab=id;if(id==="financeiro"&&sub)finSub=sub;hcDone=false;
 function openCorrecoes(){cTab="correcoes";rTabs();rPnl()}
 
 function dashTodos(S){var todos=[];
-  D.invoices.filter(function(i){return!i.collected}).forEach(function(i){var dd=Math.floor((new Date()-new Date(i.date))/86400000);var dl=D.deals.find(function(x){return x.id===i.dealId});
+  D.invoices.filter(function(i){return!i.collected&&!i.fromSAFT}).forEach(function(i){var dd=Math.floor((new Date()-new Date(i.date))/86400000);var dl=D.deals.find(function(x){return x.id===i.dealId});
     if(dd>=180)todos.push({p:1,ic:"🔴",t:"Cobrança em risco ("+dd+" dias)",s:(dl?cn(dl.clientId):"—")+" — "+fmt(ivC(i))+" · considerar provisão para incobrável",go:"financeiro",sub:"faturas"});
     else if(dd>=90)todos.push({p:2,ic:"🟠",t:"Cobrança vencida ("+dd+" dias)",s:(dl?cn(dl.clientId):"—")+" — "+fmt(ivC(i)),go:"financeiro",sub:"faturas"})});
   D.deals.filter(isOverdue).forEach(function(d){todos.push({p:2,ic:"⏰",t:"Follow-up em atraso ("+daysLate(d)+" dias)",s:cn(d.clientId)+" — "+(d.nextAction||"sem acção definida")+" · "+fmt(d.value),go:"pipeline"})});
@@ -1178,7 +1182,7 @@ if(cTab==="dashboard"){
   } else if(finSub==="cobrancas"){
     var adjDeals=D.deals.filter(function(d){return isWon(d)&&!D.invoices.find(function(i){return i.dealId===d.id})});
     var adjTotal=adjDeals.reduce(function(a,d){return a+d.value},0);
-    var pendInvs=D.invoices.filter(function(i){return!i.collected}).map(function(i){var d=D.deals.find(function(x){return x.id===i.dealId});return{iv:i,name:d?cn(d.clientId):"—",amount:ivC(i),days:Math.floor((new Date()-new Date(i.date))/86400000),date:i.date}}).sort(function(a,b){return b.days-a.days});
+    var pendInvs=D.invoices.filter(function(i){return!i.collected&&!i.fromSAFT}).map(function(i){var d=D.deals.find(function(x){return x.id===i.dealId});return{iv:i,name:d?cn(d.clientId):"—",amount:ivC(i),days:Math.floor((new Date()-new Date(i.date))/86400000),date:i.date}}).sort(function(a,b){return b.days-a.days});
     var risky=pendInvs.filter(function(p){return p.days>=180});
     var rTot=risky.reduce(function(a,p){return a+p.amount},0);
     var _cobP=D.invoices.filter(function(i){return i.collected&&i.collDate&&i.date&&inYear(i.date)&&!i.preERP;});
@@ -1259,8 +1263,8 @@ if(cTab==="dashboard"){
   h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">NOVAS VENDAS '+_Y+' (por adjudicação)</div><div style="overflow-x:auto"><table><tr><th>Mês</th><th'+RA+'>'+py+'</th><th'+RA+'>'+_Y+'</th><th'+RA+'>Saldo acumulado</th></tr>'+rowsM+'<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>Média mensal orçamento</td><td'+RA+'></td><td'+RA+'></td><td'+RA+'>'+fmt(orc.nv/12)+'</td></tr><tr style="font-weight:700"><td>Média mensal realizada</td><td'+RA+'></td><td'+RA+'></td><td'+RA+'>'+fmt(moTot/12)+'</td></tr></table></div></div>';
   h+='<div class="ins"><div style="font-size:12px;color:#7E8892">Valores <b>sem IVA</b>, calculados da app para o ano selecionado. Novas vendas mensais por <b>data de adjudicação</b>; caracterização e licenças por <b>data de fatura</b>.</div></div>';
   /* ===== Reconciliação com o Estado (SAF-T + e-Fatura) ===== */
-  if(D.fatOficial&&Number(D.fatOficial.ano)===Number(_Y)){
-    var FO=D.fatOficial;
+  var FO=(D.fatOficialMulti&&D.fatOficialMulti[String(_Y)])||((D.fatOficial&&Number(D.fatOficial.ano)===Number(_Y))?D.fatOficial:null);
+  if(FO){
     var appMo=[];for(var _am=0;_am<12;_am++)appMo.push(0);
     var appTot=0;D.invoices.forEach(function(i){if(String((i.date||"").slice(0,4))!==String(_Y)||i.preERP)return;var mm3=parseInt((i.date||"").slice(5,7),10)-1;if(mm3<0||mm3>11)return;appMo[mm3]+=Number(i.amount)||0;appTot+=Number(i.amount)||0;});
     var difTot=appTot-(FO.totalBase||0);
@@ -1283,7 +1287,7 @@ if(cTab==="dashboard"){
       dsc.forEach(function(x){var tg=x.tipo==="anulado_estado"?'<span style="color:'+DNG+'">Anulado no Estado</span>':(x.tipo==="em_falta"?'<span style="color:'+DNG+'">Em falta na app</span>':'<span style="color:'+GD+'">'+esc(x.nota||"valor")+'</span>');h+='<tr><td>FT '+_Y+'/'+x.ft+'</td><td>'+tg+'</td><td style="font-size:11px;color:#7E8892">'+esc(x.cliente||"")+'</td><td style="text-align:right">'+fmt(x.app||0)+'</td><td style="text-align:right">'+fmt(x.oficial||0)+'</td></tr>';});
       h+='</table></div></div>';
     }
-    h+='<div class="ins" style="margin-top:12px"><div style="font-size:12px;color:#7E8892">Fonte oficial de vendas: <b>SAF-T</b> (SalesInvoices) + <b>e-Fatura</b> emitidas, série 2023A. As <b>faturas (FT) reconciliam a 99,9%</b> com o Estado; a diferença residual do total resulta da <b>imputação de notas de crédito</b> na fronteira 2022/2023. Os documentos anulados no Estado devem ser anulados também na app.</div></div>';
+    h+='<div class="ins" style="margin-top:12px"><div style="font-size:12px;color:#7E8892">'+(String(_Y)==="2023"?'Fonte oficial de vendas: <b>SAF-T</b> (SalesInvoices) + <b>e-Fatura</b> emitidas, série 2023A. As <b>faturas (FT) reconciliam a 99,9%</b> com o Estado; a diferença residual do total resulta da <b>imputação de notas de crédito</b> na fronteira 2022/2023.':'Fonte oficial de vendas: <b>SAF-T '+_Y+'</b> (SalesInvoices). As faturas na app '+_Y+' são carregadas <b>diretamente do SAF-T</b>, pelo que reconciliam integralmente com o Estado. Notas de crédito entram com sinal negativo.')+' Os documentos anulados no Estado devem ser anulados também na app.</div></div>';
     h+='</div>';
   }
 } else if(cTab==="vendasPais"||cTab==="vendasVend"){
@@ -6609,6 +6613,37 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   function myDespesas(){var me=(typeof myEmail==="function"?myEmail():"")||"";return (typeof reList==="function"?reList():(D.reembolsos||[])).filter(function(r){return r.email===me;});}
   function allDespesasPend(){var out=[];Object.keys(D.hrPeople||{}).forEach(function(em){(D.hrPeople[em].despesas||[]).forEach(function(x){if(x.estado==="pendente")out.push({em:em,d:x});});});return out;}
 
+  function renderImportar(){
+    var app=document.getElementById("app");if(!app)return;
+    if(typeof currentRole!=="undefined"&&currentRole!=="admin"){app.innerHTML=pgHead("📥","Importar dados")+'<div class="cd"><div style="color:#A6AEB6;font-size:13px">Só o administrador pode importar dados.</div></div>';return;}
+    var FILES=[
+     ["Financeiro · Vendas","SAF-T (XML) + e-Fatura emitidas (CSV)","Faturação oficial e reconciliação com o Estado","offline"],
+     ["Financeiro · Custos","Extrato bancário (XLSX, categoria na col G) + e-Fatura recebidas","Custos do P&L + IVA dedutível","despesas"],
+     ["Comercial","Pipe Line / Faturação (XLSX)","Deals, vendas por vendedor/país, caracterização","offline"],
+     ["Projetos","Projeto + Tarefa (XLSX Odoo)","Projetos de cliente + estrutura de tarefas","offline"],
+     ["Pessoas · Horas","Linha Analítica / analytic.line (XLSX)","Horas do ano → custo e rácio projeto vs interno","offline"],
+     ["Suporte","Ticket / helpdesk.ticket (XLSX)","Tickets de suporte (histórico + abertos)","offline"],
+     ["Pessoas · RH","Salários por ano (XLSX)","Custo/hora e vencimentos do P&L","offline"]
+    ];
+    var h=pgHead("📥","Importar dados");
+    h+='<div class="cd" style="border-left:3px solid '+BLU+'"><div style="font-size:13.5px;color:#4a453d;line-height:1.6">Como carregar os dados de cada ano/área. O ficheiro-mestre (<b>JSON</b>) é preparado a partir dos ficheiros de origem e importado aqui; as <b>despesas</b> podem ser importadas diretamente de Excel.</div></div>';
+    // Master JSON
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">1 · Ficheiro-mestre (JSON completo)</div>';
+    h+='<div style="font-size:12.5px;color:#7E8892;margin-bottom:10px">Substitui todo o estado pela versão preparada (clientes, deals, faturas, projetos, horas, bolsas, tickets…). É o que vai para o Supabase.</div>';
+    h+='<label class="btn" style="background:'+R+';cursor:pointer;display:inline-block">📥 Importar JSON<input type="file" accept=".json" onchange="impData(event)" style="display:none"></label>';
+    h+='<button class="btn bs" style="background:'+SL+';margin-left:8px" onclick="expData()">⬇️ Exportar backup atual</button></div>';
+    // Despesas Excel
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">2 · Despesas de Excel (extrato)</div>';
+    h+='<div style="font-size:12.5px;color:#7E8892;margin-bottom:10px">Importa movimentos de despesa de um Excel com colunas Data, Valor, Tipo/Categoria e Descrição.</div>';
+    h+='<label class="btn" style="background:'+TEAL+';cursor:pointer;display:inline-block">📄 Importar despesas (XLSX)<input type="file" accept=".xlsx,.xls,.csv" onchange="impDespesasXlsx(this)" style="display:none"></label></div>';
+    // Checklist per area
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">3 · Ficheiros por área (checklist)</div><div style="overflow-x:auto"><table><tr><th>Área</th><th>Ficheiro a exportar</th><th>Para quê</th><th>Como</th></tr>';
+    FILES.forEach(function(f){var how=f[3]==="despesas"?'<span style="color:'+TEAL+';font-weight:700">direto (acima)</span>':'<span style="color:#A6AEB6">via JSON-mestre</span>';h+='<tr><td><b>'+esc(f[0])+'</b></td><td>'+esc(f[1])+'</td><td style="color:#7E8892">'+esc(f[2])+'</td><td>'+how+'</td></tr>';});
+    h+='</table></div>';
+    h+='<div style="background:#fdf7ec;border:1px solid #f0d9b5;border-radius:8px;padding:10px 12px;font-size:12.5px;color:#6b5836;margin-top:12px"><b>Ordem por ano:</b> Projetos+Tarefas → Linha Analítica (horas) → SAF-T+e-Fatura (vendas) → Extrato (custos) → Pipe Line → Tickets. No fim: reconciliar faturação (vs Estado) e horas (analytics vs tarefas).</div></div>';
+    app.innerHTML=h;
+  }
+  window.renderImportar=renderImportar;
   function renderManual(){
     var app=document.getElementById("app");if(!app)return;
     function stp(n,t){return '<div style="display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #EFF1F4"><div style="min-width:22px;height:22px;background:'+R+';color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0">'+n+'</div><div style="font-size:13px;color:#4a453d;line-height:1.5">'+t+'</div></div>';}
@@ -6677,6 +6712,13 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
       +'<li><b>Vencimentos</b> têm autorização própria e separada — nem toda a gente do RH os vê.</li>'
       +'</ul></div>';
 
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:6px">Tarefas do dia-a-dia</div>';
+    h+=bk("🎧","Suporte — filtrar pedidos","Na página de Suporte tens filtros por <b>ano</b>, <b>mês</b>, <b>estado</b> e <b>prioridade</b>, além da pesquisa. A lista mostra os abertos primeiro (até 200 — usa os filtros para ver o resto).");
+    h+=bk("🎫","Atribuir um pedido a alguém","Abre o pedido, escolhe a pessoa no campo <b>Responsável</b> (lista de colaboradores). Essa pessoa recebe o aviso no <b>sino</b> e em <b>«A minha área»</b>. Se te atribuírem um pedido, aparece-te lá.");
+    h+=bk("⏳","Bolsa de horas","Cada bolsa mostra as horas <b>contratadas</b>, <b>consumidas</b> e o <b>saldo</b>. Filtra por <b>estado</b> (ativas, quase esgotadas, esgotadas, expiradas) ou por cliente. Regista horas numa bolsa com o botão <b>+ Horas</b> — vão descontando o saldo.");
+    h+=bk("📊","Mapa de horas (Direção)","Mostra, por colaborador, horas em <b>projetos</b> vs <b>interno</b> e o <b>rácio</b> de produtividade. As horas servem para o custo dos projetos — não entram no P&L.");
+    h+=bk("📥","Importar dados (admin)","Em Definições › <b>Importar dados</b> carrega-se o ficheiro-mestre (JSON) e as despesas de Excel. Vê a checklist de ficheiros por área.");
+    h+='</div>';
     h+='<div style="font-size:11px;color:#A6AEB6;text-align:center;padding:8px">Para dúvidas de acesso, fala com o administrador.</div>';
     app.innerHTML=h;
   }
@@ -7133,7 +7175,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     if(d===0)return {txt:"hoje",color:GD,vencido:false};
     return {txt:"faltam "+d+"d",color:d<=2?GD:GRN,vencido:false};
   }
-  var tkState={estado:"",prio:"",search:""};
+  var tkState={estado:"",prio:"",search:"",ano:"",mes:""};
   function tkFirstResp(t){if(!t.createdAt)return null;var env=(t.mensagens||[]).filter(function(m){return m.direcao==="enviada"&&(m.data||m.createdAt);}).map(function(m){return m.data||m.createdAt;}).sort();if(!env.length)return null;var d=Math.round((new Date(env[0])-new Date(t.createdAt))/86400000);return d<0?0:d;}
   function tkResolvedOnTime(t){if(!(t.estado==="resolvido"||t.estado==="fechado")||!t.resolvedAt||!t.dueDate)return null;return t.resolvedAt<=t.dueDate;}
   // Passo 1 do Suporte: canal, associação a cliente por email, e fio de conversa
@@ -7198,11 +7240,20 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
       });
       h+='</div>';
     }
+    var _tkYears={};all.forEach(function(t){var y=(t.createdAt||"").slice(0,4);if(y)_tkYears[y]=1;});_tkYears=Object.keys(_tkYears).sort().reverse();
+    var _MESES=["01·Jan","02·Fev","03·Mar","04·Abr","05·Mai","06·Jun","07·Jul","08·Ago","09·Set","10·Out","11·Nov","12·Dez"];
     h+='<div class="cd"><div class="ch"><div class="ct2">Pedidos ('+all.length+')</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
+    h+='<select id="tkAno" style="'+selStyle()+'"><option value="">Todos os anos</option>'+_tkYears.map(function(y){return '<option value="'+y+'"'+(tkState.ano===y?" selected":"")+'>'+y+'</option>';}).join("")+'</select>';
+    h+='<select id="tkMes" style="'+selStyle()+'"><option value="">Todos os meses</option>'+_MESES.map(function(m){var v=m.slice(0,2);return '<option value="'+v+'"'+(tkState.mes===v?" selected":"")+'>'+m.slice(3)+'</option>';}).join("")+'</select>';
     h+='<select id="tkEstado" style="'+selStyle()+'"><option value="">Todos os estados</option>'+TK_ESTADO.map(function(o){return '<option value="'+o[0]+'"'+(tkState.estado===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select>';
     h+='<select id="tkPrio" style="'+selStyle()+'"><option value="">Todas prioridades</option>'+TK_PRIO.map(function(o){return '<option value="'+o[0]+'"'+(tkState.prio===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select>';
-    h+='<input id="tkSearch" placeholder="Procurar cliente/assunto..." value="'+esc(tkState.search)+'" style="border:1px solid #E4E8EB;border-radius:8px;padding:7px 10px;font-size:12.5px;max-width:200px;font-family:inherit;outline:none"></div></div>';
+    h+='<input id="tkSearch" placeholder="Procurar cliente/assunto..." value="'+esc(tkState.search)+'" style="border:1px solid #E4E8EB;border-radius:8px;padding:7px 10px;font-size:12.5px;max-width:200px;font-family:inherit;outline:none">';
+    if(tkState.ano||tkState.mes||tkState.estado||tkState.prio||tkState.search)h+='<button class="btn bs" style="background:#EFF1F4;color:#7E8892" onclick="tkState={estado:\'\',prio:\'\',search:\'\',ano:\'\',mes:\'\'};renderSuporte();">Limpar</button>';
+    h+='</div></div>';
     var list=all.filter(function(t){
+      var d=t.createdAt||"";
+      if(tkState.ano&&d.slice(0,4)!==tkState.ano)return false;
+      if(tkState.mes&&d.slice(5,7)!==tkState.mes)return false;
       if(tkState.estado&&t.estado!==tkState.estado)return false;
       if(tkState.prio&&t.prioridade!==tkState.prio)return false;
       if(tkState.search){var q=tkState.search.toLowerCase();if((cn(t.clientId)+" "+(t.titulo||"")).toLowerCase().indexOf(q)<0)return false;}
@@ -7229,6 +7280,8 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     var e1=document.getElementById("tkEstado");if(e1)e1.onchange=function(){tkState.estado=e1.value;renderSuporte();};
     var e2=document.getElementById("tkPrio");if(e2)e2.onchange=function(){tkState.prio=e2.value;renderSuporte();};
     var e3=document.getElementById("tkSearch");if(e3)e3.oninput=function(){tkState.search=e3.value;keepFocus("tkSearch",renderSuporte);};
+    var e4=document.getElementById("tkAno");if(e4)e4.onchange=function(){tkState.ano=e4.value;renderSuporte();};
+    var e5=document.getElementById("tkMes");if(e5)e5.onchange=function(){tkState.mes=e5.value;renderSuporte();};
   }
   // ===================== INVENTÁRIO & EQUIPAMENTOS =====================
   var INV_CAT=[["hw","Hardware"],["servidor","Servidor"],["rede","Rede"],["periferico","Periférico"],["licenca","Licença"],["consumivel","Consumível"],["outro","Outro"]];
@@ -8462,7 +8515,12 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     var canEdit=!(typeof isReadOnlyNow==="function"&&isReadOnlyNow());
     var all=bolsaList().slice();
     var fCli=window.__bhCli||"";
-    var list=all.filter(function(b){return !fCli||b.clientId===fCli;});
+    var fEst=window.__bhEstado||"";
+    var list=all.filter(function(b){
+      if(fCli&&b.clientId!==fCli)return false;
+      if(fEst){var k=bolsaEstado(b).k;if(fEst==="ativas"){if(k!=="ativa"&&k!=="quase")return false;}else if(k!==fEst)return false;}
+      return true;
+    });
     list.sort(function(a,b){return bolsaSaldo(a)-bolsaSaldo(b);});
     var totH=all.reduce(function(a,b){return a+(Number(b.horas)||0);},0);
     var totC=all.reduce(function(a,b){return a+bolsaConsumo(b);},0);
@@ -8472,7 +8530,12 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     h+='<div style="font-size:12px;color:#7E8892;margin:-4px 0 12px">Horas contratadas por cliente (avença/retainer). Consome automaticamente as horas registadas em projetos, suporte e integrações desse cliente, dentro do período.</div>';
     h+='<div class="kr">'+kpi("Bolsas ativas",String(nAtivas),"de "+all.length+" no total",GRN,GRN)+kpi("Horas contratadas",fmtHM(totH),"soma de todas",BLU,BLU)+kpi("Horas consumidas",fmtHM(totC),"registadas",PUR,PUR)+kpi("A precisar de atenção",String(nAlerta),"esgotadas ou quase",nAlerta?GD:SL,nAlerta?GD:SL)+'</div>';
     var clis={};all.forEach(function(b){if(b.clientId)clis[b.clientId]=1;});
-    h+='<div class="cd"><div class="ch"><div class="ct2">Bolsas ('+list.length+')</div>'+(Object.keys(clis).length>1?'<select onchange="window.__bhCli=this.value;rPnl()" style="border:1px solid #E4E8EB;border-radius:8px;padding:6px 9px;font-size:12px"><option value="">Todos os clientes</option>'+Object.keys(clis).map(function(c){return '<option value="'+esc(c)+'"'+(fCli===c?" selected":"")+'>'+esc(cn(c))+'</option>';}).join("")+'</select>':'')+'</div>';
+    var _bhEstOpts=[["","Todos os estados"],["ativas","Ativas (inclui quase)"],["ativa","Só ativas"],["quase","Quase esgotadas"],["esgotada","Esgotadas"],["expirada","Expiradas"]];
+    h+='<div class="cd"><div class="ch"><div class="ct2">Bolsas ('+list.length+')</div><div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +'<select onchange="window.__bhEstado=this.value;rPnl()" style="border:1px solid #E4E8EB;border-radius:8px;padding:6px 9px;font-size:12px">'+_bhEstOpts.map(function(o){return '<option value="'+o[0]+'"'+(fEst===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select>'
+      +(Object.keys(clis).length>1?'<select onchange="window.__bhCli=this.value;rPnl()" style="border:1px solid #E4E8EB;border-radius:8px;padding:6px 9px;font-size:12px"><option value="">Todos os clientes</option>'+Object.keys(clis).map(function(c){return '<option value="'+esc(c)+'"'+(fCli===c?" selected":"")+'>'+esc(cn(c))+'</option>';}).join("")+'</select>':'')
+      +((fEst||fCli)?'<button class="btn bs" style="background:#EFF1F4;color:#7E8892" onclick="window.__bhEstado=\'\';window.__bhCli=\'\';rPnl()">Limpar</button>':'')
+      +'</div></div>';
     if(!list.length)h+='<div style="font-size:12.5px;color:#A6AEB6;margin-top:8px">Sem bolsas de horas. Usa «+ Nova bolsa» para registar as horas contratadas de um cliente.</div>';
     else{
       list.forEach(function(b){
@@ -8995,6 +9058,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
       if(typeof cTab!=="undefined"&&cTab==="portalacessos"){try{renderPortalAcessos();}catch(e){}try{applyRoleGating();}catch(e){}return;}
       if(typeof cTab!=="undefined"&&cTab==="bolsahoras"){try{renderBolsas();}catch(e){}try{applyRoleGating();}catch(e){}return;}
       if(typeof cTab!=="undefined"&&cTab==="mapahoras"){try{renderMapaHoras();}catch(e){}try{applyRoleGating();}catch(e){}return;}
+      if(typeof cTab!=="undefined"&&cTab==="importar"){try{renderImportar();}catch(e){}try{applyRoleGating();}catch(e){}return;}
       if(typeof cTab!=="undefined"&&cTab==="subscricoes"){try{renderSubscricoes();}catch(e){}try{applyRoleGating();}catch(e){}return;}
       var x=_r.apply(this,arguments);try{applyRoleGating();}catch(e){}
       if(typeof cTab!=="undefined"&&cTab==="dashboard"){try{injectExecPanel();}catch(e){}}
@@ -9138,7 +9202,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     {group:"A minha área",i:"🙋",dept:"eu",always:true,items:[
       {id:"minhaarea",l:"Início"},{id:"agenda",l:"Agenda",dept:"agenda",always:true},{id:"pesquisa",l:"Pesquisa & avisos"},{id:"manual",l:"Manual / Ajuda"},{id:"seguranca",l:"Segurança"}]},
     {group:"Definições",i:"⚙️",dept:"admin",items:[
-      {id:"colaboradores",l:"Colaboradores & Perfis"},{id:"portalacessos",l:"Acessos ao portal"},{id:"rgpd",l:"Proteção de dados (RGPD)"},{id:"logs",l:"Auditoria"},{id:"correcoes",l:"Definições"}]}
+      {id:"colaboradores",l:"Colaboradores & Perfis"},{id:"importar",l:"Importar dados"},{id:"portalacessos",l:"Acessos ao portal"},{id:"rgpd",l:"Proteção de dados (RGPD)"},{id:"logs",l:"Auditoria"},{id:"correcoes",l:"Definições"}]}
   ];
   var TAB2DEPT={};DEPT_GROUPS.forEach(function(g){g.items.forEach(function(it){TAB2DEPT[it.id]=it.dept||g.dept;});});
   var ALWAYS_TABS={};DEPT_GROUPS.forEach(function(g){g.items.forEach(function(it){if((g.always&&!it.dept)||it.always)ALWAYS_TABS[it.id]=true;});});
