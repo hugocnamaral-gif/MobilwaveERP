@@ -198,10 +198,10 @@ function yearPicker(){
 function fmtD(d){return d?new Date(d).toLocaleDateString("pt-PT",{day:"numeric",month:"short",year:"numeric"}):"—"}
 function pc(a,b){return b>0?((a/b)*100).toFixed(1):"0"}
 function cn(id){var c=D.clients.find(function(x){return x.id===id});return c?c.name:"—"}
-function isWon(d){return d.stage==="ganho"||d.stage==="projeto"||d.stage==="concluido"}
+function isWon(d){return !d.fromProj&&(d.stage==="ganho"||d.stage==="projeto"||d.stage==="concluido")}
 function isSubDeal(d){return !!(d&&(d.type==="AT"||d.type==="SUB"))}
 try{window.isSubDeal=isSubDeal;}catch(e){}
-function isClosed(d){return d.stage==="ganho"||d.stage==="projeto"||d.stage==="concluido"||d.stage==="perdido"}
+function isClosed(d){return d.fromProj||d.stage==="ganho"||d.stage==="projeto"||d.stage==="concluido"||d.stage==="perdido"}
 function rgba(hex,a){var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return"rgba("+r+","+g+","+b+","+a+")"}
 function bdg(t,c){return'<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;background:'+rgba(c,.1)+';color:'+c+'">'+t+'</span>'}
 function barH(l,v,mx,c){var w=mx>0?Math.max((v/mx)*100,2):0;return'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div style="width:72px;font-size:12px;text-align:right;color:#7E8892;flex-shrink:0">'+l+'</div><div style="flex:1;height:24px;background:#f8f7f5;border-radius:6px;overflow:hidden"><div style="width:'+w+'%;height:100%;border-radius:6px;background:'+rgba(c,.25)+';display:flex;align-items:center;justify-content:flex-end;padding-right:8px;font-size:11px;font-weight:600;color:'+c+';min-width:40px">'+fmt(v)+'</div></div></div>'}
@@ -8674,6 +8674,19 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
       +'<select onchange="window.__mhMod=this.value;rPnl()" style="'+selStyle()+'"><option value="">Todos os módulos</option>'+MODS.map(function(m){return '<option value="'+m+'"'+(fmod===m?" selected":"")+'>'+m+'</option>';}).join("")+'</select>'
       +'<span style="margin-left:auto;font-size:12.5px;color:#7E8892">Total no período: <b style="color:#28313A">'+fmtHM(totH)+'</b></span></div></div>';
     h+='<div class="kr">'+MODS.map(function(m){return kpi(m,fmtHM(byMod[m]||0),totH?Math.round((byMod[m]||0)/totH*100)+"% do total":"sem horas",PUR,PUR);}).join("")+'</div>';
+    /* ===== Projetos vs Interno (rácio) — Direção ===== */
+    if(Array.isArray(D.horasDirecao)&&D.horasDirecao.length){
+      var HD=D.horasDirecao.slice().sort(function(a,b){return (b.projetos+b.interno)-(a.projetos+a.interno);});
+      var tProj=0,tInt=0;HD.forEach(function(r){tProj+=r.projetos||0;tInt+=r.interno||0;});
+      var tAll=tProj+tInt;
+      h+='<div class="cd"><div class="ct2" style="margin-bottom:4px">⚖️ Projetos vs Interno — rácio de produtividade por colaborador</div>';
+      h+='<div style="font-size:11px;color:#A6AEB6;margin-bottom:10px">Horas de projeto (cliente + bolsas, Parceiro ≠ Mobilwave) vs horas internas/overhead (Parceiro = Mobilwave/interno). Fonte: analytics '+ (D._projLoadMeta&&D._projLoadMeta.ano||"2023") +' (account.analytic.line). Não entra no P&L.</div>';
+      h+='<div class="kr">'+kpi("Horas projeto",fmtHM(tProj),tAll?Math.round(tProj/tAll*100)+"% do total":"",GRN,GRN)+kpi("Horas interno",fmtHM(tInt),tAll?Math.round(tInt/tAll*100)+"% do total":"",GD,GD)+kpi("Rácio global",tAll?Math.round(tProj/tAll*100)+"%":"—","horas faturáveis / total",BLU,BLU)+'</div>';
+      h+='<div style="overflow-x:auto"><table><thead><tr><th>Colaborador</th><th style="text-align:right">Projetos</th><th style="text-align:right">Interno</th><th style="text-align:right">Total</th><th style="text-align:right">Rácio</th><th style="text-align:right">Custo/h</th></tr></thead><tbody>';
+      HD.forEach(function(r){var rt=r.ratio||0;var rc=rt>=60?GRN:(rt>=35?GD:DNG);h+='<tr><td style="font-weight:600">'+esc(r.colaborador||"—")+'</td><td style="text-align:right">'+fmtHM(r.projetos||0)+'</td><td style="text-align:right">'+fmtHM(r.interno||0)+'</td><td style="text-align:right;font-weight:600">'+fmtHM(r.total||0)+'</td><td style="text-align:right;font-weight:700;color:'+rc+'">'+rt+'%</td><td style="text-align:right;color:#7E8892">'+(r.custoHora?fmt(r.custoHora):"—")+'</td></tr>';});
+      h+='<tr style="border-top:2px solid #E4E8EB"><td style="font-weight:700">TOTAL</td><td style="text-align:right;font-weight:700">'+fmtHM(tProj)+'</td><td style="text-align:right;font-weight:700">'+fmtHM(tInt)+'</td><td style="text-align:right;font-weight:700">'+fmtHM(tAll)+'</td><td style="text-align:right;font-weight:700;color:'+R+'">'+(tAll?Math.round(tProj/tAll*100):0)+'%</td><td></td></tr>';
+      h+='</tbody></table></div></div>';
+    }
     h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">Horas por pessoa e módulo ('+fy+(fm?" · "+MONTHS[Number(fm)-1]:"")+')</div>';
     if(!people.length)h+='<div style="font-size:12.5px;color:#A6AEB6">Sem horas registadas neste período.</div>';
     else{h+='<div style="overflow-x:auto"><table><thead><tr><th>Pessoa</th>'+MODS.map(function(m){return '<th style="text-align:right">'+m+'</th>';}).join("")+'<th style="text-align:right">Total</th></tr></thead><tbody>';
