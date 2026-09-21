@@ -8375,9 +8375,17 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   function bolsaList(){return Array.isArray(D.bolsas)?D.bolsas:(D.bolsas=[]);}
   function bolsaConsumo(b){
     if(!b)return 0;
+    var ah=(typeof allHours==="function"?allHours():[]);
+    // horas registadas explicitamente contra ESTA bolsa
+    var tagged=0,hasTag=false;
+    for(var i=0;i<ah.length;i++){if(ah[i]._bolsa===b.id){hasTag=true;tagged+=Number(ah[i].horas)||0;}}
+    // bolsa importada (do ficheiro BH): consumo = consumido no ficheiro + horas registadas depois contra a bolsa
+    if(b._consumidoImport!=null&&b._consumidoImport!==""){return (Number(b._consumidoImport)||0)+tagged;}
+    if(hasTag)return tagged;
+    // legado: auto-consumo por cliente+período (bolsas manuais tipo avença)
     var di=b.dataInicio||"",df=b.dataFim||"";
-    return (typeof allHours==="function"?allHours():[]).reduce(function(a,e){
-      if(e._bolsa){return a+((e._bolsa===b.id)?(Number(e.horas)||0):0);}
+    return ah.reduce(function(a,e){
+      if(e._bolsa)return a;
       if(!b.clientId||e._client!==b.clientId)return a;
       var d=e.data||"";
       if(di&&d&&d<di)return a;
@@ -8395,9 +8403,18 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     return {k:"ativa",l:"Ativa",c:GRN};
   }
   function bolsaConsumoDetalhe(b){
-    var byProj={};
-    (typeof allHours==="function"?allHours():[]).forEach(function(e){
-      if(e._client!==b.clientId)return;var d=e.data||"";
+    var byProj={};var ah=(typeof allHours==="function"?allHours():[]);
+    // horas registadas contra a bolsa
+    ah.forEach(function(e){if(e._bolsa===b.id){var k=e.projeto||e.tarefa||"—";byProj[k]=(byProj[k]||0)+(Number(e.horas)||0);}});
+    // bolsa importada: consumo do ficheiro sob o nome da tarefa/bolsa
+    if(b._consumidoImport!=null&&b._consumidoImport!==""&&(Number(b._consumidoImport)||0)>0){
+      var lbl=(b.nota||"Consumo importado").slice(0,42);byProj[lbl]=(byProj[lbl]||0)+(Number(b._consumidoImport)||0);
+      return byProj;
+    }
+    if(Object.keys(byProj).length)return byProj;
+    // legado: por cliente+período
+    ah.forEach(function(e){
+      if(e._bolsa)return;if(e._client!==b.clientId)return;var d=e.data||"";
       if(b.dataInicio&&d&&d<b.dataInicio)return;if(b.dataFim&&d&&d>b.dataFim)return;
       var k=e.projeto||e.cliente||"—";byProj[k]=(byProj[k]||0)+(Number(e.horas)||0);
     });
