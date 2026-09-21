@@ -860,11 +860,25 @@ function projRecorrente(year,aum){/* base recorrente projetada para 'year' a par
   var f=1+aum/100;
   o.atA=o.at*f;o.subA=o.sub*f;o.licA=o.lic*f;o.aum=aum;
   o.total=(o.at+o.sub+o.lic)*f;return o;}
+// ===== Métricas a partir das linhas do Pipe Line (batem com DashVendas/DashFacturas do Facturação) =====
+// NV vs AT pela coluna F (M=AT; termina em V=NV); facturado pela data de fatura; cobrado pela data de pagamento (c/IVA).
+function nvFatAno(y){y=String(y||activeYear());var s=0;(D.deals||[]).forEach(function(d){if(d.src==="pipe"&&d.nat==="NV"&&String(d.factDate||"").slice(0,4)===y)s+=Number(d.value)||0;});return s;}
+function atFatAno(y){y=String(y||activeYear());var s=0;(D.deals||[]).forEach(function(d){if(d.src==="pipe"&&d.nat==="AT"&&String(d.factDate||"").slice(0,4)===y)s+=Number(d.value)||0;});return s;}
+function cobradoAno(y){y=String(y||activeYear());var s=0;(D.deals||[]).forEach(function(d){if(d.src==="pipe"&&d.paid&&String(d.payDate||"").slice(0,4)===y)s+=Number(d.civa||0);});return s;}
+function atPrevAno(y){y=String(y||activeYear());var ny=String(+y+1);var s=0;(D.deals||[]).forEach(function(d){if(d.src!=="pipe"||d.type!=="AT")return;var adj=String(d.adj||d.date||"").slice(0,10);if(adj>=y+"-01-01"&&adj<ny+"-01-01")s+=Number(d.value)||0;else if(d.stFat==="Pendente"&&adj<y+"-01-01")s+=Number(d.value)||0;});return s;}
+function nvPrevAno(y){y=String(y||activeYear());var s=0;(D.deals||[]).forEach(function(d){if(d.src!=="pipe"||d.type==="AT")return;var adj=String(d.adj||d.date||"").slice(0,10);if(adj>=y+"-01-01"&&adj<(+y+1)+"-01-01")s+=Number(d.value)||0;});return s;}
+try{window.nvFatAno=nvFatAno;window.atFatAno=atFatAno;window.cobradoAno=cobradoAno;window.atPrevAno=atPrevAno;window.nvPrevAno=nvPrevAno;}catch(e){}
+// Custos realizados na visão P&L (net IVA dedutível, com as regras contabilísticas) — não a coluna E antiga do Orçamento.
+// Vencimentos = categorias de vencimentos/gratificações + gratificações pagas por FSE (viaturas/deslocações/seguros) reclassificadas.
+function custoRealPL(y){y=String(y||activeYear());var venc=0,tot=0;(D.expenses||[]).forEach(function(e){if(String(e.date||"").slice(0,4)!==y)return;var K=(typeof expCat==="function")?expCat(e):(e.type||"");if(typeof isTaxCat==="function"&&isTaxCat(K))return;var nv=(typeof expNetPL==="function")?expNetPL(e):Math.abs(Number(e.amount)||0);tot+=nv;if(/venc|gratif|coverflex|ticket/i.test(K))venc+=nv;});var rec=0;var ba=(D.gratificacoes&&D.gratificacoes.byAcc&&D.gratificacoes.byAcc[y])||{};["FSE·Viaturas","FSE·Deslocações","FSE·Seguros"].forEach(function(k){rec+=ba[k]||0;});venc+=rec;return {venc:Math.round(venc*100)/100,func:Math.round((tot-venc)*100)/100,total:Math.round(tot*100)/100};}
+try{window.custoRealPL=custoRealPL;}catch(e){}
 function st(){
   var inv=0,col=0,exp=0,pend=0,pendPrev=0,cash=0;
   D.invoices.forEach(function(i){if(i.preERP||i.notInv)return;if(inYear(i.date)){inv+=i.amount}var _cd=i.collDate||i.date;if(i.collected&&inYear(_cd)){col+=ivC(i);cash+=ivC(i)}if(!i.collected){pend+=ivC(i);var _pre=(i.pre2026!==undefined)?i.pre2026:beforeYear(i.date);if(_pre)pendPrev+=ivC(i)}});
   // ajuste de reconciliação com o Facturação (Pipe Line): pendentes sem fatura individual no ERP — bate ao cêntimo com o quadro da direção
   if(D.pendAdj){pend+=Number(D.pendAdj.total)||0;pendPrev+=Number(D.pendAdj.pre2026)||0;}
+  // Cobrado autoritário: c/IVA das faturas pagas, pela data de pagamento (col L do Pipe Line) — bate com o teu ficheiro
+  try{var _cob=cobradoAno(activeYear());if(_cob>0){cash+=(_cob-col);col=_cob;}}catch(e){}
   D.expenses.forEach(function(e){if(inYear(e.date))exp+=e.amount});
   var pipe=0;D.deals.forEach(function(d){if(!isClosed(d)&&inYear(d.date)){pipe+=d.value}});
   var debtCh={};D.invoices.forEach(function(i){if(i.collected||i.preERP)return;var d=dealById(i.dealId);var c=d?clientById(d.clientId):null;var ch=c?c.channel:"Outro";debtCh[ch]=(debtCh[ch]||0)+ivC(i)});
@@ -1232,8 +1246,8 @@ if(cTab==="dashboard"){
 } else if(cTab==="financeiro"){
   h=pgHead("💶",finSub==="orcamento"?"Orçamento":finSub==="cobrancas"?"Financeiro — Pendentes":finSub==="despesas"?"Financeiro — Despesas":"Financeiro — Faturação",yearPicker())+'<div class="kr">'+kpi("Facturado",fmt(S.inv),"emitido em "+yearLabel(),GD,G)+kpi("Cobrado",fmt(S.col),"recebido em "+yearLabel(),GRN,GRN)+kpi("Pendente",fmt(S.pend),S.pendPrev>0?"inclui "+fmt(S.pendPrev)+" de anos anteriores":"",R,R)+kpi("Custos",fmt(S.exp),"",R,R)+kpi("Cashflow",fmt(S.cf2),"recebido − custos",S.cf2<0?DNG:GRN,S.cf2<0?DNG:GRN)+'</div>';
   if(finSub==="orcamento"){
-    var fVendasAT=0,fVendasNV=0;
-    D.invoices.forEach(function(i){if(beforeYear(i.date)||i.preERP)return;var d=dealById(i.dealId);if(d&&d.type==="AT")fVendasAT+=i.amount;else fVendasNV+=i.amount});
+    // NV vs AT pela classificação da Pipe Line (col F): NV=vendas novas, AT=manutenções — bate com H8/I8 do teu ficheiro
+    var fVendasNV=nvFatAno(),fVendasAT=atFatAno();
     function orcRow(label,fact,orc,bold){var pctv=orc>0?pc(fact,orc):null;return'<tr'+(bold?' style="font-weight:700;border-top:2px solid #E4E8EB"':'')+'><td style="font-weight:600">'+label+'</td><td style="text-align:right">'+(orc>0?fmt(orc):'—')+'</td><td style="font-weight:700;text-align:right">'+fmt(fact)+'</td><td style="text-align:right">'+(pctv!==null?bdg(pctv+"%",pctv>=95?GRN:(pctv>=80?GD:DNG)):'—')+'</td></tr>'}
     var _Yo=String(activeYear());var _orc=(D.orcamento&&D.orcamento[_Yo])||null;var _drO=(D.drOficial&&D.drOficial[_Yo])||null;
     // realizado custos na visão de gestão
@@ -1241,17 +1255,36 @@ if(cTab==="dashboard"){
     var _vencReal=_drO?(Math.abs(_drO.pessoal)+_recO):S.expPL;var _funcReal=_drO?(Math.abs(_drO.fse)-_recO+Math.abs(_drO.cmvmc)+Math.abs(_drO.outros)):0;
     var _provReal=_drO?_drO.vendas:S.inv;
     if(_orc){
-      h+='<div class="cd"><div class="ct2" style="margin-bottom:6px">ORÇAMENTO '+_Yo+' vs REALIZADO — PROVEITOS (s/IVA)</div>';
-      h+='<table><thead><tr><th>Rubrica</th><th style="text-align:right">Orçamento</th><th style="text-align:right">Realizado</th><th style="text-align:right">% Exec.</th></tr></thead><tbody>';
-      h+=orcRow("Novas vendas",fVendasNV,_orc.vendas)+orcRow("AT / recorrente",fVendasAT,_orc.at)+orcRow("TOTAL PROVEITOS",_provReal,_orc.totalProv,true);
-      h+='</tbody></table></div>';
-      h+='<div class="cd"><div class="ct2" style="margin-bottom:6px">ORÇAMENTO '+_Yo+' vs REALIZADO — CUSTOS (visão gestão)</div>';
-      h+='<table><thead><tr><th>Rubrica</th><th style="text-align:right">Orçamento</th><th style="text-align:right">Realizado</th><th style="text-align:right">% Exec.</th></tr></thead><tbody>';
-      h+=orcRow("Vencimentos (inc. gratificações)",_vencReal,_orc.venc)+orcRow("Funcionamento (FSE+CMVMC+outros)",_funcReal,_orc.func)+orcRow("TOTAL CUSTOS",_vencReal+_funcReal,_orc.totalCusto,true);
-      var _resO=_orc.totalProv-_orc.totalCusto,_resR=_provReal-(_vencReal+_funcReal);
-      h+='<tr style="font-weight:700;border-top:2px solid #E4E8EB;background:#EAF7F3"><td>MARGEM (EBITDA)</td><td style="text-align:right">'+fmt(_resO)+'</td><td style="text-align:right">'+fmt(_resR)+'</td><td style="text-align:right">'+(_resO>0?bdg(pc(_resR,_resO)+"%",_resR>=_resO?GRN:GD):'—')+'</td></tr>';
+      var _nvPrev=nvPrevAno(_Yo),_atPrev=atPrevAno(_Yo),_cob=cobradoAno(_Yo);
+      function r3(l,orc,prev,fact,bold){var pe=orc>0?pc(fact,orc):null;return '<tr'+(bold?' style="font-weight:700;border-top:2px solid #E4E8EB"':'')+'><td style="font-weight:600">'+l+'</td><td style="text-align:right">'+(orc?fmt(orc):'—')+'</td><td style="text-align:right;color:#7E8892">'+(prev?fmt(prev):'—')+'</td><td style="text-align:right;font-weight:700">'+fmt(fact)+'</td><td style="text-align:right">'+(pe!==null?bdg(pe+"%",pe>=95?GRN:(pe>=80?GD:DNG)):'—')+'</td></tr>';}
+      var _bal=(D.balanco&&D.balanco[_Yo])||null;
+      // r3v: linha do balanço a 3 valores (Orçamento | Previsão | Facturado/Realizado)
+      function r3v(l,orc,prev,fact,bold,hl){return '<tr'+(bold?' style="font-weight:700;border-top:2px solid #E4E8EB'+(hl?';background:#EAF7F3':'')+'"':'')+'><td style="font-weight:600">'+l+'</td><td style="text-align:right">'+(orc?fmt(orc):'—')+'</td><td style="text-align:right;color:#7E8892">'+(prev?fmt(prev):'—')+'</td><td style="text-align:right;font-weight:'+(bold?800:700)+'">'+fmt(fact)+'</td></tr>';}
+      // Proveitos previsão: do balanço se existir, senão calculado
+      var _bp=_bal?_bal.proveitos:null;
+      var _nvP=_bp?_bp.vendas.prev:_nvPrev,_atP=_bp?_bp.at.prev:_atPrev;
+      var _outO=_bp?_bp.outros.orc:0,_outP=_bp?_bp.outros.prev:0,_outF=_bp?_bp.outros.fact:0;
+      var _provO=_orc.totalProv,_provP=_nvP+_atP+_outP,_provF=fVendasNV+fVendasAT+_outF;
+      h+='<div class="ins" style="margin-bottom:12px;border-left:3px solid '+BLU+'"><div style="font-size:12px;color:#7E8892;line-height:1.6"><b>BALANÇO '+_Yo+'</b> a 3 colunas: <b>Orçamento</b> (metas) · <b>Previsão</b> (fim de ano pela média'+(_bal?", "+_bal.mesesMedia+" meses":"")+') · <b>Facturado/Realizado</b>. Proveitos NV/AT do Facturação (Pipe Line H8/I8); custos: orçamento (K) e previsão (F) do Orçamento '+_Yo+', <b>realizado do P&amp;L</b> (net IVA dedutível, com as nossas regras — vencimentos incluem gratificações).</div></div>';
+      h+='<div class="cd"><div class="ct2" style="margin-bottom:6px">PROVEITOS (s/IVA)</div>';
+      h+='<table><thead><tr><th>Rubrica</th><th style="text-align:right">Orçamento</th><th style="text-align:right">Previsão</th><th style="text-align:right">Facturado</th></tr></thead><tbody>';
+      h+=r3v("Vendas (NV)",_orc.vendas,_nvP,fVendasNV)+r3v("AT / recorrente (M)",_orc.at,_atP,fVendasAT)+(_bp?r3v("Outros ganhos financ.",_outO,_outP,_outF):'')+r3v("TOTAL PROVEITOS",_provO,_provP,_provF,true);
+      h+='</tbody></table><div style="border-top:1px dashed #E4E8EB;margin-top:6px;padding-top:8px;font-size:12.5px;color:#414D57"><b>Cobrado no ano (c/IVA):</b> '+fmt(_cob)+' — recebido efetivamente, pela data de pagamento (bate com J8 do Facturação).</div></div>';
+      // CUSTOS
+      var _bc=_bal?_bal.custos:null;
+      // Realizado dos custos = P&L (net IVA dedutível, com as regras), NÃO a coluna E antiga do Orçamento
+      var _cpl=custoRealPL(_Yo);
+      var _vO=_bc?_bc.venc.orc:_orc.venc,_vP=_bc?_bc.venc.prev:0,_vR=_cpl.venc;
+      var _fO=_bc?_bc.func.orc:_orc.func,_fP=_bc?_bc.func.prev:0,_fR=_cpl.func;
+      h+='<div class="cd"><div class="ct2" style="margin-bottom:6px">CUSTOS (visão de gestão — com as regras)</div>';
+      h+='<table><thead><tr><th>Rubrica</th><th style="text-align:right">Orçamento</th><th style="text-align:right">Previsão</th><th style="text-align:right">Realizado</th></tr></thead><tbody>';
+      h+=r3v("Custos vencimentos (inc. gratificações)",_vO,_vP,_vR)+r3v("Custos funcionamento",_fO,_fP,_fR)+r3v("TOTAL CUSTOS",_vO+_fO,_vP+_fP,_vR+_fR,true);
+      // MARGEM + RENTABILIDADE (3 colunas)
+      var _mO=_provO-(_vO+_fO),_mP=_provP-(_vP+_fP),_mF=_provF-(_vR+_fR);
+      h+='<tr style="font-weight:800;border-top:2px solid #E4E8EB;background:#EAF7F3"><td>MARGEM PREVISTA</td><td style="text-align:right">'+fmt(_mO)+'</td><td style="text-align:right;color:'+(_mP<0?DNG:"#414D57")+'">'+fmt(_mP)+'</td><td style="text-align:right;color:'+(_mF<0?DNG:GRN)+'">'+fmt(_mF)+'</td></tr>';
+      h+='<tr style="font-weight:700"><td style="color:#7E8892">Rentabilidade</td><td style="text-align:right">'+(_provO?Math.round(_mO/_provO*100)+"%":"—")+'</td><td style="text-align:right;color:'+(_mP<0?DNG:"#7E8892")+'">'+(_provP?Math.round(_mP/_provP*100)+"%":"—")+'</td><td style="text-align:right;color:'+(_mF<0?DNG:GRN)+'">'+(_provF?Math.round(_mF/_provF*100)+"%":"—")+'</td></tr>';
       h+='</tbody></table>';
-      h+='<div style="border-top:1px dashed #E4E8EB;margin-top:6px;padding-top:8px;font-size:11px;color:#A6AEB6">Custos na vossa visão (vencimentos inclui gratificações/Coverflex). Realizado dos totais = DR oficial. Fora da margem: IVA '+fmt(S.ivaTax||0)+' · IRC '+fmt(S.ircTax||0)+'</div></div>';
+      h+='<div style="border-top:1px dashed #E4E8EB;margin-top:6px;padding-top:8px;font-size:11px;color:#A6AEB6">'+(_bal?'Realizado dos custos = <b>P&amp;L</b> (net IVA dedutível, com as regras); previsão (F, pela média) e orçamento (K) do Orçamento '+_Yo+'. ':'Custos na visão de gestão (vencimentos inclui gratificações). ')+'Fora da margem: IVA '+fmt(S.ivaTax||0)+' · IRC '+fmt(S.ircTax||0)+'</div></div>';
     }else{
       h+='<div class="cd"><div class="ct2" style="margin-bottom:14px">ORÇAMENTO '+_Yo+' vs REALIZADO (S/IVA)</div><table><thead><tr><th>Rubrica</th><th style="text-align:right">Orçamento</th><th style="text-align:right">Facturado</th><th style="text-align:right">% Exec.</th></tr></thead><tbody>';
       h+=orcRow("Vendas (NV)",fVendasNV,0)+orcRow("AT/SaaS",fVendasAT,0)+orcRow("TOTAL RECEITA",S.inv,D.budget)+orcRow("Custos (P&L, líq. IVA ded.)",S.expPL,0)+orcRow("Margem (P&L, s/ impostos)",S.inv-S.expPL,0);
