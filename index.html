@@ -428,7 +428,20 @@ function migrate(){var changed=false;
   try{window.__migrateChanged=changed;}catch(e){}
   if(changed)save();
 }
-function save(){try{window.__ahCache=null;}catch(e){}try{localStorage.setItem("mw26v3",JSON.stringify(D));return true}catch(e){if(typeof toast==="function")toast("⚠️ Não foi possível guardar — o armazenamento do navegador está cheio (provavelmente por causa de anexos grandes). Os dados em memória continuam, mas NÃO foram gravados. Remove alguns anexos ou exporta um backup já.",{type:"error"});return false}}
+function lsPayload(){
+  // A cache local (localStorage ~5MB) guarda tudo EXCETO o histórico pesado de tickets:
+  // só os tickets abertos ficam localmente; os resolvidos/cancelados vivem no Supabase (fonte de verdade).
+  if(!Array.isArray(D.tickets)||D.tickets.length<=300)return D;
+  var open=D.tickets.filter(function(t){return t&&t.estado!=="resolvido"&&t.estado!=="fechado";});
+  var d={};for(var k in D)d[k]=D[k];d.tickets=open;d._ticketsFull=D.tickets.length;return d;
+}
+function save(){try{window.__ahCache=null;}catch(e){}
+  try{localStorage.setItem("mw26v3",JSON.stringify(lsPayload()));return true}
+  catch(e){
+    // se ainda não couber, tenta sem histórico de tickets de todo
+    try{var d={};for(var k in D)d[k]=D[k];d.tickets=(Array.isArray(D.tickets)?D.tickets.filter(function(t){return t&&t.estado!=="resolvido"&&t.estado!=="fechado";}):[]);d._ticketsFull=(D.tickets||[]).length;localStorage.setItem("mw26v3",JSON.stringify(d));return true;}catch(e2){}
+    if(typeof toast==="function")toast("⚠️ Não foi possível guardar a cache local (cheia). Os dados estão em memória e no Supabase; exporta um backup por segurança.",{type:"error"});return false}
+}
 function rstData(){confirmM("Repor dados iniciais?\n\nISTO APAGA todos os teus dados e volta ao estado de fábrica. Exporta um backup primeiro se tiveres dúvidas.",function(){D=JSON.parse(JSON.stringify(INIT));save();ren()},{yesLabel:"Repor tudo"})}
 function reimportarDados(){
   var log=[]; var errs=[];
@@ -7145,10 +7158,11 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     var canEdit=!isReadOnlyNow();
     if(!Array.isArray(D.tickets))D.tickets=[];
     var all=D.tickets.slice();
-    var stats=all.filter(function(t){return t.canal!=="importado"&&t.canal!=="portal";});
+    var stats=all.filter(function(t){return t.canal!=="portal";});
+    var statsManual=all.filter(function(t){return t.canal!=="importado"&&t.canal!=="portal";});
     var abertos=stats.filter(tkOpen).length;
     var urg=stats.filter(function(t){return tkOpen(t)&&(t.prioridade==="urgente"||t.prioridade==="alta");}).length;
-    var vencidos=stats.filter(function(t){return tkSla(t).vencido;}).length;
+    var vencidos=statsManual.filter(function(t){return tkSla(t).vencido;}).length;
     var mes=new Date().toISOString().slice(0,7);
     var resolvMes=stats.filter(function(t){return t.resolvedAt&&t.resolvedAt.slice(0,7)===mes;}).length;
     var triar=all.filter(tkTriar);
@@ -7156,12 +7170,12 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     h+='<div class="kr">'+kpi("Por triar",""+stats.filter(tkTriar).length,"sem responsável",triar.length?GD:GRN,triar.length?GD:GRN)+kpi("Abertos",""+abertos,"por resolver",R,R)+kpi("SLA vencido",""+vencidos,"fora do prazo",vencidos?DNG:GRN,vencidos?DNG:GRN)+kpi("Resolvidos (mês)",""+resolvMes,"",GRN,GRN)+'</div>';
     // ---- Painel de desempenho & SLA ----
     (function(){
-      var rot=stats.map(tkResolvedOnTime).filter(function(v){return v!==null;});
+      var rot=statsManual.map(tkResolvedOnTime).filter(function(v){return v!==null;});
       var slaComp=rot.length?Math.round(rot.filter(Boolean).length/rot.length*100):null;
-      var frs=stats.map(tkFirstResp).filter(function(v){return v!==null;});
+      var frs=statsManual.map(tkFirstResp).filter(function(v){return v!==null;});
       var frAvg=frs.length?(Math.round((frs.reduce(function(a,b){return a+b;},0)/frs.length)*10)/10):null;
       var criadosMes=stats.filter(function(t){return (t.createdAt||"").slice(0,7)===mes;}).length;
-      var abertoDentro=stats.filter(function(t){return tkOpen(t)&&!tkSla(t).vencido;}).length;var _csv=stats.map(function(t){return t.csat;}).filter(function(v){return v>0;});var csatAvg=_csv.length?(Math.round((_csv.reduce(function(a,b){return a+b;},0)/_csv.length)*10)/10):null;
+      var abertoDentro=statsManual.filter(function(t){return tkOpen(t)&&!tkSla(t).vencido;}).length;var _csv=statsManual.map(function(t){return t.csat;}).filter(function(v){return v>0;});var csatAvg=_csv.length?(Math.round((_csv.reduce(function(a,b){return a+b;},0)/_csv.length)*10)/10):null;
       var scol=slaComp==null?SL:(slaComp>=80?GRN:(slaComp>=50?GD:DNG));
       h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">Desempenho &amp; SLA</div><div class="kr" style="margin:0">'
         +kpi("Cumprimento de SLA",slaComp==null?"—":slaComp+"%","resolvidos no prazo",scol,scol)
@@ -7169,7 +7183,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
         +kpi("Abertos no prazo",""+abertoDentro,"dentro do SLA",GRN,GRN)
         +kpi("Novos (mês)",""+criadosMes,"pedidos criados",PUR,PUR)+kpi("Satisfação (CSAT)",csatAvg==null?"—":csatAvg+"/5",_csv.length+" resposta(s)",csatAvg==null?SL:(csatAvg>=4?GRN:(csatAvg>=3?GD:DNG)),csatAvg==null?SL:(csatAvg>=4?GRN:(csatAvg>=3?GD:DNG)))+'</div><div style="font-size:11px;color:#A6AEB6;margin-top:6px">As estatísticas contam apenas pedidos <b>manuais</b> ou recebidos por <b>email</b> — importados e do portal não contam.</div>';
       h+='<div style="overflow-x:auto;margin-top:10px"><table><thead><tr><th>Prioridade</th><th style="text-align:right">Abertos</th><th style="text-align:right">Vencidos</th><th style="text-align:right">SLA (dias)</th></tr></thead><tbody>';
-      TK_PRIO.forEach(function(pr){var op=stats.filter(function(t){return tkOpen(t)&&t.prioridade===pr[0];}).length;var vn=stats.filter(function(t){return t.prioridade===pr[0]&&tkSla(t).vencido;}).length;h+='<tr><td>'+bdg(pr[1],TK_PRIO_COL[pr[0]]||SL)+'</td><td style="text-align:right">'+op+'</td><td style="text-align:right;color:'+(vn?R:"#7E8892")+';font-weight:'+(vn?700:400)+'">'+vn+'</td><td style="text-align:right;color:#A6AEB6">'+TK_SLA_DAYS[pr[0]]+'</td></tr>';});
+      TK_PRIO.forEach(function(pr){var op=statsManual.filter(function(t){return tkOpen(t)&&t.prioridade===pr[0];}).length;var vn=statsManual.filter(function(t){return t.prioridade===pr[0]&&tkSla(t).vencido;}).length;h+='<tr><td>'+bdg(pr[1],TK_PRIO_COL[pr[0]]||SL)+'</td><td style="text-align:right">'+op+'</td><td style="text-align:right;color:'+(vn?R:"#7E8892")+';font-weight:'+(vn?700:400)+'">'+vn+'</td><td style="text-align:right;color:#A6AEB6">'+TK_SLA_DAYS[pr[0]]+'</td></tr>';});
       h+='</tbody></table></div></div>';
     })();
     // caixa de entrada — pedidos por triar (sem responsável)
@@ -7194,9 +7208,10 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
       if(tkState.search){var q=tkState.search.toLowerCase();if((cn(t.clientId)+" "+(t.titulo||"")).toLowerCase().indexOf(q)<0)return false;}
       return true;
     }).sort(function(a,b){var oa=tkOpen(a)?0:1,ob=tkOpen(b)?0:1;if(oa!==ob)return oa-ob;var pr={urgente:0,alta:1,media:2,baixa:3};return (pr[a.prioridade]||9)-(pr[b.prioridade]||9);});
+    var _TKCAP=200;var _listAll=list.length;var _listShown=list.slice(0,_TKCAP);
     h+='<div style="overflow-x:auto"><table><thead><tr><th>Cliente</th><th>Assunto</th><th>Prioridade</th><th>Estado</th><th>SLA</th><th>Resp.</th><th></th></tr></thead><tbody>';
     if(!list.length)h+='<tr><td colspan="7" style="text-align:center;padding:24px;color:#A6AEB6">Sem pedidos.'+(canEdit?' Cria o primeiro com “+ Novo pedido”.':'')+'</td></tr>';
-    list.forEach(function(t){
+    _listShown.forEach(function(t){
       var sla=tkSla(t);var ni=(t.intervencoes||[]).length;
       var nm=(t.mensagens||[]).length;
       h+='<tr style="cursor:pointer" onclick="openTicketM(\''+t.id+'\')"><td style="font-weight:600">'+(t.canal==="email"?'<span title="veio por email">📧</span> ':'')+(t.clientId?esc(cn(t.clientId)):'<span style="color:#C98F34">por associar</span>')+'</td>'+
@@ -7207,7 +7222,9 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
         '<td style="font-size:11.5px;color:#7E8892">'+esc(t.assignee||"—")+'</td>'+
         '<td style="text-align:right;color:'+R+';font-size:12px;font-weight:600">abrir ›</td></tr>';
     });
-    h+='</tbody></table></div></div>';
+    h+='</tbody></table></div>';
+    if(_listAll>_TKCAP)h+='<div style="font-size:11.5px;color:#A6AEB6;padding:8px 2px 0">A mostrar '+_TKCAP+' de '+_listAll+' pedidos (abertos primeiro). Usa os filtros de estado, prioridade ou a pesquisa para ver os restantes.</div>';
+    h+='</div>';
     app.innerHTML=h;
     var e1=document.getElementById("tkEstado");if(e1)e1.onchange=function(){tkState.estado=e1.value;renderSuporte();};
     var e2=document.getElementById("tkPrio");if(e2)e2.onchange=function(){tkState.prio=e2.value;renderSuporte();};
@@ -7579,6 +7596,13 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
       h+='</tbody></table></div><div style="font-size:11px;color:#A6AEB6;margin-top:8px">Campo do valor-hora a roxo = editado manualmente. “Aplicar aos custos” usa estes valores para o custo de mão de obra dos projetos (por nome do colaborador).</div></div>';}
     app.innerHTML=h;
   }
+  function tkColabOptions(){var seen={},out="";try{Object.keys(D.hrPeople||{}).forEach(function(em){var nm=((D.hrPeople[em]||{}).nome||"").trim();if(nm&&!seen[nm.toLowerCase()]){seen[nm.toLowerCase()]=1;out+='<option value="'+esc(nm)+'"></option>';}});}catch(e){}return out;}
+  window.tkColabOptions=tkColabOptions;
+  window.tkAssigneeHint=function(v){var el=document.getElementById("tk6hint");if(!el)return;v=(v||"").trim();if(!v){el.textContent="";return;}
+    var known=false;try{Object.keys(D.hrPeople||{}).forEach(function(k){var nm=((D.hrPeople[k]||{}).nome||"").trim();if(nm&&nm.toLowerCase()===v.toLowerCase())known=true;});}catch(e){}
+    if(!known){try{if(nomeToEmail(v))known=true;}catch(e){}}
+    if(known)el.innerHTML='✓ <span style="color:'+GRN+'">'+esc(v)+' vai receber o aviso deste pedido (sino + «A minha área»).</span>';
+    else el.innerHTML='⚠️ <span style="color:'+GD+'">Este nome não corresponde a um colaborador — o aviso pode não chegar. Escolhe da lista.</span>';};
   window.openTicketM=function(id){
     if(!Array.isArray(D.tickets))D.tickets=[];
     var canEdit=!isReadOnlyNow();
@@ -7591,7 +7615,8 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
       +fld("Assunto",'<input id="tk2" '+dis+' value="'+(t?esc(t.titulo||""):"")+'" placeholder="ex.: DOCbase não arranca">')
       +fld("Descrição",'<textarea id="tk3" '+dis+' rows="3" style="resize:vertical">'+(t?esc(t.descricao||""):"")+'</textarea>')
       +'<div class="r2">'+fld("Prioridade",sel("tk4",TK_PRIO.map(function(o){return {v:o[0],t:o[1]};}),t?t.prioridade:"media"))+fld("Estado",sel("tk5",TK_ESTADO.map(function(o){return {v:o[0],t:o[1]};}),t?t.estado:"aberto"))+'</div>'
-      +'<div class="r2">'+fld("Responsável",'<input id="tk6" '+dis+' value="'+(t?esc(t.assignee||""):"")+'" placeholder="técnico">')+fld("Data-limite (SLA)",'<input type="date" id="tk7" '+dis+' value="'+(t?(t.dueDate||""):"")+'">')+'</div>';
+      +'<div class="r2">'+fld("Responsável",'<input id="tk6" list="tk6_colabs" '+dis+' value="'+(t?esc(t.assignee||""):"")+'" placeholder="escolhe o técnico" oninput="tkAssigneeHint(this.value)"><datalist id="tk6_colabs">'+tkColabOptions()+'</datalist>')+fld("Data-limite (SLA)",'<input type="date" id="tk7" '+dis+' value="'+(t?(t.dueDate||""):"")+'">')+'</div>';
+    body+='<div id="tk6hint" style="font-size:11px;color:#A6AEB6;margin:-6px 0 8px"></div>';
     body+=fld("Data de entrada do pedido",'<input type="date" id="tk_created" '+dis+' value="'+(t?(t.createdAt||todayISO()):todayISO())+'">');
     body+=fld("Tipo de pedido",sel("tk_tipo",[{v:"suporte",t:"Suporte"},{v:"equipamento",t:"Equipamento"}],t?(t.tipo||"suporte"):"suporte"));
     if(t&&t.anulado)body+='<div style="margin:-4px 0 10px">'+bdg("Pedido anulado"+(t.anuladoAt?" · "+fmtD(t.anuladoAt):""),SL)+'</div>';
@@ -7648,6 +7673,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     var prio=document.getElementById("tk4").value, estado=document.getElementById("tk5").value, due=document.getElementById("tk7").value;
     if(!Array.isArray(D.tickets))D.tickets=[];
     var t=id?D.tickets.filter(function(x){return x.id===id;})[0]:null;
+    var _oldAsg=t?(t.assignee||""):"";
     if(!due){var base=t?(t.createdAt||new Date().toISOString().slice(0,10)):new Date().toISOString().slice(0,10);var dd=new Date(base);dd.setDate(dd.getDate()+(TK_SLA_DAYS[prio]||5));due=dd.toISOString().slice(0,10);}
     var data={clientId:cid,titulo:titulo,descricao:descricao,prioridade:prio,estado:estado,tipo:((document.getElementById("tk_tipo")||{}).value||"suporte"),assignee:(document.getElementById("tk6").value||"").trim(),dueDate:due};
     var _cr=(document.getElementById("tk_created")||{}).value||"";if(_cr)data.createdAt=_cr;
@@ -7664,6 +7690,16 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
       }
       if(estado==="resolvido")data.resolvedAt=data.createdAt;
       D.tickets.push(data);if(typeof logAct==="function")logAct("Suporte","Novo pedido"+(emailChk?" (email)":"")+" — "+(cn(data.clientId)||data.fromEmail||"por associar")+": "+titulo.slice(0,40));
+    }
+    // aviso ao responsável: confirma se o nome corresponde a um colaborador (recebe no sino + "A minha área")
+    var _asg=(data.assignee||"").trim();var _asgChanged=_asg&&_asg.toLowerCase()!==(_oldAsg||"").toLowerCase();
+    if(_asgChanged&&estado!=="resolvido"&&estado!=="fechado"){
+      var _known=false;try{Object.keys(D.hrPeople||{}).forEach(function(k){var nm=((D.hrPeople[k]||{}).nome||"").trim();if(nm&&nm.toLowerCase()===_asg.toLowerCase())_known=true;});}catch(e){}
+      if(!_known){try{if(nomeToEmail(_asg))_known=true;}catch(e){}}
+      if(typeof logAct==="function")logAct("Suporte","Pedido atribuído a "+_asg+(cn(data.clientId)?" — "+cn(data.clientId):""));
+      try{save();clM();ren();}catch(e){}
+      toastSafe(_known?("Atribuído a "+_asg+" — vai receber o aviso no sino e em «A minha área»."):("Atribuído a "+_asg+". Atenção: este nome não corresponde a um colaborador, o aviso pode não chegar."), _known?"ok":"error");
+      return;
     }
     save();clM();ren();
   };
