@@ -1355,15 +1355,16 @@ if(cTab==="dashboard"){
 } else if(cTab==="caractfat"){
   var _Y=activeYear();
   var _dl={}; D.deals.forEach(function(d){_dl[d.id]=d;});
-  function _ft(types,yr){var t=0;D.invoices.forEach(function(i){if(String((i.date||"").slice(0,4))!==String(yr)||i.preERP)return;var d=_dl[i.dealId];if(d&&types.indexOf(d.type)>=0)t+=Number(i.amount)||0;});return t;}
-  function _fc(cond,yr){var t=0;D.invoices.forEach(function(i){if(String((i.date||"").slice(0,4))!==String(yr)||i.preERP)return;var d=_dl[i.dealId];if(d&&cond(d))t+=Number(i.amount)||0;});return t;}
+  // Caracterização pela LINHA do Pipe Line (valor real por tipo, pela data de fatura) — bate com H8/I8, sem duplicar SUB (×1)
+  function _ft(types,yr){var t=0;(D.deals||[]).forEach(function(d){if(d.src!=="pipe"||types.indexOf(d.type)<0)return;if(String(d.factDate||"").slice(0,4)!==String(yr))return;t+=Number(d.value)||0;});return t;}
+  function _fc(cond,yr){var t=0;(D.deals||[]).forEach(function(d){if(d.src!=="pipe"||!cond(d))return;if(String(d.factDate||"").slice(0,4)!==String(yr))return;t+=Number(d.value)||0;});return t;}
   var NVt=["SV","EV","DV","HV","SUV","SMV"];
   var dvF=_ft(["DV"],_Y),evF=_ft(["EV"],_Y),svF=_ft(["SV"],_Y),hvF=_ft(["HV"],_Y),nvF=_ft(NVt,_Y),atF=_ft(["AT"],_Y),totF=nvF+atF;
   var py=_Y-1,dvP=_ft(["DV"],py),evP=_ft(["EV"],py),svP=_ft(["SV"],py),hvP=_ft(["HV"],py),totP=dvP+evP+svP+hvP;
   var orc=D.orc||{total:(objYear()||0),nv:0,at:0};
   var saasLic=_fc(function(d){return d.saas&&NVt.indexOf(d.type)>=0;},_Y),cloudF=_fc(function(d){return d.cloud;},_Y),dirServ=svF,dirLic=nvF-saasLic-svF;
   var moNV=[],moNVp=[];for(var _m=0;_m<12;_m++){moNV.push(0);moNVp.push(0);}
-  D.deals.forEach(function(d){if(NVt.indexOf(d.type)<0)return;var yy=String((d.date||"").slice(0,4)),mm=parseInt((d.date||"").slice(5,7),10)-1;if(mm<0||mm>11)return;if(yy===String(_Y))moNV[mm]+=Number(d.value)||0;else if(yy===String(py))moNVp[mm]+=Number(d.value)||0;});
+  D.deals.forEach(function(d){if(d.src!=="pipe"||NVt.indexOf(d.type)<0)return;var _fd=String(d.factDate||"");var yy=_fd.slice(0,4),mm=parseInt(_fd.slice(5,7),10)-1;if(mm<0||mm>11)return;if(yy===String(_Y))moNV[mm]+=Number(d.value)||0;else if(yy===String(py))moNVp[mm]+=Number(d.value)||0;});
   var moTot=moNV.reduce(function(a,b){return a+b;},0);
   function pctS(v,t){return t?Math.round(v/t*100)+"%":"—";}
   var RA=' style="text-align:right"';
