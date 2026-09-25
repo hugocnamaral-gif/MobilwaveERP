@@ -168,7 +168,7 @@ function parseHM(v){if(v==null)return 0;v=String(v).trim().replace(",",".");if(v
 function fmtHM(dec){dec=Number(dec)||0;var ng=dec<0;dec=Math.abs(dec);var hh=Math.floor(dec+1e-9);var mm=Math.round((dec-hh)*60);if(mm===60){hh++;mm=0;}return (ng?"-":"")+hh+":"+(mm<10?"0":"")+mm;}
 window.parseHM=parseHM;window.fmtHM=fmtHM;
 function esc(t){return String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
-var _yearSel=null;/* null = automático (ano mais recente) */
+var _yearSel=null;/* null = automático (ano civil corrente) */
 function yearsInData(){
   if(window.__yid)return window.__yid;   // memoizado — invalidado em _idxClear() (save/ren) e setYear()
   var set={};
@@ -183,7 +183,9 @@ function yearsInData(){
 function activeYear(){
   if(_yearSel!==null)return _yearSel;
   if(window.__ay!=null)return window.__ay;   // memoizado
-  window.__ay=Math.max.apply(null,yearsInData().concat([2026]));
+  // automático = ano civil corrente (não o ano mais alto nos dados: há linhas já adjudicadas para o ano seguinte)
+  var _cy=new Date().getFullYear();var _ys=yearsInData().filter(function(y){return y<=_cy;});
+  window.__ay=_ys.length?Math.max.apply(null,_ys):Math.max.apply(null,yearsInData().concat([2026]));
   return window.__ay;
 }
 function yStart(){return activeYear()+"-01-01"}
@@ -208,7 +210,7 @@ function _idxClients(){if(window.__idxC==null){var m={};var a=D.clients||[];for(
 function _idxInvByDeal(){if(window.__idxIvD==null){var m={};for(var i=0;i<D.invoices.length;i++){var iv=D.invoices[i];if(iv.dealId&&!m[iv.dealId])m[iv.dealId]=iv;}window.__idxIvD=m;}return window.__idxIvD;}
 function dealById(id){return _idxDeals()[id];}
 function clientById(id){return _idxClients()[id];}
-function _idxClear(){window.__idxD=null;window.__idxC=null;window.__idxIvD=null;window.__yid=null;window.__ay=null;}
+function _idxClear(){window.__pfy=null;window.__idxD=null;window.__idxC=null;window.__idxIvD=null;window.__yid=null;window.__ay=null;}
 function cn(id){var c=_idxClients()[id];return c?c.name:"—"}
 function isWon(d){return !d.fromProj&&(d.stage==="ganho"||d.stage==="projeto"||d.stage==="concluido")}
 function isSubDeal(d){return !!(d&&(d.type==="AT"||d.type==="SUB"))}
@@ -216,6 +218,8 @@ try{window.isSubDeal=isSubDeal;}catch(e){}
 function isClosed(d){return d.fromProj||d.stage==="ganho"||d.stage==="projeto"||d.stage==="concluido"||d.stage==="perdido"}
 function rgba(hex,a){var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return"rgba("+r+","+g+","+b+","+a+")"}
 function bdg(t,c){return'<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;background:'+rgba(c,.1)+';color:'+c+'">'+t+'</span>'}
+// Barra legível: nome | barra | valor e % SEMPRE fora da barra (visível mesmo com barras pequenas)
+function barV(l,v,mx,c,tot){var w=mx>0?Math.max((Math.abs(v)/mx)*100,1.5):0;var pctx=tot?'<span style="color:#A6AEB6;font-weight:600;margin-left:6px">'+Math.round(v/tot*100)+'%</span>':'';return'<div style="display:grid;grid-template-columns:minmax(90px,34%) 1fr auto;align-items:center;gap:10px;margin-bottom:7px"><div style="font-size:12px;color:#414D57;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(String(l))+'">'+esc(String(l))+'</div><div style="height:14px;background:#F2F4F6;border-radius:5px;overflow:hidden"><div style="width:'+w+'%;height:100%;border-radius:5px;background:'+c+'"></div></div><div style="font-size:12px;font-weight:700;color:#1B2733;white-space:nowrap;text-align:right;min-width:92px;font-variant-numeric:tabular-nums">'+fmt(v)+pctx+'</div></div>'}
 function barH(l,v,mx,c){var w=mx>0?Math.max((v/mx)*100,2):0;return'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div style="width:72px;font-size:12px;text-align:right;color:#7E8892;flex-shrink:0">'+l+'</div><div style="flex:1;height:24px;background:#f8f7f5;border-radius:6px;overflow:hidden"><div style="width:'+w+'%;height:100%;border-radius:6px;background:'+rgba(c,.25)+';display:flex;align-items:center;justify-content:flex-end;padding-right:8px;font-size:11px;font-weight:600;color:'+c+';min-width:40px">'+fmt(v)+'</div></div></div>'}
 function kpi(l,v,s,c,ac){var _vs=String(v).trim();var _kc=(_vs.charAt(0)==="-"||_vs.charAt(0)==="\u2212")?DNG:c;return'<div class="kpi"><div class="bar" style="background:'+(ac||G)+'"></div><div class="kl">'+l+'</div><div class="kv" style="color:'+_kc+'">'+v+'</div>'+(s?'<div class="ks">'+s+'</div>':'')+'</div>'}
 window.__EMOSVG={
@@ -735,12 +739,14 @@ function svCt(editId){
 function editCt(id){openCtM({editId:id})}
 function delCt(id){var c=(D.contacts||[]).find(function(x){return x.id===id});if(!c)return;
   confirmM("Remover o contacto \""+c.name+"\"?",function(){D.contacts=D.contacts.filter(function(x){return x.id!==id});logAct("Contacto","Contacto removido: "+c.name);save();ren();},{yesLabel:"Remover"});}
+var PAISES=["Portugal","Espanha","Andorra","Angola","Moçambique","São Tomé e Príncipe","Cabo Verde","Letónia","Guiné-Bissau"];
 function openAddrM(clientId){var cl=D.clients.find(function(c){return c.id===clientId});if(!cl)return;
   var regs=[...new Set(D.clients.map(function(c){return c.region}).concat(["Andorra","Andaluzia","Aragão","Astúrias","Ilhas Baleares","Canárias","Cantábria","Castela-Mancha","Castela e Leão","Catalunha","Ceuta","Comunidade Valenciana","Estremadura","Galiza","La Rioja","Madrid","Melilla","Múrcia","Navarra","País Basco","Portugal","Espanha"]))].filter(Boolean).sort();
   var chans=[...new Set(D.clients.map(function(c){return c.channel}).concat(["Directo","Parceiro","Canal"]))].filter(Boolean).sort();
   document.getElementById("mArea").innerHTML=mWrap("Editar cliente",
     fld("Nome do cliente",'<input id="f0" value="'+String(cl.name).replace(/"/g,"&quot;")+'">')
     +'<div class="r2">'+fld("Região",sel("f4",regs,cl.region))+fld("Canal",sel("f5",chans,cl.channel))+'</div>'
+    +fld("País",sel("f6",PAISES,cl.pais||"Portugal"))
     +'<div style="border-top:1px solid #EFF1F4;margin:14px 0 10px;padding-top:10px;font-size:11px;font-weight:700;color:#7E8892;text-transform:uppercase;letter-spacing:.4px">Morada e contactos gerais</div>'
     +fld("Morada",'<textarea id="f1" placeholder="Rua, código postal, cidade">'+(cl.address||"")+'</textarea>')
     +'<div class="r2">'+fld("Telefone geral",'<input id="f2" value="'+(cl.phone?String(cl.phone).replace(/"/g,"&quot;"):"")+'">')
@@ -753,6 +759,7 @@ function svAddr(clientId){var cl=D.clients.find(function(c){return c.id===client
   cl.name=newName;
   cl.region=document.getElementById("f4").value;
   cl.channel=document.getElementById("f5").value;
+  var _pe=document.getElementById("f6");if(_pe)cl.pais=_pe.value;
   cl.address=document.getElementById("f1").value.trim();
   cl.phone=document.getElementById("f2").value.trim();
   cl.web=document.getElementById("f3").value.trim();
@@ -862,11 +869,52 @@ function projRecorrente(year,aum){/* base recorrente projetada para 'year' a par
   o.total=(o.at+o.sub+o.lic)*f;return o;}
 // ===== Métricas a partir das linhas do Pipe Line (batem com DashVendas/DashFacturas do Facturação) =====
 // NV vs AT pela coluna F (M=AT; termina em V=NV); facturado pela data de fatura; cobrado pela data de pagamento (c/IVA).
-function nvFatAno(y){y=String(y||activeYear());var s=0;(D.deals||[]).forEach(function(d){if(d.src==="pipe"&&d.nat==="NV"&&String(d.factDate||"").slice(0,4)===y)s+=Number(d.value)||0;});return s;}
-function atFatAno(y){y=String(y||activeYear());var s=0;(D.deals||[]).forEach(function(d){if(d.src==="pipe"&&d.nat==="AT"&&String(d.factDate||"").slice(0,4)===y)s+=Number(d.value)||0;});return s;}
-function cobradoAno(y){y=String(y||activeYear());var s=0;(D.deals||[]).forEach(function(d){if(d.src==="pipe"&&d.paid&&String(d.payDate||"").slice(0,4)===y)s+=Number(d.civa||0);});return s;}
-function atPrevAno(y){y=String(y||activeYear());var ny=String(+y+1);var s=0;(D.deals||[]).forEach(function(d){if(d.src!=="pipe"||d.type!=="AT")return;var adj=String(d.adj||d.date||"").slice(0,10);if(adj>=y+"-01-01"&&adj<ny+"-01-01")s+=Number(d.value)||0;else if(d.stFat==="Pendente"&&adj<y+"-01-01")s+=Number(d.value)||0;});return s;}
-function nvPrevAno(y){y=String(y||activeYear());var s=0;(D.deals||[]).forEach(function(d){if(d.src!=="pipe"||d.type==="AT")return;var adj=String(d.adj||d.date||"").slice(0,10);if(adj>=y+"-01-01"&&adj<(+y+1)+"-01-01")s+=Number(d.value)||0;});return s;}
+function nvFatAno(y){y=String(y||activeYear());var s=0;(D.deals||[]).forEach(function(d){if(_pr(d,y)&&d.nat==="NV"&&String(d.factDate||"").slice(0,4)===y)s+=Number(d.value)||0;});return s;}
+function atFatAno(y){y=String(y||activeYear());var s=0;(D.deals||[]).forEach(function(d){if(_pr(d,y)&&d.nat==="AT"&&String(d.factDate||"").slice(0,4)===y)s+=Number(d.value)||0;});return s;}
+function cobradoAno(y){y=String(y||activeYear());var s=0;(D.deals||[]).forEach(function(d){if(_pr(d,y)&&d.paid&&String(d.payDate||"").slice(0,4)===y)s+=Number(d.civa||0);});return s;}
+// ================= NÚCLEO DE DADOS — Pipe Line do Facturação (fonte única para todas as vistas) =================
+// Linha do Facturação = deal com src "pipe" e civa (importado do ficheiro). Regras = fórmulas do teu Excel:
+//   adj = coluna G (sem data → ignorada, como no Excel) · stFat = coluna J · nat = coluna F (M=AT, *V=NV) · paid = coluna K
+function _padj(d){return String(d&&d.adj||"").slice(0,10);}
+function _isPipeRow(d){return d&&d.src==="pipe"&&d.civa!=null;}
+// Cada linha guarda o ano do ficheiro Facturação de onde veio (fy; sem fy = 2026). Cada ficheiro anual traz as pendências
+// dos anos anteriores, por isso as métricas de um ano usam só o ficheiro desse ano (ou o mais recente, se ainda não existir).
+function _pipeFYs(){if(window.__pfy)return window.__pfy;var o={};(D.deals||[]).forEach(function(d){if(_isPipeRow(d))o[d.fy||2026]=1;});var ks=Object.keys(o).map(Number).sort();window.__pfy={set:o,max:ks.length?ks[ks.length-1]:2026};return window.__pfy;}
+function _fyFor(y){var f=_pipeFYs();y=+y;return f.set[y]?y:f.max;}
+function _pr(d,y){return _isPipeRow(d)&&(d.fy||2026)===(y==null?_pipeFYs().max:_fyFor(y));}
+// AT previsão (L8): M adjudicada no ano + M ainda por facturar adjudicada antes
+function atPrevAno(y){y=+(y||activeYear());var a0=y+"-01-01",a1=(y+1)+"-01-01",s=0;(D.deals||[]).forEach(function(d){if(!_pr(d,y)||d.nat!=="AT")return;var a=_padj(d);if(!a)return;if(a>=a0&&a<a1)s+=Number(d.value)||0;else if(d.stFat==="Pendente"&&a<a0)s+=Number(d.value)||0;});return s;}
+// Por facturar = adjudicado ainda não facturado (F8 NV + G8 M): J=Pendente e G < 1 jan do ano seguinte
+function porFacturarAno(y){y=+(y||activeYear());var lim=(y+1)+"-01-01",o={nv:0,at:0,total:0,n:0,rows:[]};(D.deals||[]).forEach(function(d){if(!_pr(d,y)||d.stFat!=="Pendente")return;var a=_padj(d);if(!a||a>=lim)return;var v=Number(d.value)||0;if(d.nat==="AT")o.at+=v;else if(d.nat==="NV")o.nv+=v;else return;o.n++;o.rows.push(d);});o.total=o.nv+o.at;return o;}
+// NV previsão (K8) = NV facturado + NV por facturar
+function nvPrevAno(y){return nvFatAno(y)+porFacturarAno(y).nv;}
+// Adjudicado total do ano (facturado + ainda por facturar)
+function adjudicadoAno(y){return nvFatAno(y)+atFatAno(y)+porFacturarAno(y).total;}
+// Faturas por cobrar (E8): facturado (J) e não pago (K≠Pago) — lista com dias em atraso
+function porCobrarRows(){var hoje=new Date();var out=[];(D.deals||[]).forEach(function(d){if(!_pr(d)||d.stFat!=="Facturado"||d.paid)return;var fd=d.factDate||d.date||"";var dias=fd?Math.floor((hoje-new Date(fd))/86400000):0;out.push({d:d,cli:cn(d.clientId),num:d.fatNum||"",date:fd,civa:Number(d.civa)||0,dias:dias,pre:(_padj(d)&&_padj(d)<"2025-12-31")});});out.sort(function(a,b){return b.dias-a.dias;});return out;}
+// Cobrado por mês (c/IVA, data de pagamento) e pagamentos por mês (banco: operacionais vs IVA/IRC entregues)
+function cobradoMes(y){y=String(y||activeYear());var m=[0,0,0,0,0,0,0,0,0,0,0,0];(D.deals||[]).forEach(function(d){if(!_pr(d,y)||!d.paid)return;var p=String(d.payDate||"");if(p.slice(0,4)!==y)return;var k=+p.slice(5,7)-1;if(k>=0&&k<12)m[k]+=Number(d.civa)||0;});return m;}
+function pagamentosMes(y){y=String(y||activeYear());var op=[0,0,0,0,0,0,0,0,0,0,0,0],imp=[0,0,0,0,0,0,0,0,0,0,0,0];(D.expenses||[]).forEach(function(e){var dt=String(e.date||"");if(dt.slice(0,4)!==y)return;var k=+dt.slice(5,7)-1;if(k<0||k>11)return;var v=Math.abs(Number(e.amount)||0);if(isTaxCat(expCat(e)))imp[k]+=v;else op[k]+=v;});return {op:op,imp:imp};}
+// Prazo médio de cobrança: dias entre data de fatura (I) e pagamento (L) das faturas pagas no ano
+function prazoMedioCob(y){y=String(y||activeYear());var s=0,n=0;(D.deals||[]).forEach(function(d){if(!_pr(d,y)||!d.paid||!d.factDate||!d.payDate)return;if(String(d.payDate).slice(0,4)!==y)return;var dd=Math.round((new Date(d.payDate)-new Date(d.factDate))/86400000);if(dd<0)return;s+=dd;n++;});return {dias:n?Math.round(s/n):0,n:n};}
+// Orçamento do ano (ficheiro Orçamento): NV, AT, total — nunca o antigo 1.050.000
+function orcAno(y){var o=(D.orcamento&&D.orcamento[String(y||activeYear())])||null;return o?{nv:Number(o.vendas)||0,at:Number(o.at)||0,total:Number(o.totalProv)||0,custo:Number(o.totalCusto)||0,venc:Number(o.venc)||0,func:Number(o.func)||0}:{nv:0,at:0,total:Number(D.budget)||0,custo:0,venc:0,func:0};}
+// Vendedores (coluna P): CP-CV/RE-CV → Carlos Veneno · CP-PN/RE-PN/CP-NOR/RE-NOR → Pedro Nogueira · CP-AR/RE-AR → Ana Rita Rodrigues · A/O → Francisco Duarte · ES → Hugo Amaral
+function vendNome(code){var c=String(code||"").toUpperCase().trim();if(!c)return "Por atribuir";if(c.indexOf("CV")>=0)return "Carlos Veneno";if(c.indexOf("PN")>=0)return "Pedro Nogueira";if(c.indexOf("AR")>=0)return "Ana Rita Rodrigues";if(c==="ES"||c.indexOf("ES-")===0)return "Hugo Amaral";if(c==="A"||c==="O")return "Francisco Duarte";if(c.indexOf("NOR")>=0)return "Pedro Nogueira";if(c.indexOf("SUL")>=0)return "Sul (sem vendedor atribuído)";if(c.indexOf("MM")>=0)return "Mónica Martins";return c;}
+// Projeção do próximo ano = coluna T do Facturação (S×M: 105% M/SUB, 100% já adjudicado no ano seguinte, 0 não transita)
+// Duplicados: cliente já com valor no ano seguinte → linha do ano corrente ×1,05 do MESMO produto (ou nota de crédito) sai automaticamente.
+function _tok(s){return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").split(" ").filter(function(w){return w.length>=2&&!/^\d{4}$/.test(w)&&["de","da","do","das","dos","em","na","no","ao","para","com","e","o","a","um","uma"].indexOf(w)<0;});}
+function projProxAno(aumPct){var NY=(new Date().getFullYear())+1,a1=NY+"-01-01";var f=(aumPct==null)?null:(1+Number(aumPct)/100);var ex=D.projExcl||{};var rows=[],byCli={};
+  (D.deals||[]).forEach(function(d){if(!_pr(d))return;var t=Number(d.tProx)||0;if(!t)return;rows.push(d);if(_padj(d)>=a1){(byCli[d.clientId]=byCli[d.clientId]||[]).push(d);}});
+  var o={NY:NY,total:0,at:0,nv:0,carry:0,base:0,excl:0,rows:[],cand:[]};
+  rows.forEach(function(d){var t=Number(d.tProx)||0;var mult=Number(d.sMult)||0;if(f!=null&&mult>1)t=t/mult*f;var cand=false,auto=false;
+    if(byCli[d.clientId]&&_padj(d)<a1&&mult>1){cand=true;var tk=_tok(d.product);if(Number(d.value)<0)auto=true;else byCli[d.clientId].forEach(function(n){var tn=_tok(n.product);var inter=tk.filter(function(w){return tn.indexOf(w)>=0;}).length;var mn=Math.min(tk.length,tn.length);if(mn&&inter/mn>=0.8)auto=true;});}
+    var excluded=cand&&(ex[d.id]!=null?!!ex[d.id]:auto);
+    if(cand)o.cand.push({d:d,t:t,auto:auto,excl:excluded});
+    if(excluded){o.excl+=t;return;}
+    o.total+=t;if(_padj(d)>=a1)o.carry+=t;else if(d.nat==="AT")o.at+=t;else o.nv+=t;o.rows.push({d:d,t:t});});
+  o.rows.sort(function(a,b){return b.t-a.t;});return o;}
+try{window.porFacturarAno=porFacturarAno;window.adjudicadoAno=adjudicadoAno;window.porCobrarRows=porCobrarRows;window.cobradoMes=cobradoMes;window.pagamentosMes=pagamentosMes;window.prazoMedioCob=prazoMedioCob;window.orcAno=orcAno;window.vendNome=vendNome;window.projProxAno=projProxAno;}catch(e){}
 try{window.nvFatAno=nvFatAno;window.atFatAno=atFatAno;window.cobradoAno=cobradoAno;window.atPrevAno=atPrevAno;window.nvPrevAno=nvPrevAno;}catch(e){}
 // Custos realizados na visão P&L (net IVA dedutível, com as regras contabilísticas) — não a coluna E antiga do Orçamento.
 // Vencimentos = categorias de vencimentos/gratificações + gratificações pagas por FSE (viaturas/deslocações/seguros) reclassificadas.
@@ -882,18 +930,25 @@ function st(){
   D.expenses.forEach(function(e){if(inYear(e.date))exp+=e.amount});
   var pipe=0;D.deals.forEach(function(d){if(!isClosed(d)&&inYear(d.date)){pipe+=d.value}});
   var debtCh={};D.invoices.forEach(function(i){if(i.collected||i.preERP)return;var d=dealById(i.dealId);var c=d?clientById(d.clientId):null;var ch=c?c.channel:"Outro";debtCh[ch]=(debtCh[ch]||0)+ivC(i)});
+  // Por cobrar autoritário = linhas do Facturação Facturado e não pagas (E8); "anteriores" = faturas emitidas antes do ano
+  try{var _pcr=porCobrarRows();if(_pcr.length){var _y0=String(activeYear());pend=_pcr.reduce(function(a,r){return a+r.civa;},0);pendPrev=_pcr.filter(function(r){return String(r.date||"").slice(0,4)<_y0;}).reduce(function(a,r){return a+r.civa;},0);}}catch(e){}
   var debt=pend;
-  var mo={};D.expenses.forEach(function(e){if(!inYear(e.date))return;var m=new Date(e.date).getMonth();mo[m]=(mo[m]||0)-e.amount});
-  D.invoices.forEach(function(i){var _cd=i.collDate||i.date;if(i.collected&&_cd&&inYear(_cd)){var m=new Date(_cd).getMonth();mo[m]=(mo[m]||0)+ivC(i)}});
-  var cf=[];for(var m=0;m<12;m++){cf.push({m:MO[m],v:Math.round(mo[m]||0)})}
+  // Cashflow mensal: recebido (data de pagamento, c/IVA) − pagamentos operacionais; IVA/IRC entregues ao Estado à parte
+  var _yy=activeYear();var _cm=cobradoMes(_yy),_pm=pagamentosMes(_yy);
+  var cf=[];for(var m=0;m<12;m++){cf.push({m:MO[m],v:Math.round(_cm[m]-_pm.op[m]),imp:Math.round(_pm.imp[m]),in:Math.round(_cm[m]),out:Math.round(_pm.op[m])})}
   var bs={},eb={},bc={};
-  D.invoices.forEach(function(i){if(!inYear(i.date)||i.preERP){return}var d=dealById(i.dealId);if(d){bs[d.specialty]=(bs[d.specialty]||0)+i.amount;var c=clientById(d.clientId);if(c){bc[c.channel]=(bc[c.channel]||0)+i.amount}}});
+  // Faturação por especialidade/canal pela LINHA do Facturação (data de fatura) — sem distorção de faturas multi-linha
+  var _hasPipe=(D.deals||[]).some(_isPipeRow);
+  if(_hasPipe){(D.deals||[]).forEach(function(d){if(!_pr(d,activeYear())||!inYear(d.factDate))return;var sp=d.specialty||"Outras";bs[sp]=(bs[sp]||0)+(Number(d.value)||0);var c=clientById(d.clientId);var ch=c?c.channel:"Outro";bc[ch]=(bc[ch]||0)+(Number(d.value)||0);});}
+  else D.invoices.forEach(function(i){if(!inYear(i.date)||i.preERP){return}var d=dealById(i.dealId);if(d){bs[d.specialty]=(bs[d.specialty]||0)+i.amount;var c=clientById(d.clientId);if(c){bc[c.channel]=(bc[c.channel]||0)+i.amount}}});
   var ebNet={},expPL=0,ivaTax=0,ircTax=0,ivaDedTot=0;
   D.expenses.forEach(function(e){if(!inYear(e.date))return;var k=e.client||e.type;eb[k]=(eb[k]||0)+e.amount;
     var K=expCat(e);
     if(isTaxCat(K)){if(K.toUpperCase()==="IVA")ivaTax+=Math.abs(e.amount);else ircTax+=Math.abs(e.amount);return;}
     var nv=expNetPL(e);ebNet[k]=(ebNet[k]||0)+nv;expPL+=nv;ivaDedTot+=expDedIVA(e);});
-  return{inv:inv,col:col,pend:pend,pendPrev:pendPrev,exp:exp,expPL:expPL,ivaTax:ivaTax,ircTax:ircTax,ivaDed:ivaDedTot,cf2:cash-exp,pipe:pipe,debt:debt,debtCh:debtCh,cfd:cf,bs:bs,eb:eb,ebNet:ebNet,bc:bc,pB:pc(inv,objYear()),cR:pc(col,col+pend),pN:D.deals.filter(function(d){return d.stage==="proposta"&&inYear(d.date)}).length};
+  // exp = pagamentos totais do banco (inclui IVA/IRC entregues); expOp = pagamentos operacionais; expPL = custo P&L
+  var expOp=exp-ivaTax-ircTax;
+  return{inv:inv,col:col,pend:pend,pendPrev:pendPrev,exp:exp,expOp:expOp,impostos:ivaTax+ircTax,expPL:expPL,ivaTax:ivaTax,ircTax:ircTax,ivaDed:ivaDedTot,cf2:cash-expOp,cfLiq:cash-exp,pipe:pipe,debt:debt,debtCh:debtCh,cfd:cf,bs:bs,eb:eb,ebNet:ebNet,bc:bc,pB:pc(inv,objYear()),cR:pc(col,col+pend),pN:D.deals.filter(function(d){return d.stage==="proposta"&&inYear(d.date)}).length};
 }
 
 var NAV=[
@@ -966,12 +1021,14 @@ function sTab(id,sub){cTab=id;if(id==="financeiro"&&sub)finSub=sub;hcDone=false;
 function openCorrecoes(){cTab="correcoes";rTabs();rPnl()}
 
 function dashTodos(S){var todos=[];
-  D.invoices.filter(function(i){return!i.collected&&!i.fromSAFT}).forEach(function(i){var dd=Math.floor((new Date()-new Date(i.date))/86400000);var dl=dealById(i.dealId);
-    if(dd>=180)todos.push({p:1,ic:"🔴",t:"Cobrança em risco ("+dd+" dias)",s:(dl?cn(dl.clientId):"—")+" — "+fmt(ivC(i))+" · considerar provisão para incobrável",go:"financeiro",sub:"faturas"});
-    else if(dd>=90)todos.push({p:2,ic:"🟠",t:"Cobrança vencida ("+dd+" dias)",s:(dl?cn(dl.clientId):"—")+" — "+fmt(ivC(i)),go:"financeiro",sub:"faturas"})});
+  // Cobranças: faturas do Facturação ainda NÃO pagas (col K ≠ Pago), agrupadas por cliente — dinâmico com o ficheiro
+  var _pcC={};(typeof porCobrarRows==="function"?porCobrarRows():[]).forEach(function(r){if(r.dias<90)return;var k=r.cli;if(!_pcC[k])_pcC[k]={v:0,n:0,max:0};_pcC[k].v+=r.civa;_pcC[k].n++;if(r.dias>_pcC[k].max)_pcC[k].max=r.dias;});
+  Object.keys(_pcC).sort(function(a,b){return _pcC[b].v-_pcC[a].v;}).forEach(function(k){var x=_pcC[k];
+    if(x.max>=180)todos.push({p:1,ic:"🔴",t:"Cobrança em risco ("+x.max+" dias)",s:k+" — "+fmt(x.v)+(x.n>1?" em "+x.n+" faturas":"")+" · considerar provisão",go:"financeiro",sub:"cobrancas"});
+    else todos.push({p:2,ic:"🟠",t:"Cobrança vencida ("+x.max+" dias)",s:k+" — "+fmt(x.v)+(x.n>1?" em "+x.n+" faturas":""),go:"financeiro",sub:"cobrancas"});});
   D.deals.filter(isOverdue).forEach(function(d){todos.push({p:2,ic:"⏰",t:"Follow-up em atraso ("+daysLate(d)+" dias)",s:cn(d.clientId)+" — "+(d.nextAction||"sem acção definida")+" · "+fmt(d.value),go:"pipeline"})});
   D.deals.filter(function(d){return(d.stage==="proposta")&&inYear(d.date)&&!d.nextDate}).forEach(function(d){todos.push({p:3,ic:"📌",t:"Proposta sem próxima acção definida",s:cn(d.clientId)+" — "+fmt(d.value),go:"pipeline"})});
-  D.deals.filter(function(d){return isWon(d)&&inYear(d.date)&&!D.invoices.find(function(i){return i.dealId===d.id})}).forEach(function(d){todos.push({p:2,ic:"🧾",t:"Adjudicado por facturar",s:cn(d.clientId)+" — "+fmt(d.value),go:"financeiro",sub:"faturas"})});
+  try{var _pf=porFacturarAno(activeYear());if(_pf.n)todos.push({p:2,ic:"🧾",t:"Adjudicado por facturar ("+_pf.n+" linhas)",s:"NV "+fmt(_pf.nv)+" + M/AT "+fmt(_pf.at)+" = "+fmt(_pf.total)+" (Facturação F8+G8)",go:"financeiro",sub:"cobrancas"});}catch(e){}
   var dsb=daysSinceBackup();
   if(dsb===null)todos.push({p:2,ic:"💾",t:"Nunca fizeste backup dos dados",s:"Os dados vivem só neste browser — exporta para não perderes tudo",go:""});
   else if(dsb>=14)todos.push({p:2,ic:"💾",t:"Último backup há "+dsb+" dias",s:"Exporta uma cópia de segurança",go:""});
@@ -984,7 +1041,7 @@ if(cTab==="dashboard"){
   var circ=2*Math.PI*34,dash=circ*Math.min(parseFloat(S.pB),100)/100;
   h=pgHead("📊","Dashboard",yearPicker());
   var dirV=0,canV=0;D.deals.filter(function(d){return d.stage!=="perdido"&&inYear(d.date)}).forEach(function(d){var c=clientById(d.clientId);if(c&&c.channel==="Directo")dirV+=d.value;else canV+=d.value});
-  h+='<div class="kr">'+kpi("Facturação",fmt(S.inv),S.pB+"% de "+fmt(objYear()),GD,G)+kpi("Recebido "+activeYear(),fmt(S.col),S.cR+"% do cobrável",GRN,GRN)+kpi("Cashflow",fmt(S.cf2),"",S.cf2<0?DNG:GRN,S.cf2<0?DNG:GRN)+kpi("Dívida",fmt(S.debt),S.pendPrev>0?fmt(S.pendPrev)+" anteriores a "+activeYear():"por cobrar",PUR,PUR)+kpi("Pipeline",fmt(S.pipe),S.pN+" propostas",BLU,BLU)+kpi("Directo vs Canal",(dirV+canV>0?pc(canV,dirV+canV):0)+"% via canal",fmt(dirV)+" directo · "+fmt(canV)+" canal",BLU,BLU)+'</div>';
+  h+='<div class="kr">'+kpi("Facturação",fmt(S.inv),S.pB+"% de "+fmt(objYear()),GD,G)+kpi("Recebido "+activeYear(),fmt(S.col),S.cR+"% do cobrável",GRN,GRN)+kpi("Cashflow operacional",fmt(S.cf2),"após IVA/IRC entregues: "+fmt(S.cfLiq),S.cf2<0?DNG:GRN,S.cf2<0?DNG:GRN)+kpi("Dívida",fmt(S.debt),S.pendPrev>0?fmt(S.pendPrev)+" anteriores a "+activeYear():"por cobrar",PUR,PUR)+kpi("Pipeline",fmt(S.pipe),S.pN+" propostas",BLU,BLU)+kpi("Directo vs Canal",(dirV+canV>0?pc(canV,dirV+canV):0)+"% via canal",fmt(dirV)+" directo · "+fmt(canV)+" canal",BLU,BLU)+'</div>';
 
   var _coY=objCustoYear();var _cyY=String(activeYear());var _crY=(D.drOficial&&D.drOficial[_cyY])?(Math.abs(D.drOficial[_cyY].fse)+Math.abs(D.drOficial[_cyY].pessoal)+Math.abs(D.drOficial[_cyY].cmvmc)+Math.abs(D.drOficial[_cyY].outros)):S.expPL;
   var _cpctY=_coY>0?Math.round(_crY/_coY*100):0;var _drFechado=!!(D.drOficial&&D.drOficial[_cyY]);
@@ -998,13 +1055,14 @@ if(cTab==="dashboard"){
   h+='<div class="cd"><div class="ct2" style="margin-bottom:14px">PIPELINE POR ETAPA ('+activeYear()+')</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
   STAGES.forEach(function(s){var ds=D.deals.filter(function(d){return d.stage===s&&inYear(d.date)});var tot=ds.reduce(function(a,d){return a+d.value},0);h+='<div style="text-align:center;padding:10px;background:#f8f7f5;border-radius:8px">'+bdg(SL2[s],SC[s])+'<div style="font-size:22px;font-weight:700;margin-top:6px;color:'+SC[s]+'">'+ds.length+'</div><div style="font-size:10px;color:#7E8892">'+fmt(tot)+'</div></div>'});
   h+='</div></div></div>';
-  h+='<div class="g2"><div class="cd"><div class="ct2" style="margin-bottom:8px">CASHFLOW MENSAL</div><div class="wfc">';
+  h+='<div class="g2"><div class="cd"><div class="ct2" style="margin-bottom:4px">CASHFLOW MENSAL — OPERACIONAL</div><div style="font-size:11px;color:#A6AEB6;margin-bottom:10px">Recebido (data de pagamento, c/IVA) − pagamentos operacionais. IVA/IRC entregues ao Estado à parte ('+fmt(S.impostos)+' no ano). Total: <b style="color:'+(S.cf2<0?DNG:GRN)+'">'+fmt(S.cf2)+'</b> · após impostos <b style="color:'+(S.cfLiq<0?DNG:GRN)+'">'+fmt(S.cfLiq)+'</b></div><div class="wfc">';
   var mx=1;S.cfd.forEach(function(d){if(Math.abs(d.v)>mx)mx=Math.abs(d.v)});
-  S.cfd.forEach(function(d){var ht=Math.max(Math.abs(d.v)/mx*120,3);var col=d.v>=0?GRN:DNG;h+='<div><div style="font-size:10px;font-weight:600;margin-bottom:3px;text-align:center;color:'+col+'">'+(d.v>=0?"+":"")+fmt(d.v)+'</div><div style="width:100%;border-radius:4px 4px 0 0;min-height:3px;height:'+ht+'px;background:'+col+'"></div><div style="font-size:10px;color:#7E8892;margin-top:4px;text-align:center">'+d.m+'</div></div>'});
+  S.cfd.forEach(function(d){var ht=Math.max(Math.abs(d.v)/mx*120,3);var col=d.v>=0?GRN:DNG;h+='<div title="Recebido '+fmt(d.in||0)+' · Pagamentos '+fmt(d.out||0)+(d.imp?' · IVA/IRC '+fmt(d.imp):'')+'"><div style="font-size:10px;font-weight:600;margin-bottom:3px;text-align:center;color:'+col+'">'+(d.v>=0?"+":"")+fmt(d.v)+'</div><div style="width:100%;border-radius:4px 4px 0 0;min-height:3px;height:'+ht+'px;background:'+col+'"></div>'+(d.imp?'<div style="font-size:8.5px;color:#9A6B2F;text-align:center;margin-top:2px">imp. −'+fmt(d.imp)+'</div>':'')+'<div style="font-size:10px;color:#7E8892;margin-top:4px;text-align:center">'+d.m+'</div></div>'});
   h+='</div></div>';
-  h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">FACTURAÇÃO POR ESPECIALIDADE</div>';
-  var spc={Gastro:G,Pneumo:PUR,Filestream:BLU,Integração:GRN};
-  SPECS.forEach(function(sp){h+=barH(sp,S.bs[sp]||0,S.inv,spc[sp]||G)});
+  h+='<div class="cd"><div class="ct2" style="margin-bottom:4px">FACTURAÇÃO POR ESPECIALIDADE</div><div style="font-size:11px;color:#A6AEB6;margin-bottom:12px">Por linha facturada no ano (s/IVA). Total '+fmt(S.inv)+'</div>';
+  var spc={Gastro:G,Pneumo:PUR,Filestream:BLU,Integração:GRN,ORL:TEAL,Gineco:"#B0617E"};
+  var _bsE=Object.keys(S.bs).map(function(k){return [k||"Outras",S.bs[k]];}).sort(function(a,b){return b[1]-a[1];});var _bsMx=_bsE.length?_bsE[0][1]:1;var _bsT=_bsE.reduce(function(a,e){return a+e[1];},0);
+  _bsE.forEach(function(e){h+=barV(e[0]==="Outras"?"Sem especialidade (AT/serviços)":e[0],e[1],_bsMx,spc[e[0]]||SL,_bsT)});
   h+='</div></div>';
 } else if(cTab==="pl"){
   var _ivaT=S.ivaTax||0,_ircT=S.ircTax||0,_ded=S.ivaDed||0;
@@ -1035,11 +1093,16 @@ if(cTab==="dashboard"){
   }else{
     h+='<div class="kr">'+kpi("Proveitos",fmt(S.inv),"faturação s/IVA",GRN,GRN)+kpi("Custos","-"+fmt(_expPL),"líq. IVA dedutível",R,R)+kpi("Resultado",fmt(_res),"",_res<0?DNG:GRN,_res<0?DNG:GRN)+kpi("Margem",_marg+"%","",_res<0?DNG:BLU,_res<0?DNG:BLU)+'</div>';
   }
-  h+='<div class="g2"><div class="cd"><div class="ct2" style="margin-bottom:12px">RECEITAS POR CLIENTE</div>';
-  var byC={};D.invoices.forEach(function(i){if(beforeYear(i.date)||i.preERP)return;var d=dealById(i.dealId);if(d){var n=cn(d.clientId);byC[n]=(byC[n]||0)+i.amount}});
-  Object.entries(byC).sort(function(a,b){return b[1]-a[1]}).slice(0,30).forEach(function(e){h+=barH(e[0],e[1],S.inv,GRN)});
-  h+='</div><div class="cd"><div class="ct2" style="margin-bottom:12px">CUSTOS POR DESTINO <span style="font-size:10px;color:#A6AEB6;font-weight:600">(valor contabilístico, líq. IVA ded.)</span></div>';
-  Object.entries(S.ebNet).sort(function(a,b){return b[1]-a[1]}).forEach(function(e){h+=barH(e[0]||"Outros",e[1],_expPL||1,R)});
+  // Receitas por cliente (ano ativo): linhas facturadas do Facturação; anos sem Pipe Line → faturas
+  var byC={};var _yP=String(activeYear());var _usePipe=(D.deals||[]).some(function(d){return _pr(d,_yP)&&String(d.factDate||"").slice(0,4)===_yP;});
+  if(_usePipe)(D.deals||[]).forEach(function(d){if(!_pr(d,_yP)||String(d.factDate||"").slice(0,4)!==_yP)return;var n=cn(d.clientId);byC[n]=(byC[n]||0)+(Number(d.value)||0);});
+  else D.invoices.forEach(function(i){if(!inYear(i.date)||i.preERP||i.notInv)return;var d=dealById(i.dealId);var n=d?cn(d.clientId):(i.clienteNome||cn(i.clientId)||"—");byC[n]=(byC[n]||0)+(Number(i.amount)||0);});
+  var _rc=Object.entries(byC).sort(function(a,b){return b[1]-a[1]});var _rcT=_rc.reduce(function(a,e){return a+e[1];},0);var _rc20=_rc.slice(0,20);var _rcMx=_rc20.length?_rc20[0][1]:1;
+  h+='<div class="g2"><div class="cd"><div class="ct2" style="margin-bottom:4px">RECEITAS POR CLIENTE — TOP 20</div><div style="font-size:11px;color:#A6AEB6;margin-bottom:12px">'+_rc.length+' clientes facturados em '+_yP+' · top 20 = '+fmt(_rc20.reduce(function(a,e){return a+e[1];},0))+' de '+fmt(_rcT)+'</div>';
+  _rc20.forEach(function(e){h+=barV(e[0],e[1],_rcMx,GRN,_rcT)});
+  var _cd=Object.entries(S.ebNet).sort(function(a,b){return b[1]-a[1]});var _cd20=_cd.slice(0,20);var _cdMx=_cd20.length?_cd20[0][1]:1;
+  h+='</div><div class="cd"><div class="ct2" style="margin-bottom:4px">CUSTOS POR DESTINO — TOP 20</div><div style="font-size:11px;color:#A6AEB6;margin-bottom:12px">Valor contabilístico, líq. IVA dedutível · '+_cd.length+' destinos, total '+fmt(_expPL)+'</div>';
+  _cd20.forEach(function(e){h+=barV(e[0]||"Outros",e[1],_cdMx,R,_expPL)});
   h+='<div style="border-top:2px solid #E4E8EB;margin-top:12px;padding-top:10px"><div style="font-size:11px;color:#A6AEB6;text-transform:uppercase;letter-spacing:.4px;font-weight:700;margin-bottom:6px">Fora do resultado (não são custos operacionais)</div>';
   if(_ded>0)h+='<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:'+GRN+'"><span>IVA dedutível recuperado</span><b>'+fmt(_ded)+'</b></div>';
   h+='<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>IVA (entregue ao Estado)</span><b>'+fmt(_ivaT)+'</b></div><div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>IRC</span><b>'+fmt(_ircT)+'</b></div></div>';
@@ -1089,61 +1152,37 @@ if(cTab==="dashboard"){
   var vFac=vDeals.filter(function(d){return billStatus(d.id).k==="fac"}).reduce(function(a,d){return a+d.value},0);
   var vPago=vDeals.filter(function(d){return billStatus(d.id).k==="pago"}).reduce(function(a,d){return a+d.value},0);
   var vARR=vDeals.reduce(function(a,d){return a+(d.arr||0)},0);
-  h+='<div class="kr">'+kpi("Total Vendas",fmt(vTotal),vDeals.length+" vendas",GD,G)+kpi("ARR ganho",fmt(vARR),"receita recorrente/ano",PUR,PUR)+kpi("Adjudicado",fmt(vAdj),"",GD,GD)+kpi("Facturado",fmt(vFac),"",SL,SL)+kpi("Pago",fmt(vPago),"",GRN,GRN)+'</div>';
+  var _yv=activeYear();var _pfv=porFacturarAno(_yv);var _fnv=nvFatAno(_yv),_fav=atFatAno(_yv);var _cobv=cobradoAno(_yv);var _pcv=porCobrarRows().filter(function(r){return String(r.date||"").slice(0,4)===String(_yv);}).reduce(function(a,r){return a+r.civa;},0);
+  h+='<div class="kr">'+kpi("Adjudicado "+_yv,fmt(adjudicadoAno(_yv)),"facturado + por facturar (s/IVA)",GD,G)+kpi("Facturado",fmt(_fnv+_fav),"NV "+fmt(_fnv)+" · M "+fmt(_fav)+" (H8+I8)",SL,SL)+kpi("Adjudicado não facturado",fmt(_pfv.total),"NV "+fmt(_pfv.nv)+" · M "+fmt(_pfv.at),GD,GD)+kpi("Pago (recebido)",fmt(_cobv),"c/IVA, pela data de pagamento",GRN,GRN)+kpi("Facturado "+_yv+" por cobrar",fmt(_pcv),"c/IVA",R,R)+'</div>';
+  h+='<div style="font-size:11.5px;color:#A6AEB6;margin:-4px 0 12px">KPIs calculados das linhas do Facturação (Pipe Line). A tabela abaixo lista as vendas registadas no CRM/Pipeline da app.</div>';
   h+='<div class="cd"><div style="overflow-x:auto"><table><tr><th>Cliente</th><th>Canal</th><th>Especialidade</th><th>Produto</th><th>Tipo</th><th style="text-align:right">Valor</th><th style="text-align:right">ARR</th><th>Estado</th><th></th></tr>';
   vDeals.forEach(function(d){var cl=clientById(d.clientId);var bs=billStatus(d.id);var sc=d.specialty==="Gastro"?GD:d.specialty==="Pneumo"?PUR:BLU;
     h+='<tr><td>'+(cl?'<a onclick="openClient(\''+cl.id+'\')" style="font-weight:600;color:'+R+';cursor:pointer;text-decoration:none;border-bottom:1px dotted '+rgba(R,.4)+'">'+cl.name+'</a>':"—")+'</td><td>'+(cl?cl.channel:"")+'</td><td>'+bdg(d.specialty,sc)+'</td><td style="color:#7E8892">'+d.product+'</td><td>'+bdg(d.type,SL)+'</td><td style="text-align:right;font-weight:700">'+fmt(d.value)+'</td><td style="text-align:right"><span style="font-weight:600;color:'+(d.arr>0?PUR:"#C6CDD4")+'">'+(d.arr>0?fmt(d.arr):"—")+'</span> <button style="background:none;border:none;font-size:11px;cursor:pointer;color:#C6CDD4" onclick="editARR(\''+d.id+'\')" title="Editar ARR">✎</button></td><td>'+bdg(bs.label,bs.color)+(bs.sub?'<div style="font-size:9px;color:#A6AEB6;margin-top:2px">'+bs.sub+'</div>':'')+'</td><td style="white-space:nowrap"><button style="background:'+rgba(SL,.15)+';color:'+SL+';border:none;border-radius:5px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer;margin-right:4px" onclick="editDl(\''+d.id+'\')" title="Editar venda (datas, valor, etapa)">✎ Editar</button><button style="background:'+rgba(BLU,.1)+';color:'+BLU+';border:none;border-radius:5px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer;margin-right:4px" onclick="openAttM(\''+d.id+'\',\'proposta\')" title="Ficheiros da proposta">📎'+(dealAtts(d.id).length?' '+dealAtts(d.id).length:'')+'</button><button style="background:#edf8f3;color:'+GRN+';border:none;border-radius:5px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer" onclick="addSpecialty(\''+d.clientId+'\')" title="Upsell — adicionar especialidade a este cliente">+ Especialidade</button></td></tr>'});
   h+='<tr style="border-top:2px solid #E4E8EB"><td colspan="5" style="font-weight:700;text-align:right;padding-top:10px">Total</td><td style="font-weight:700;padding-top:10px;text-align:right">'+fmt(vTotal)+'</td><td style="font-weight:700;padding-top:10px;text-align:right;color:'+PUR+'">'+fmt(vARR)+'</td><td colspan="2" style="padding-top:10px"></td></tr>';
   h+='</table></div></div>';
 } else if(cTab==="arr"){
-  var _ry=String(activeYear());
-  var _items=(typeof recurItems==="function")?recurItems(""):[];
-  var arrTotal=_items.reduce(function(a,x){return a+(Number(x.arr)||0)},0);
-  var arrAno=(typeof window.recurArrAno==="function")?window.recurArrAno(_ry):_items.filter(function(x){return (String(x.renov||"").slice(0,4)===_ry)}).reduce(function(a,x){return a+(Number(x.arr)||0)},0);
-  var openD2=D.deals.filter(function(d){return !isClosed(d)&&inYear(d.date)});
+  // ARR = base recorrente real do Facturação (sem somar anos repetidos): M/AT do ano (L8) e base garantida do próximo ano (col. T, sem duplicados)
+  var _ry=activeYear();var _atY=atPrevAno(_ry),_atF=atFatAno(_ry);var _pp=projProxAno();var _pny=_pp.NY;
+  var openD2=D.deals.filter(function(d){return d.src!=="pipe"&&!isClosed(d)&&inYear(d.date)});
   var arrO=openD2.reduce(function(a,d){return a+(d.arr||0)},0);
   h=pgHead("🔁","Receita Recorrente (ARR)");
-  h+='<div class="kr">'+kpi("ARR base total",fmt(arrTotal),"toda a recorrência ativa",PUR,PUR)+kpi("ARR a renovar em "+_ry,fmt(arrAno),"renovações deste ano",GRN,GRN)+kpi("ARR em jogo",fmt(arrO),"pipeline aberto",GD,G)+kpi("MRR base",fmt(arrTotal/12),"por mês",GRN,GRN)+'</div>';
-  h+='<div class="ins"><div style="font-size:12.5px;color:#7E8892;line-height:1.6">O ARR é a base recorrente que transita para o ano seguinte sem ser preciso vender de novo. <b>ARR base total</b> é toda a recorrência ativa (subscrições/AT + contratos); <b>ARR a renovar em '+_ry+'</b> conta apenas as linhas cuja renovação cai neste ano — quando unes subscrições renovadas, cada uma passa a contar só no ano em que efetivamente renova. Edita renovações e ARR em <b>Comercial › Subscrições/AT</b>.</div></div>';
-  /* ===== Projeção da base recorrente para o ano seguinte (regras Mobilwave) ===== */
-  var _pny=activeYear()+1;var _aum=(window.__projAum!=null?window.__projAum:((D.renewRules&&D.renewRules.aumentoDefault)||0));
-  var _pr=projRecorrente(_pny,_aum);
-  if(_pr.at||_pr.sub||_pr.lic||_pr.oneShot){
-    h+='<div class="cd" style="border-left:3px solid '+PUR+'"><div class="ct2" style="margin-bottom:6px">🔮 BASE RECORRENTE PROJETADA PARA '+_pny+' <span style="font-size:10px;color:#A6AEB6;font-weight:600">(a partir das vendas de '+activeYear()+')</span></div>';
-    // seletor de aumento
-    var _aopts=((D.renewRules&&D.renewRules.aumentoOpcoes)||[0,5,10]);
-    h+='<div style="display:flex;gap:6px;align-items:center;margin-bottom:12px"><span style="font-size:11px;color:#7E8892;font-weight:600">Ponderar aumento:</span>';
-    _aopts.forEach(function(a){h+='<button onclick="window.__projAum='+a+';rPnl()" style="padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid '+(_aum===a?PUR:"#E4E8EB")+';background:'+(_aum===a?PUR:"#fff")+';color:'+(_aum===a?"#fff":"#1B2733")+'">+'+a+'%</button>';});
-    h+='</div>';
-    h+='<div class="kr" style="margin-bottom:10px">'+kpi("Base recorrente "+_pny,fmt(_pr.total),(_aum?"com +"+_aum+"% de aumento":"sem aumento"),PUR,PUR)+kpi("M/AT renovado",fmt(_pr.atA),"mantém valor"+(_aum?" +"+_aum+"%":""),TEAL,TEAL)+kpi("Subscrições",fmt(_pr.subA),"renovam 100%",GRN,GRN)+kpi("Manutenção licenças",fmt(_pr.licA),"EV/DV × 20%",GD,GD)+'</div>';
-    h+='<div style="overflow-x:auto"><table><tr><th>Componente</th><th style="text-align:right">Valor '+activeYear()+'</th><th style="text-align:right">Projetado '+_pny+(_aum?" (+"+_aum+"%)":"")+'</th><th>Regra</th></tr>';
-    var _prow=function(l,base,proj,regra,col){return '<tr><td>'+l+'</td><td style="text-align:right">'+fmt(base)+'</td><td style="text-align:right;font-weight:700;color:'+(col||"#1B2733")+'">'+fmt(proj)+'</td><td style="font-size:11px;color:#7E8892">'+regra+'</td></tr>';};
-    h+=_prow("M / AT",_pr.at,_pr.atA,"renova e mantém valor"+(_aum?" +"+_aum+"%":""),TEAL);
-    h+=_prow("Subscrições (SUB)",_pr.sub,_pr.subA,"renovam a 100%"+(_aum?" +"+_aum+"%":""),GRN);
-    h+=_prow("Licenciamento EV/DV",_pr.lic/0.2,_pr.licA,"manutenção 20% do valor",GD);
-    h+=_prow("SV / HV / SMV / SUV",_pr.oneShot,0,"one-shot — não renovam","#A6AEB6");
-    if(_pr.ncM)h+=_prow("M com NC / cancelados",_pr.ncM,0,"NC incluída — não conta","#A6AEB6");
-    h+='<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>BASE RECORRENTE '+_pny+'</td><td></td><td style="text-align:right;color:'+PUR+'">'+fmt(_pr.total)+'</td><td></td></tr>';
-    h+='</table></div><div style="font-size:11px;color:#A6AEB6;margin-top:8px">Regras: NC/cancelados não passam · <b>M/AT renovam e mantêm o valor</b> (M com NC incluída não conta) · subscrições renovam 100% · SV/HV/SMV/SUV one-shot · licenciamento sem subscrição gera 20%. Aumento ponderável (5%/10%). Editável em <code>D.renewRules</code>.</div></div>';
-  }
-  var arrByC={};_items.forEach(function(x){if(!(Number(x.arr)>0))return;var n=cn(x.clientId);arrByC[n]=(arrByC[n]||0)+Number(x.arr)});
-  h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">ARR BASE POR CLIENTE</div>';
-  if(!Object.keys(arrByC).length)h+='<div style="font-size:13px;color:#A6AEB6;padding:10px 0">Ainda não há ARR registado. Isto significa que a operação recomeça do zero — é o ponto mais crítico a corrigir.</div>';
-  else{var mxA=Math.max.apply(null,Object.values(arrByC));Object.entries(arrByC).sort(function(a,b){return b[1]-a[1]}).forEach(function(e){h+=barH(e[0],e[1],mxA,GRN)})}
+  h+='<div class="kr">'+kpi("M/AT "+_ry+" (previsto)",fmt(_atY),"adjudicado no ano + pendente (L8)",PUR,PUR)+kpi("M/AT facturado "+_ry,fmt(_atF),(_atY?Math.round(_atF/_atY*100)+"% do previsto":""),GRN,GRN)+kpi("Base garantida "+_pny,fmt(_pp.total),"col. T, sem duplicados",TEAL,TEAL)+kpi("MRR "+_ry,fmt(_atY/12),"M/AT previsto ÷ 12",GD,GD)+(arrO?kpi("ARR em jogo",fmt(arrO),"pipeline CRM",GD,G):"")+'</div>';
+  h+='<div class="ins"><div style="font-size:12.5px;color:#7E8892;line-height:1.6">O ARR é a base recorrente que transita para o ano seguinte. Aqui usa-se só o <b>Facturação</b>: <b>M/AT '+_ry+'</b> = manutenções adjudicadas no ano + as pendentes de anos anteriores (L8 do Pipe Line); a <b>base garantida '+_pny+'</b> é a coluna T (M/AT a 105%, subscrições a 100%, já adjudicado '+_pny+' a 100%) sem os duplicados. Os antigos "3,9M" somavam as manutenções de vários anos repetidas — já não são usados.</div></div>';
+  h+='<div class="cd" style="border-left:3px solid '+PUR+'"><div class="ct2" style="margin-bottom:6px">🔮 BASE RECORRENTE GARANTIDA PARA '+_pny+'</div>';
+  h+='<div class="kr" style="margin-bottom:10px">'+kpi("Base "+_pny,fmt(_pp.total),"col. T do Facturação",PUR,PUR)+kpi("M / AT",fmt(_pp.at),"renovam (S=105%)",TEAL,TEAL)+kpi("Subscrições / outras",fmt(_pp.nv),"renovam (S=100%)",GRN,GRN)+kpi("Já adjudicado "+_pny,fmt(_pp.carry),"adjudicação em "+_pny,GD,GD)+'</div>';
+  h+='<div style="font-size:11.5px;color:#7E8892">Excluídos por duplicação: <b>'+fmt(_pp.excl)+'</b>. Revisão dos duplicados em <a style="color:'+R+';cursor:pointer;font-weight:600" onclick="cTab=\'projprox\';rPnl()">Projeção próximo ano</a>. Mesmo número da Direção, Análise, Cenários e Orçamento '+_pny+'.</div></div>';
+  var arrByC={};_pp.rows.forEach(function(r){var n=cn(r.d.clientId);arrByC[n]=(arrByC[n]||0)+r.t;});
+  h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">BASE '+_pny+' POR CLIENTE — TOP 30</div>';
+  var _ac=Object.entries(arrByC).sort(function(a,b){return b[1]-a[1]});var mxA=_ac.length?_ac[0][1]:1;
+  _ac.slice(0,30).forEach(function(e){h+=barV(e[0],e[1],mxA,GRN,_pp.total)});
+  if(_ac.length>30)h+='<div style="font-size:11px;color:#A6AEB6;margin-top:6px">+ '+(_ac.length-30)+' clientes ('+fmt(_ac.slice(30).reduce(function(a,e){return a+e[1];},0))+')</div>';
   h+='</div>';
-  h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">DETALHE — TODA A RECORRÊNCIA</div><div style="overflow-x:auto"><table><tr><th>Cliente</th><th>Item</th><th>Tipo</th><th style="text-align:right">ARR/ano</th><th style="text-align:right">MRR</th><th>Renova em</th><th style="text-align:center">Renov.</th></tr>';
-  var allA=_items.filter(function(x){return Number(x.arr)>0}).sort(function(a,b){return Number(b.arr)-Number(a.arr)});
-  if(!allA.length)h+='<tr><td colspan="7" style="text-align:center;padding:24px;color:#A6AEB6">Sem linhas com ARR definido.</td></tr>';
-  var _arrCap=300;var _arrShown=allA.slice(0,_arrCap);
-  _arrShown.forEach(function(x){var isY=(String(x.renov||"").slice(0,4)===_ry);var rc=Number(x.renovacoesCount)||1;h+='<tr'+(isY?' style="background:'+rgba(GRN,.06)+'"':'')+'><td style="font-weight:600">'+esc(cn(x.clientId))+'</td><td style="color:#7E8892">'+esc(String(x.nome||"").slice(0,40))+'</td><td>'+(x.kind==="sub"?bdg(x.tipo,x.tipo==="AT"?TEAL:PUR):bdg("Contrato",SL))+'</td><td style="text-align:right;font-weight:700;color:'+PUR+'">'+fmt(x.arr)+'</td><td style="text-align:right;color:#7E8892">'+fmt(x.arr/12)+'</td><td'+(isY?' style="font-weight:700;color:'+GRN+'"':' style="color:#7E8892"')+'>'+(x.renov?fmtD(x.renov):"—")+'</td><td style="text-align:center">'+(rc>1?'<span style="background:'+rgba(TEAL,.15)+';color:'+TEAL+';border-radius:6px;padding:1px 6px;font-size:10px;font-weight:700">🔁 '+rc+'</span>':'<span style="color:#C6CDD4">—</span>')+'</td></tr>'});
-  if(allA.length>_arrCap)h+='<tr><td colspan="7" style="text-align:center;padding:12px;color:#A6AEB6;font-size:12px">A mostrar as '+_arrCap+' maiores de '+allA.length+' linhas (as de maior ARR).</td></tr>';
-  h+='</table></div></div>';
 } else if(cTab==="orc2027"){
   var NY=(new Date().getFullYear())+1;
-  var B=D.budget2027||{renew:90,newBiz:0,upsell:0,priceInc:0};
+  var B=D.budget2027||{renew:100,newBiz:0,upsell:0,priceInc:0};
   var wonD3=D.deals.filter(function(d){return isWon(d)});
-  var arrBase=0;try{arrBase=(typeof window.recurArrAno==="function")?window.recurArrAno(NY):wonD3.reduce(function(a,d){return a+(d.arr||0)},0);}catch(e){arrBase=wonD3.reduce(function(a,d){return a+(d.arr||0)},0);}
-  var openD3=D.deals.filter(function(d){return !isClosed(d)&&inYear(d.date)});
+  var _pp3=projProxAno();NY=_pp3.NY;var arrBase=_pp3.total;
+  var openD3=D.deals.filter(function(d){return d.src!=="pipe"&&!isClosed(d)&&inYear(d.date)});
   var arrPipe3=openD3.reduce(function(a,d){return a+(d.arr||0)},0);
   var WT3={projeto:0.75,proposta:0.4,lead:0.1};
   var arrExp=openD3.reduce(function(a,d){return a+(d.arr||0)*(WT3[d.stage]||0.1)},0);
@@ -1160,7 +1199,7 @@ if(cTab==="dashboard"){
   h+='<div><label style="font-size:10px;color:#7E8892;display:block;margin-bottom:3px">Upsell base instalada (€)</label><input type="number" id="b27up" value="'+B.upsell+'" style="border:1px solid #E4E8EB;border-radius:6px;padding:6px 9px;font-size:12px;font-family:inherit;width:130px"></div>';
   h+='<button class="btn bs" style="background:'+R+'" onclick="save2027()">Recalcular</button></div></div>';
   h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">ORÇAMENTO '+NY+' — CONSTRUÇÃO</div><table><tr><th>Camada</th><th>Origem</th><th style="text-align:right">Valor</th></tr>';
-  h+='<tr><td style="font-weight:600">1. ARR garantido</td><td style="color:#7E8892;font-size:11px">subscrições/AT + contratos que renovam em '+NY+'</td><td style="text-align:right">'+fmt(arrBase)+'</td></tr>';
+  h+='<tr><td style="font-weight:600">1. ARR garantido</td><td style="color:#7E8892;font-size:11px">col. T do Facturação (M/AT a 105%, subscrições a 100%, sem duplicados) — igual à Direção</td><td style="text-align:right">'+fmt(arrBase)+'</td></tr>';
   h+='<tr><td style="font-weight:600">2. ARR do pipeline (ponderado)</td><td style="color:#7E8892;font-size:11px">'+fmt(arrPipe3)+' em aberto × probabilidade por etapa</td><td style="text-align:right">'+fmt(arrExp)+'</td></tr>';
   h+='<tr><td style="font-weight:600">3. Menos churn ('+(100-B.renew)+'%)</td><td style="color:#7E8892;font-size:11px">taxa de renovação '+B.renew+'%</td><td style="text-align:right;color:'+R+'">-'+fmt((arrBase+arrExp)-carry)+'</td></tr>';
   h+='<tr><td style="font-weight:600">4. Aumento de preço</td><td style="color:#7E8892;font-size:11px">+'+B.priceInc+'% sobre a base renovada</td><td style="text-align:right;color:'+GRN+'">+'+fmt(withPrice-carry)+'</td></tr>';
@@ -1173,7 +1212,7 @@ if(cTab==="dashboard"){
   var _subsO=_subsAll.filter(function(d){var ry=String(d.renov||"").slice(0,4);return ry?(ry===String(NY)):true;});
   var _subArrO=_subsO.reduce(function(a,d){return a+(Number(d.arr)||0);},0);
   var _subBaseTot=_subsAll.reduce(function(a,d){return a+(Number(d.arr)||0);},0);
-  h+='<div style="font-size:12.5px;color:#7E8892;margin-bottom:8px">As subscrições/AT & contratos que <b>renovam em '+NY+'</b> somam <b>'+fmt(_subArrO)+'</b> de ARR — é o que alimenta a Camada 1 acima (só conta o que renova neste ano). A base recorrente total ativa é '+fmt(_subBaseTot)+'. Edita renovações e ARR em Comercial › Subscrições/AT; o orçamento reflete automaticamente.</div>';
+  h+='<div style="font-size:12.5px;color:#7E8892;margin-bottom:8px">As subscrições/AT & contratos que <b>renovam em '+NY+'</b> somam <b>'+fmt(_subArrO)+'</b> de ARR (lista informativa das datas de renovação registadas; a Camada 1 usa a col. T do Facturação). A base recorrente total ativa é '+fmt(_subBaseTot)+'. Edita renovações e ARR em Comercial › Subscrições/AT; o orçamento reflete automaticamente.</div>';
   if(!_subsO.length)h+='<div style="font-size:12px;color:#A6AEB6">Nenhuma subscrição/AT/contrato renova em '+NY+'.</div>';
   else{h+='<div style="overflow-x:auto"><table><tr><th>Cliente</th><th>Produto</th><th style="text-align:right">ARR</th><th>Renova em</th><th style="text-align:center">Renov.</th></tr>';
     _subsO.slice().sort(function(a,b){return (Number(b.arr)||0)-(Number(a.arr)||0);}).forEach(function(d){var rc=Number(d.renovacoesCount)||1;h+='<tr><td style="font-weight:600">'+esc(cn(d.clientId))+'</td><td style="color:#7E8892">'+esc(d.product||"—")+'</td><td style="text-align:right;font-weight:700;color:'+PUR+'">'+(d.arr>0?fmt(d.arr):"—")+'</td><td style="color:#7E8892">'+(d.renov?fmtD(d.renov):"—")+'</td><td style="text-align:center">'+(rc>1?'<span style="background:'+rgba(TEAL,.15)+';color:'+TEAL+';border-radius:6px;padding:1px 6px;font-size:10px;font-weight:700">🔁 '+rc+'</span>':'—')+'</td></tr>';});
@@ -1244,7 +1283,8 @@ if(cTab==="dashboard"){
   h+='</div></div>';
   h+='<div class="cd"><div style="overflow-x:auto"><table><tr><th>Cliente</th><th>Região</th><th>Canal</th><th>Cloud</th><th>Especialidades</th><th></th></tr><tbody id="clRows">'+clRowsHtml()+'</tbody></table></div></div>';
 } else if(cTab==="financeiro"){
-  h=pgHead("💶",finSub==="orcamento"?"Orçamento":finSub==="cobrancas"?"Financeiro — Pendentes":finSub==="despesas"?"Financeiro — Despesas":"Financeiro — Faturação",yearPicker())+'<div class="kr">'+kpi("Facturado",fmt(S.inv),"emitido em "+yearLabel(),GD,G)+kpi("Cobrado",fmt(S.col),"recebido em "+yearLabel(),GRN,GRN)+kpi("Pendente",fmt(S.pend),S.pendPrev>0?"inclui "+fmt(S.pendPrev)+" de anos anteriores":"",R,R)+kpi("Custos",fmt(S.exp),"",R,R)+kpi("Cashflow",fmt(S.cf2),"recebido − custos",S.cf2<0?DNG:GRN,S.cf2<0?DNG:GRN)+'</div>';
+  h=pgHead("💶",finSub==="orcamento"?"Orçamento":finSub==="cobrancas"?"Financeiro — Pendentes":finSub==="despesas"?"Financeiro — Despesas":"Financeiro — Faturação",yearPicker())+(function(){var _y=activeYear();var _fn=nvFatAno(_y),_fa=atFatAno(_y);var _pc=porCobrarRows();var _pcT=_pc.reduce(function(a,r){return a+r.civa;},0);var _pcP=_pc.filter(function(r){return String(r.date||"").slice(0,4)<String(_y);}).reduce(function(a,r){return a+r.civa;},0);
+    return '<div class="kr">'+kpi("Facturado",fmt(_fn+_fa),"NV "+fmt(_fn)+" + AT "+fmt(_fa)+" (s/IVA)",GD,G)+kpi("Cobrado",fmt(S.col),"recebido em "+yearLabel()+" (c/IVA)",GRN,GRN)+kpi("Por cobrar",fmt(_pcT),_pc.length+" faturas c/IVA"+(_pcP>0?" · "+fmt(_pcP)+" de anos anteriores":""),R,R)+kpi("Custos (P&L)",fmt(S.expPL),"s/IVA dedutível, sem impostos",R,R)+kpi("Cashflow operacional",fmt(S.cf2),"recebido − pagamentos · após IVA/IRC: "+fmt(S.cfLiq),S.cf2<0?DNG:GRN,S.cf2<0?DNG:GRN)+'</div>';})();
   if(finSub==="orcamento"){
     // NV vs AT pela classificação da Pipe Line (col F): NV=vendas novas, AT=manutenções — bate com H8/I8 do teu ficheiro
     var fVendasNV=nvFatAno(),fVendasAT=atFatAno();
@@ -1287,10 +1327,11 @@ if(cTab==="dashboard"){
       h+='<div style="border-top:1px dashed #E4E8EB;margin-top:6px;padding-top:8px;font-size:11px;color:#A6AEB6">'+(_bal?'Realizado dos custos = <b>P&amp;L</b> (net IVA dedutível, com as regras); previsão (F, pela média) e orçamento (K) do Orçamento '+_Yo+'. ':'Custos na visão de gestão (vencimentos inclui gratificações). ')+'Fora da margem: IVA '+fmt(S.ivaTax||0)+' · IRC '+fmt(S.ircTax||0)+'</div></div>';
     }else{
       h+='<div class="cd"><div class="ct2" style="margin-bottom:14px">ORÇAMENTO '+_Yo+' vs REALIZADO (S/IVA)</div><table><thead><tr><th>Rubrica</th><th style="text-align:right">Orçamento</th><th style="text-align:right">Facturado</th><th style="text-align:right">% Exec.</th></tr></thead><tbody>';
-      h+=orcRow("Vendas (NV)",fVendasNV,0)+orcRow("AT/SaaS",fVendasAT,0)+orcRow("TOTAL RECEITA",S.inv,D.budget)+orcRow("Custos (P&L, líq. IVA ded.)",S.expPL,0)+orcRow("Margem (P&L, s/ impostos)",S.inv-S.expPL,0);
+      h+=orcRow("Vendas (NV)",fVendasNV,0)+orcRow("AT/SaaS",fVendasAT,0)+orcRow("TOTAL RECEITA",S.inv,objYear())+orcRow("Custos (P&L, líq. IVA ded.)",S.expPL,0)+orcRow("Margem (P&L, s/ impostos)",S.inv-S.expPL,0);
       h+='</tbody></table><div style="border-top:1px dashed #E4E8EB;margin-top:6px;padding-top:8px;font-size:11px;color:#A6AEB6">Fora da margem: IVA '+fmt(S.ivaTax||0)+' · IRC '+fmt(S.ircTax||0)+'</div></div>';
     }
-    var moInv={};D.invoices.forEach(function(i){if(beforeYear(i.date)||i.preERP)return;var m=new Date(i.date).getMonth();moInv[m]=(moInv[m]||0)+i.amount});
+    var moInv={};var _hasPL=false;(D.deals||[]).forEach(function(d){if(!_pr(d,activeYear()))return;var f=String(d.factDate||"");if(f.slice(0,4)!==String(activeYear()))return;_hasPL=true;var m=+f.slice(5,7)-1;if(m>=0&&m<12)moInv[m]=(moInv[m]||0)+(Number(d.value)||0);});
+    if(!_hasPL)D.invoices.forEach(function(i){if(!inYear(i.date)||i.preERP)return;var m=new Date(i.date).getMonth();moInv[m]=(moInv[m]||0)+i.amount});
     var mxInv=Math.max.apply(null,Object.values(moInv).concat([1]));
     h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">FACTURAÇÃO MENSAL — '+activeYear()+' (S/IVA)</div><div class="wfc">';
     for(var m=0;m<12;m++){var vv=moInv[m]||0;var hgt=mxInv>0?Math.max((vv/mxInv)*120,vv>0?4:0):0;h+='<div><div style="font-size:9px;color:#7E8892;margin-bottom:3px">'+(vv>0?fmt(vv):'')+'</div><div style="width:70%;height:'+hgt+'px;background:'+rgba(GD,.7)+';border-radius:4px 4px 0 0"></div><div style="font-size:9px;color:#A6AEB6;margin-top:4px">'+MO[m]+'</div></div>'}
@@ -1299,31 +1340,40 @@ if(cTab==="dashboard"){
     if(tCost>0){h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">CUSTO TOTAL DO PROJETO (incl. tempo)</div><table><tr><th>Rubrica</th><th style="text-align:right">Valor</th></tr><tr><td>Custos diretos (viagens, marketing)</td><td style="text-align:right">'+fmt(S.exp)+'</td></tr><tr><td>Custo nocional do tempo ('+fmt(D.timeCostMonth)+'/mês × '+mNow+')</td><td style="text-align:right">'+fmt(tCost)+'</td></tr><tr style="border-top:2px solid #E4E8EB"><td style="font-weight:700">Custo total real</td><td style="text-align:right;font-weight:700">'+fmt(S.exp+tCost)+'</td></tr><tr><td style="font-weight:700">Break-even (facturação necessária)</td><td style="text-align:right;font-weight:700;color:'+(S.inv>=S.exp+tCost?GRN:DNG)+'">'+fmt(S.exp+tCost)+' → '+(S.inv>=S.exp+tCost?"atingido":"faltam "+fmt(S.exp+tCost-S.inv))+'</td></tr></table><div style="font-size:11px;color:#A6AEB6;margin-top:8px">Define o custo mensal do teu tempo em Correções › definições para ajustar este cálculo.</div></div>'}
     h+='<div class="ins"><div style="font-size:12px;color:#7E8892"><b>Nota sobre IVA:</b> a <b>facturação</b>, o pipeline e a margem são <b>sem IVA</b> (receita); o <b>cobrado</b>, o <b>cashflow</b> e a <b>dívida a receber</b> (pendente, por cobrar, em risco) são <b>com IVA</b> — o dinheiro real recebido e em falta. Restante nota: sem IVA</b> (é o que conta como receita/facturação). As despesas vêm de extractos bancários, logo <b>incluem IVA</b> — o Cashflow mistura receita líquida com custo bruto, pelo que o resultado real é ligeiramente melhor do que o apresentado. Não há dados de saldos bancários reais para a Mobilwave nesta app.</div></div>';
   } else if(finSub==="cobrancas"){
-    var adjDeals=D.deals.filter(function(d){return isWon(d)&&!D.invoices.find(function(i){return i.dealId===d.id})});
-    var adjTotal=adjDeals.reduce(function(a,d){return a+d.value},0);
-    var pendInvs=D.invoices.filter(function(i){return!i.collected&&!i.fromSAFT}).map(function(i){var d=dealById(i.dealId);return{iv:i,name:d?cn(d.clientId):"—",amount:ivC(i),days:Math.floor((new Date()-new Date(i.date))/86400000),date:i.date}}).sort(function(a,b){return b.days-a.days});
-    var risky=pendInvs.filter(function(p){return p.days>=180});
-    var rTot=risky.reduce(function(a,p){return a+p.amount},0);
-    var _cobP=D.invoices.filter(function(i){return i.collected&&i.collDate&&i.date&&inYear(i.date)&&!i.preERP;});
-    var _avgCob=_cobP.length?Math.round(_cobP.reduce(function(a,i){return a+Math.max(0,Math.floor((new Date(i.collDate)-new Date(i.date))/86400000));},0)/_cobP.length):0;
-    h+='<div class="kr">'+kpi("Por facturar",fmt(adjTotal),adjDeals.length+" adjudicados",GD,GD)+kpi("Por cobrar",fmt(S.pend),pendInvs.length+" facturas",R,R)+kpi("Em risco (>180d)",fmt(rTot),risky.length+" facturas",R,R)+kpi("Prazo médio cobrança",_avgCob+" dias",_cobP.length+" faturas pagas em "+activeYear(),BLU,BLU)+kpi("Total a receber",fmt(adjTotal+S.pend),"",PUR,PUR)+'</div>';
-    if(adjDeals.length){h+='<div class="cd"><div class="ch"><div class="ct2">1. ADJUDICADO — PENDENTE DE FACTURAÇÃO ('+fmt(adjTotal)+')</div></div><div style="font-size:11.5px;color:#7E8892;margin-bottom:8px">Vendas ganhas que ainda não geraram factura. É o passo mais rápido para converter trabalho feito em dinheiro.</div>';
-      adjDeals.forEach(function(d){h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f8f7f5"><div><div style="font-size:12px;font-weight:500">'+cn(d.clientId)+'</div><div style="font-size:10px;color:#7E8892">'+d.product+' · '+fmtD(d.date)+'</div></div><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:700;font-size:13px">'+fmt(d.value)+'</span>'+bdg("Adjudicado",GD)+'<button class="btn bs" style="background:'+R+'" onclick="openIM_pre(\''+d.id+'\')">+ Factura</button></div></div>'});
-      h+='</div>'}
-    h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">2. AGING — PRIORIDADE DE CONTACTO</div>';
+    var _yC=activeYear();var pfA=porFacturarAno(_yC);var adjTotal=pfA.total;
+    var pendInvs=porCobrarRows();var pcTot=pendInvs.reduce(function(a,r){return a+r.civa;},0);
+    var risky=pendInvs.filter(function(p){return p.dias>=180});
+    var rTot=risky.reduce(function(a,p){return a+p.civa},0);
+    var pmC=prazoMedioCob(_yC);
+    h+='<div class="kr">'+kpi("Por facturar",fmt(adjTotal),pfA.n+" linhas adjudicadas · NV "+fmt(pfA.nv)+" + M "+fmt(pfA.at)+" (s/IVA)",GD,GD)+kpi("Por cobrar",fmt(pcTot),pendInvs.length+" faturas (c/IVA)",R,R)+kpi("Em risco (>180d)",fmt(rTot),risky.length+" faturas",DNG,DNG)+kpi("Prazo médio cobrança",pmC.dias+" dias",pmC.n+" faturas pagas em "+_yC+" (fatura→pagamento)",BLU,BLU)+kpi("Total a receber",fmt(adjTotal+pcTot),"por cobrar + por facturar",PUR,PUR)+'</div>';
+    h+='<div style="display:flex;justify-content:flex-end;margin:-4px 0 10px">'+((typeof isReadOnlyNow==="function"&&isReadOnlyNow())?'':'<button class="btn bs" style="background:'+TEAL+'" onclick="syncFacturacao()">📥 Atualizar com o Facturação (.xlsx)</button>')+'</div>';
+    h+='<div class="ins"><div style="font-size:12px;color:#7E8892;line-height:1.6">Fonte: <b>Facturação</b> (Pipe Line). <b>Por facturar</b> = linhas com estado <b>Pendente</b> e adjudicação até 31/12/'+_yC+' (F8+G8). <b>Por cobrar</b> = linhas <b>Facturado</b> sem pagamento na coluna K (E8). Quando importas o Facturação atualizado com os pagamentos, as faturas pagas saem daqui automaticamente.</div></div>';
+    // 1. adjudicado por facturar
+    if(pfA.rows.length){var _pfr=pfA.rows.slice().sort(function(a,b){return (Number(b.value)||0)-(Number(a.value)||0);});
+      h+='<div class="cd"><div class="ch"><div class="ct2">1. ADJUDICADO — PENDENTE DE FACTURAÇÃO ('+fmt(adjTotal)+')</div></div><div style="overflow-x:auto"><table><tr><th>Cliente</th><th>Produto</th><th>Tipo</th><th>Adjudicado</th><th style="text-align:right">Valor s/IVA</th></tr>';
+      _pfr.slice(0,300).forEach(function(d){h+='<tr style="cursor:pointer" onclick="openClient(\''+d.clientId+'\')"><td style="font-weight:600">'+esc(cn(d.clientId))+'</td><td style="font-size:12px;color:#7E8892">'+esc(String(d.product||"").slice(0,48))+'</td><td>'+bdg(d.nat==="AT"?"M/AT":"NV",d.nat==="AT"?TEAL:GD)+'</td><td style="font-size:12px">'+fmtD(_padj(d))+'</td><td style="text-align:right;font-weight:700">'+fmt(d.value)+'</td></tr>';});
+      if(_pfr.length>300)h+='<tr><td colspan="5" style="text-align:center;color:#A6AEB6;font-size:12px">A mostrar as 300 maiores de '+_pfr.length+'.</td></tr>';
+      h+='</table></div></div>';}
+    // 2. aging
+    var bk=[["0–30 dias",0,30,GRN],["31–90 dias",31,90,G],["91–180 dias",91,180,GD],["> 180 dias",181,1e9,DNG]];
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">2. AGING — ANTIGUIDADE DO POR COBRAR</div>';
+    var bkV=bk.map(function(b){return pendInvs.filter(function(p){return p.dias>=b[1]&&p.dias<=b[2];}).reduce(function(a,p){return a+p.civa;},0);});var mxB=Math.max.apply(null,bkV.concat([1]));
+    bk.forEach(function(b,ix){h+=barV(b[0]+" ("+pendInvs.filter(function(p){return p.dias>=b[1]&&p.dias<=b[2];}).length+")",bkV[ix],mxB,b[3],pcTot);});
     if(!pendInvs.length)h+='<div style="font-size:13px;color:'+GRN+'">✓ Sem facturas por cobrar.</div>';
-    else{h+='<div style="overflow-x:auto"><table><tr><th>Cliente</th><th style="text-align:right">Valor</th><th style="text-align:right">Dias em dívida</th><th style="text-align:right">Urgência</th><th style="text-align:right">Acção</th></tr>';
-      pendInvs.forEach(function(p){var urg=p.days>=180?["Crítica",R]:p.days>=90?["Alta",GD]:p.days>=30?["Média",G]:["Recente",GRN];
-        h+='<tr><td style="font-weight:600">'+p.name+'</td><td style="text-align:right;font-weight:700">'+fmt(p.amount)+'</td><td style="text-align:right">'+p.days+' dias <span style="color:#A6AEB6;font-size:10px">('+fmtD(p.date)+')</span></td><td style="text-align:right">'+bdg(urg[0],urg[1])+'</td><td style="text-align:right"><button class="btn bs" style="background:'+GRN+'" onclick="tgCl(\''+p.iv.id+'\')">✓ Recebido</button></td></tr>'});
+    else{h+='<div style="overflow-x:auto;margin-top:12px"><table><tr><th>Cliente</th><th>Fatura</th><th style="text-align:right">Valor c/IVA</th><th style="text-align:right">Dias</th><th style="text-align:right">Urgência</th><th style="text-align:right">Acção</th></tr>';
+      pendInvs.slice(0,400).forEach(function(p){var urg=p.dias>=180?["Crítica",R]:p.dias>=90?["Alta",GD]:p.dias>=30?["Média",G]:["Recente",GRN];
+        h+='<tr><td style="font-weight:600">'+esc(p.cli)+'</td><td style="font-size:12px;color:#7E8892">'+esc(p.num||"—")+'</td><td style="text-align:right;font-weight:700">'+fmt(p.civa)+'</td><td style="text-align:right">'+p.dias+' dias <span style="color:#A6AEB6;font-size:10px">('+fmtD(p.date)+')</span></td><td style="text-align:right">'+bdg(urg[0],urg[1])+'</td><td style="text-align:right">'+((typeof isReadOnlyNow==="function"&&isReadOnlyNow())?'':'<button class="btn bs" style="background:'+GRN+'" onclick="pipeMarkPaid(\''+p.d.id+'\')">✓ Recebido</button>')+'</td></tr>'});
+      if(pendInvs.length>400)h+='<tr><td colspan="6" style="text-align:center;color:#A6AEB6;font-size:12px">A mostrar as 400 mais antigas de '+pendInvs.length+'.</td></tr>';
       h+='</table></div>'}
     h+='</div>';
-    if(risky.length){h+='<div class="ins w"><div style="font-weight:600;margin-bottom:4px">⚠️ Créditos de cobrança duvidosa</div><div style="font-size:13px;color:#7E8892;line-height:1.6">'+risky.length+' factura(s) com mais de 180 dias, totalizando <b>'+fmt(rTot)+'</b>. Dívida a este prazo justifica avaliar uma provisão para imparidade em sede contabilística. Detalhe: '+risky.map(function(p){return p.name+" "+fmt(p.amount)+" ("+p.days+"d)"}).join(" · ")+'</div></div>'}
-    h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">3. PENDENTE POR CANAL</div>';
-    var mxCh=Math.max.apply(null,Object.values(S.debtCh).concat([1]));
-    Object.entries(S.debtCh).sort(function(a,b){return b[1]-a[1]}).forEach(function(e){h+=barH(e[0],e[1],mxCh,R)});
-    if(S.pendPrev>0)h+='<div style="font-size:11px;color:#7E8892;margin-top:6px">Das quais <b>'+fmt(S.pendPrev)+'</b> são facturas anteriores a '+activeYear()+' (incluído no total acima, não é adicional).</div>';
+    if(risky.length){var _rc={};risky.forEach(function(p){_rc[p.cli]=(_rc[p.cli]||0)+p.civa;});h+='<div class="ins w"><div style="font-weight:600;margin-bottom:4px">⚠️ Créditos de cobrança duvidosa</div><div style="font-size:13px;color:#7E8892;line-height:1.6">'+risky.length+' factura(s) com mais de 180 dias, totalizando <b>'+fmt(rTot)+'</b>. Confirma no Facturação se já foram pagas (coluna K) — se sim, basta reimportar. Por cliente: '+Object.keys(_rc).sort(function(a,b){return _rc[b]-_rc[a];}).slice(0,15).map(function(k){return esc(k)+" "+fmt(_rc[k]);}).join(" · ")+'</div></div>'}
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">3. POR COBRAR POR CANAL</div>';
+    var _dch={};pendInvs.forEach(function(p){var c=clientById(p.d.clientId);var ch=(c&&c.channel)||"Outro";_dch[ch]=(_dch[ch]||0)+p.civa;});
+    var mxCh=Math.max.apply(null,Object.values(_dch).concat([1]));
+    Object.entries(_dch).sort(function(a,b){return b[1]-a[1]}).forEach(function(e){h+=barV(e[0],e[1],mxCh,R,pcTot)});
     h+='</div>';
   } else if(finSub==="despesas"){
+  h+='<div class="ins"><div style="font-size:12.5px;color:#7E8892;line-height:1.7"><b>Como se ligam os custos de '+yearLabel()+':</b> pagamentos totais (banco, c/IVA) <b>'+fmt(S.exp)+'</b> = pagamentos operacionais <b>'+fmt(S.expOp)+'</b> + IVA/IRC entregues ao Estado <b>'+fmt(S.impostos)+'</b>. O <b>custo do P&L</b> é <b>'+fmt(S.expPL)+'</b>: os pagamentos operacionais sem o IVA dedutível e com as reclassificações contabilísticas (é o mesmo número do P&L e do KPI Custos).</div></div>';
   h+='<div class="cd"><div class="ch"><div class="ct2">Despesas</div><div style="display:flex;gap:6px;align-items:center"><label class="btn bs" style="background:'+SL+';cursor:pointer;margin:0">📄 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="impDespesasXlsx(this)"></label><button class="btn bs" style="background:'+R+'" onclick="openEM(\'\')">+ Despesa</button></div></div><div style="font-size:11px;color:#A6AEB6;margin-bottom:8px">Clica numa despesa para editar, atribuir a projeto/cliente ou eliminar. Importar Excel: colunas <b>data</b>, <b>a que se refere</b>, <b>valor</b>, <b>tipo</b>.</div>'+'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"><select onchange="window.__expAloc=this.value;rPnl()" style="border:1px solid #E4E8EB;border-radius:8px;padding:6px 9px;font-size:12px"><option value="">Alocação: todas</option><option value="sim"'+(window.__expAloc==="sim"?" selected":"")+'>Alocadas a projeto</option><option value="nao"'+(window.__expAloc==="nao"?" selected":"")+'>Não alocadas a projeto</option></select></div>'+'<div style="max-height:560px;overflow:auto">';
   D.expenses.filter(function(e){var al=!!e.projetoId;if(window.__expAloc==="sim"&&!al)return false;if(window.__expAloc==="nao"&&al)return false;return true;}).slice().sort(function(a,b){return b.date.localeCompare(a.date)}).forEach(function(e){var _pj=e.projetoId?(dealById(e.projetoId)||null):null;var _tag=[e.type,(_pj?cn(_pj.clientId):""),e.client].filter(Boolean).join(" · ");h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f8f7f5;cursor:pointer" onclick="openEM(\''+e.id+'\')"><div><div style="font-size:12px;font-weight:500">'+esc(e.desc||"—")+'</div><div style="font-size:10px;color:#7E8892">'+fmtD(e.date)+(e.bank?" · "+esc(e.bank):"")+(_tag?" · "+esc(_tag):"")+'</div></div><div style="display:flex;align-items:center;gap:6px">'+(e.reembolsoId?'<span style="font-size:9px;font-weight:600;color:'+BLU+';border:1px solid '+rgba(BLU,.4)+';border-radius:6px;padding:1px 6px;white-space:nowrap">reembolso</span>':'')+(e.projetoId?'<span style="font-size:9px;font-weight:600;color:'+GRN+';border:1px solid '+rgba(GRN,.4)+';border-radius:6px;padding:1px 6px;white-space:nowrap">alocado</span>':'')+'<span style="font-weight:600;color:'+R+';font-size:12px;white-space:nowrap">-'+fmt(e.amount)+'</span><button class="btn bs" style="background:'+SL+'" onclick="event.stopPropagation();openEM(\''+e.id+'\')">Editar</button><button style="background:none;border:none;font-size:12px;cursor:pointer;color:#ccc" onclick="event.stopPropagation();delEx(\''+e.id+'\')">✕</button></div></div>'});
   h+='</div></div>';
@@ -1356,32 +1406,46 @@ if(cTab==="dashboard"){
   var _Y=activeYear();
   var _dl={}; D.deals.forEach(function(d){_dl[d.id]=d;});
   // Caracterização pela LINHA do Pipe Line (valor real por tipo, pela data de fatura) — bate com H8/I8, sem duplicar SUB (×1)
-  function _ft(types,yr){var t=0;(D.deals||[]).forEach(function(d){if(d.src!=="pipe"||types.indexOf(d.type)<0)return;if(String(d.factDate||"").slice(0,4)!==String(yr))return;t+=Number(d.value)||0;});return t;}
-  function _fc(cond,yr){var t=0;(D.deals||[]).forEach(function(d){if(d.src!=="pipe"||!cond(d))return;if(String(d.factDate||"").slice(0,4)!==String(yr))return;t+=Number(d.value)||0;});return t;}
+  // Base dos 2 quadros (caracterização + licenças): "fat" = data de fatura (col. I) · "adj" = data de adjudicação (col. G, como a DashVendas C17–C31)
+  var _cfB=window.__cfBase||"fat";
+  function _inB(d,yr,base,open){if(base==="adj"){var g=_padj(d);if(!g)return false;return open?(g>=yr+"-01-01"):(g.slice(0,4)===String(yr));}return String(d.factDate||"").slice(0,4)===String(yr);}
+  function _ft(types,yr,base){base=base||"fat";var t=0;(D.deals||[]).forEach(function(d){if(!_pr(d,yr)||types.indexOf(d.type)<0)return;if(!_inB(d,yr,base,base==="adj"&&yr===_Y))return;t+=Number(d.value)||0;});return t;}
+  function _fc(cond,yr,base){base=base||"fat";var t=0;(D.deals||[]).forEach(function(d){if(!_pr(d,yr)||!cond(d))return;if(!_inB(d,yr,base,false))return;t+=Number(d.value)||0;});return t;}
   var NVt=["SV","EV","DV","HV","SUV","SMV"];
-  var dvF=_ft(["DV"],_Y),evF=_ft(["EV"],_Y),svF=_ft(["SV"],_Y),hvF=_ft(["HV"],_Y),nvF=_ft(NVt,_Y),atF=_ft(["AT"],_Y),totF=nvF+atF;
-  var py=_Y-1,dvP=_ft(["DV"],py),evP=_ft(["EV"],py),svP=_ft(["SV"],py),hvP=_ft(["HV"],py),totP=dvP+evP+svP+hvP;
-  var orc=D.orc||{total:(objYear()||0),nv:0,at:0};
-  var saasLic=_fc(function(d){return d.saas&&NVt.indexOf(d.type)>=0;},_Y),cloudF=_fc(function(d){return d.cloud;},_Y),dirServ=svF,dirLic=nvF-saasLic-svF;
-  var moNV=[],moNVp=[];for(var _m=0;_m<12;_m++){moNV.push(0);moNVp.push(0);}
-  D.deals.forEach(function(d){if(d.src!=="pipe"||NVt.indexOf(d.type)<0)return;var _fd=String(d.factDate||"");var yy=_fd.slice(0,4),mm=parseInt(_fd.slice(5,7),10)-1;if(mm<0||mm>11)return;if(yy===String(_Y))moNV[mm]+=Number(d.value)||0;else if(yy===String(py))moNVp[mm]+=Number(d.value)||0;});
-  var moTot=moNV.reduce(function(a,b){return a+b;},0);
+  // KPIs e orçamento: sempre facturação (H8/I8)
+  var nvF=_ft(NVt,_Y),atF=_ft(["AT"],_Y),totF=nvF+atF;
+  // quadros: base escolhida
+  var dvF=_ft(["DV"],_Y,_cfB),evF=_ft(["EV"],_Y,_cfB),svF=_ft(["SV"],_Y,_cfB),hvF=_ft(["HV"],_Y,_cfB),nvB=dvF+evF+svF+hvF;
+  var py=_Y-1,dvP=_ft(["DV"],py,_cfB),evP=_ft(["EV"],py,_cfB),svP=_ft(["SV"],py,_cfB),hvP=_ft(["HV"],py,_cfB),totP=dvP+evP+svP+hvP;
+  var orc=orcAno(_Y); // orçamento do ano (ficheiro Orçamento) — NV, AT, total
+  // Licenças vs serviços (réplica DashVendas C28–C31): Serviços = SV+SUV+SMV · SaaS/Subscrições = NV com SUB (col. E) · Licenciamento = NV − SUB − serviços · Cloud = NV com col. D > 0
+  var nvB2=_fc(function(d){return NVt.indexOf(d.type)>=0;},_Y,_cfB);
+  var saasLic=_fc(function(d){return NVt.indexOf(d.type)>=0&&!!d.sub;},_Y,_cfB),dirServ=svF,dirLic=nvB2-saasLic-dirServ; // C28 = C19+C20+C21 (mesmo critério do quadro de caracterização)
+  var cloudF=_fc(function(d){return NVt.indexOf(d.type)>=0&&(d.cloud!=null?!!d.cloud:/cloud/i.test(String(d.product||"")));},_Y,_cfB);
+  var moNV=[],moNVp=[],moAdj=[],moAdjP=[];for(var _m=0;_m<12;_m++){moNV.push(0);moNVp.push(0);moAdj.push(0);moAdjP.push(0);}
+  D.deals.forEach(function(d){if(!_pr(d,_Y)||NVt.indexOf(d.type)<0)return;var v=Number(d.value)||0;
+    var _fd=String(d.factDate||"");var yy=_fd.slice(0,4),mm=parseInt(_fd.slice(5,7),10)-1;if(mm>=0&&mm<12){if(yy===String(_Y))moNV[mm]+=v;else if(yy===String(py))moNVp[mm]+=v;}
+    var _ad=_padj(d);var ya=_ad.slice(0,4),ma=parseInt(_ad.slice(5,7),10)-1;if(ma>=0&&ma<12){if(ya===String(_Y))moAdj[ma]+=v;else if(ya===String(py))moAdjP[ma]+=v;}});
+  var moTot=moNV.reduce(function(a,b){return a+b;},0),moAdjTot=moAdj.reduce(function(a,b){return a+b;},0);
   function pctS(v,t){return t?Math.round(v/t*100)+"%":"—";}
   var RA=' style="text-align:right"';
   h=pgHead("📊","Caracterização de Faturação",yearPicker());
   var exec=orc.total?Math.round(totF/orc.total*100):0;
+  h+='<div style="display:flex;gap:6px;align-items:center;margin-bottom:12px"><span style="font-size:11px;color:#7E8892;font-weight:600">Quadros de caracterização:</span>'+[["fat","Por data de faturação"],["adj","Por adjudicação (DashVendas)"]].map(function(o){var on=_cfB===o[0];return '<button onclick="window.__cfBase=\''+o[0]+'\';rPnl()" style="padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid '+(on?R:"#E4E8EB")+';background:'+(on?R:"#fff")+';color:'+(on?"#fff":"#1B2733")+'">'+o[1]+'</button>';}).join("")+'</div>';
   h+='<div class="kr">'+kpi("Realizado faturação",fmt(totF),exec+"% do orçamento",GD,G)+kpi("Novas vendas",fmt(nvF),pctS(nvF,totF)+" do total",BLU,BLU)+kpi("AT (recorrente)",fmt(atF),pctS(atF,totF)+" do total",TEAL,TEAL)+'</div>';
-  function rowC(l,v,p){return '<tr><td>'+l+'</td><td'+RA+'>'+fmt(v)+'</td><td'+RA+'>'+pctS(v,nvF)+'</td><td'+RA+' style="text-align:right;color:#7E8892">'+(p?fmt(p):"—")+'</td><td'+RA+' style="text-align:right;color:#7E8892">'+pctS(p,totP)+'</td></tr>';}
-  h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">CARACTERIZAÇÃO DE FATURAÇÃO ('+_Y+')</div><div style="overflow-x:auto"><table><tr><th>Tipo</th><th'+RA+'>Realizado</th><th'+RA+'>%</th><th'+RA+'>'+py+'</th><th'+RA+'>%</th></tr>'+rowC("DOCbase",dvF,dvP)+rowC("Especialidades",evF,evP)+rowC("Serviços",svF,svP)+rowC("Equipamentos",hvF,hvP)+'<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>TOTAL</td><td'+RA+'>'+fmt(nvF)+'</td><td'+RA+'>100%</td><td'+RA+'>'+fmt(totP)+'</td><td'+RA+'></td></tr></table></div></div>';
+  function rowC(l,v,p){return '<tr><td>'+l+'</td><td'+RA+'>'+fmt(v)+'</td><td'+RA+'>'+pctS(v,nvB)+'</td><td'+RA+' style="text-align:right;color:#7E8892">'+(p?fmt(p):"—")+'</td><td'+RA+' style="text-align:right;color:#7E8892">'+pctS(p,totP)+'</td></tr>';}
+  h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">CARACTERIZAÇÃO DE '+(_cfB==="adj"?"VENDAS (por adjudicação)":"FATURAÇÃO (por data de fatura)")+' — NOVAS VENDAS '+_Y+'</div><div style="overflow-x:auto"><table><tr><th>Tipo</th><th'+RA+'>Realizado</th><th'+RA+'>%</th><th'+RA+'>'+py+'</th><th'+RA+'>%</th></tr>'+rowC("DOCbase",dvF,dvP)+rowC("Especialidades",evF,evP)+rowC("Serviços",svF,svP)+rowC("Equipamentos",hvF,hvP)+'<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>TOTAL</td><td'+RA+'>'+fmt(nvB)+'</td><td'+RA+'>100%</td><td'+RA+'>'+fmt(totP)+'</td><td'+RA+'></td></tr></table></div></div>';
   var lvsTot=dirServ+dirLic+saasLic;
   function rowL(l,v,sp){return '<tr><td>'+l+'</td><td'+RA+'>'+fmt(v)+'</td><td'+RA+'>'+(sp?pctS(v,lvsTot):"")+'</td></tr>';}
-  h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">LICENÇAS vs SERVIÇOS ('+_Y+')</div><div style="overflow-x:auto"><table><tr><th>Rubrica</th><th'+RA+'>Valor</th><th'+RA+'>%</th></tr>'+rowL("Directas Serviços",dirServ,1)+rowL("Directas Licenças",dirLic,1)+rowL("SaaS Licenças",saasLic,1)+rowL("Cloud",cloudF,0)+rowL("AT",atF,0)+'</table></div></div>';
+  h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">LICENÇAS vs SERVIÇOS — '+(_cfB==="adj"?"por adjudicação":"por data de fatura")+' '+_Y+'</div><div style="overflow-x:auto"><table><tr><th>Rubrica</th><th'+RA+'>Valor</th><th'+RA+'>%</th></tr>'+rowL("Directas Serviços (+Suporte+SMS)",dirServ,1)+rowL("Licenciamento",dirLic,1)+rowL("SaaS / Subscrições (NV com SUB)",saasLic,1)+rowL("Cloud (col. D)",cloudF,0)+rowL("AT facturado",atF,0)+'</table></div></div>';
   h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">ORÇAMENTO FATURAÇÃO '+_Y+'</div><div style="overflow-x:auto"><table><tr><th>Rubrica</th><th'+RA+'>Orçamento</th><th'+RA+'>Realizado</th><th'+RA+'>Execução</th></tr><tr><td>Novas vendas</td><td'+RA+'>'+fmt(orc.nv)+'</td><td'+RA+'>'+fmt(nvF)+'</td><td'+RA+'>'+pctS(nvF,orc.nv)+'</td></tr><tr><td>AT</td><td'+RA+'>'+fmt(orc.at)+'</td><td'+RA+'>'+fmt(atF)+'</td><td'+RA+'>'+pctS(atF,orc.at)+'</td></tr><tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>TOTAL</td><td'+RA+'>'+fmt(orc.total)+'</td><td'+RA+'>'+fmt(totF)+'</td><td'+RA+'>'+pctS(totF,orc.total)+'</td></tr></table></div></div>';
   var MOn=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-  var sal=0,rowsM="";
-  for(var mm2=0;mm2<12;mm2++){sal+=moNV[mm2];rowsM+='<tr><td>'+MOn[mm2]+'</td><td'+RA+' style="text-align:right;color:#7E8892">'+(moNVp[mm2]?fmt(moNVp[mm2]):"—")+'</td><td'+RA+'>'+(moNV[mm2]?fmt(moNV[mm2]):"—")+'</td><td'+RA+' style="text-align:right;font-weight:600">'+fmt(sal)+'</td></tr>';}
-  h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">NOVAS VENDAS '+_Y+' (por adjudicação)</div><div style="overflow-x:auto"><table><tr><th>Mês</th><th'+RA+'>'+py+'</th><th'+RA+'>'+_Y+'</th><th'+RA+'>Saldo acumulado</th></tr>'+rowsM+'<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>Média mensal orçamento</td><td'+RA+'></td><td'+RA+'></td><td'+RA+'>'+fmt(orc.nv/12)+'</td></tr><tr style="font-weight:700"><td>Média mensal realizada</td><td'+RA+'></td><td'+RA+'></td><td'+RA+'>'+fmt(moTot/12)+'</td></tr></table></div></div>';
-  h+='<div class="ins"><div style="font-size:12px;color:#7E8892">Valores <b>sem IVA</b>, calculados da app para o ano selecionado. Novas vendas mensais por <b>data de adjudicação</b>; caracterização e licenças por <b>data de fatura</b>.</div></div>';
+  function nvMonthTable(tit,cur,prev,tot){var sal=0,rowsM="";var mesesDecorr=(String(_Y)===String(new Date().getFullYear()))?Math.max(1,new Date().getMonth()+1):12;
+    for(var mm2=0;mm2<12;mm2++){sal+=cur[mm2];rowsM+='<tr><td>'+MOn[mm2]+'</td><td'+RA+' style="text-align:right;color:#7E8892">'+(prev[mm2]?fmt(prev[mm2]):"—")+'</td><td'+RA+'>'+(cur[mm2]?fmt(cur[mm2]):"—")+'</td><td'+RA+' style="text-align:right;font-weight:600">'+fmt(sal)+'</td></tr>';}
+    return '<div class="cd"><div class="ct2" style="margin-bottom:10px">'+tit+'</div><div style="overflow-x:auto"><table><tr><th>Mês</th><th'+RA+'>'+py+'</th><th'+RA+'>'+_Y+'</th><th'+RA+'>Acumulado</th></tr>'+rowsM+'<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>Média mensal orçamento</td><td'+RA+'></td><td'+RA+'></td><td'+RA+'>'+fmt(orc.nv/12)+'</td></tr><tr style="font-weight:700"><td>Média mensal realizada ('+mesesDecorr+' meses)</td><td'+RA+'></td><td'+RA+'></td><td'+RA+'>'+fmt(tot/mesesDecorr)+'</td></tr></table></div></div>';}
+  h+=nvMonthTable("NOVAS VENDAS "+_Y+" — por data de faturação",moNV,moNVp,moTot);
+  h+=nvMonthTable("NOVAS VENDAS "+_Y+" — por data de adjudicação",moAdj,moAdjP,moAdjTot);
+  h+='<div class="ins"><div style="font-size:12px;color:#7E8892">Valores <b>sem IVA</b>, valor real (subscrições <b>sem ×2</b>), das linhas do Facturação. Orçamento do ficheiro Orçamento '+_Y+' ('+fmt(orc.total)+'). Caracterização e licenças por <b>data de fatura</b>.</div></div>';
   /* ===== Reconciliação com o Estado (SAF-T + e-Fatura) ===== */
   var FO=(D.fatOficialMulti&&D.fatOficialMulti[String(_Y)])||((D.fatOficial&&Number(D.fatOficial.ano)===Number(_Y))?D.fatOficial:null);
   if(FO){
@@ -1411,24 +1475,27 @@ if(cTab==="dashboard"){
     h+='</div>';
   }
 } else if(cTab==="vendasPais"||cTab==="vendasVend"){
-  var _byP=(cTab==="vendasPais");
-  var _wd=D.deals.filter(function(d){return isWon(d)&&!d.preERP&&inYear(d.date);});
-  var _g={};_wd.forEach(function(d){var k=_byP?(d.pais||"—"):((d.vendedor&&String(d.vendedor).trim())?d.vendedor:"Por atribuir");if(!_g[k])_g[k]={v:0,n:0,at:0};_g[k].v+=Number(d.value)||0;_g[k].n++;if(d.type==="AT")_g[k].at+=Number(d.value)||0;});
+  var _byP=(cTab==="vendasPais");var _yV=String(activeYear());var _base=window.__vendBase||"fat";
+  // Fonte: linhas do Facturação (Pipe Line), valor real s/IVA. Base "fat" = data de fatura (H8/I8); "adj" = data de adjudicação (col. G)
+  var _rowsV=(D.deals||[]).filter(function(d){if(!_pr(d,_yV))return false;var dt=_base==="adj"?_padj(d):String(d.factDate||"");return dt.slice(0,4)===_yV;});
+  var _g={};_rowsV.forEach(function(d){var k;if(_byP){var c=clientById(d.clientId);k=(c&&c.pais)||"Sem país";}else k=vendNome(d.vendedor);if(!_g[k])_g[k]={v:0,n:0,at:0,nv:0,cli:{}};var v=Number(d.value)||0;_g[k].v+=v;_g[k].n++;_g[k].cli[d.clientId]=1;if(d.nat==="AT")_g[k].at+=v;else _g[k].nv+=v;});
   var _rows=Object.keys(_g).map(function(k){return[k,_g[k]];}).sort(function(a,b){return b[1].v-a[1].v;});
-  var _tot=_rows.reduce(function(a,e){return a+e[1].v;},0);
-  var _atT=_rows.reduce(function(a,e){return a+e[1].at;},0);
-  var _mx=Math.max.apply(null,_rows.map(function(e){return e[1].v;}).concat([1]));
+  var _tot=_rows.reduce(function(a,e){return a+e[1].v;},0),_atT=_rows.reduce(function(a,e){return a+e[1].at;},0),_nvT=_tot-_atT;
+  var _mx=Math.max.apply(null,_rows.map(function(e){return Math.abs(e[1].v);}).concat([1]));
   h=pgHead(_byP?"🌍":"👤",_byP?"Vendas por País":"Vendas por Vendedor",yearPicker());
-  h+='<div class="kr">'+kpi("Total vendas",fmt(_tot),_wd.length+" vendas ganhas",GD,G)+kpi(_byP?"Países":"Vendedores",String(_rows.length),"",BLU,BLU)+kpi("Dos quais ARR",fmt(_atT),_tot?Math.round(_atT/_tot*100)+"% do total":"",TEAL,TEAL)+'</div>';
-  h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">'+(_byP?"DISTRIBUIÇÃO POR PAÍS":"DISTRIBUIÇÃO POR VENDEDOR")+'</div>';
-  if(!_rows.length)h+='<div style="font-size:13px;color:#A6AEB6">Sem vendas registadas.</div>';
-  _rows.forEach(function(e){h+=barH(e[0]+' ('+e[1].n+')',e[1].v,_mx,_byP?BLU:TEAL);});
+  h+='<div style="display:flex;gap:6px;align-items:center;margin-bottom:12px"><span style="font-size:11px;color:#7E8892;font-weight:600">Base:</span>';
+  [["fat","Data de faturação"],["adj","Data de adjudicação"]].forEach(function(o){var on=_base===o[0];h+='<button onclick="window.__vendBase=\''+o[0]+'\';rPnl()" style="padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid '+(on?R:"#E4E8EB")+';background:'+(on?R:"#fff")+';color:'+(on?"#fff":"#1B2733")+'">'+o[1]+'</button>';});
   h+='</div>';
-  h+='<div class="cd"><div style="overflow-x:auto"><table><tr><th>'+(_byP?"País":"Vendedor")+'</th><th style="text-align:right">Vendas</th><th style="text-align:right">Nº</th><th style="text-align:right">Dos quais ARR</th><th style="text-align:right">% do total</th></tr>';
-  _rows.forEach(function(e){h+='<tr><td style="font-weight:600">'+esc(e[0])+'</td><td style="text-align:right;font-weight:700">'+fmt(e[1].v)+'</td><td style="text-align:right">'+e[1].n+'</td><td style="text-align:right">'+(e[1].at?fmt(e[1].at):"—")+'</td><td style="text-align:right">'+(_tot?Math.round(e[1].v/_tot*100):0)+'%</td></tr>';});
-  h+='<tr style="border-top:2px solid #E4E8EB;font-weight:700"><td>TOTAL</td><td style="text-align:right">'+fmt(_tot)+'</td><td style="text-align:right">'+_wd.length+'</td><td style="text-align:right">'+fmt(_atT)+'</td><td style="text-align:right">100%</td></tr>';
+  h+='<div class="kr">'+kpi("Total "+(_base==="adj"?"adjudicado":"facturado"),fmt(_tot),_rowsV.length+" linhas",GD,G)+kpi("Novas vendas (NV)",fmt(_nvT),_tot?Math.round(_nvT/_tot*100)+"%":"",BLU,BLU)+kpi("Manutenção (M/AT)",fmt(_atT),_tot?Math.round(_atT/_tot*100)+"%":"",TEAL,TEAL)+kpi(_byP?"Países":"Vendedores",String(_rows.length),"",PUR,PUR)+'</div>';
+  h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">'+(_byP?"DISTRIBUIÇÃO POR PAÍS":"DISTRIBUIÇÃO POR VENDEDOR")+'</div>';
+  if(!_rows.length)h+='<div style="font-size:13px;color:#A6AEB6">Sem vendas neste ano.</div>';
+  _rows.forEach(function(e){h+=barV(e[0]+' ('+Object.keys(e[1].cli).length+' cli.)',e[1].v,_mx,_byP?BLU:TEAL,_tot);});
+  h+='</div>';
+  h+='<div class="cd"><div style="overflow-x:auto"><table><tr><th>'+(_byP?"País":"Vendedor")+'</th><th style="text-align:right">Novas vendas (NV)</th><th style="text-align:right">Manutenção (M)</th><th style="text-align:right">Total</th><th style="text-align:right">Clientes</th><th style="text-align:right">% do total</th></tr>';
+  _rows.forEach(function(e){h+='<tr><td style="font-weight:600">'+esc(e[0])+'</td><td style="text-align:right">'+fmt(e[1].nv)+'</td><td style="text-align:right">'+fmt(e[1].at)+'</td><td style="text-align:right;font-weight:700">'+fmt(e[1].v)+'</td><td style="text-align:right">'+Object.keys(e[1].cli).length+'</td><td style="text-align:right">'+(_tot?Math.round(e[1].v/_tot*100):0)+'%</td></tr>';});
+  h+='<tr style="border-top:2px solid #E4E8EB;font-weight:700"><td>TOTAL</td><td style="text-align:right">'+fmt(_nvT)+'</td><td style="text-align:right">'+fmt(_atT)+'</td><td style="text-align:right">'+fmt(_tot)+'</td><td></td><td style="text-align:right">100%</td></tr>';
   h+='</table></div></div>';
-  h+='<div class="ins"><div style="font-size:12px;color:#7E8892">Vendas ganhas adjudicadas em <b>'+activeYear()+'</b>, valores <b>sem IVA</b>. "Por atribuir" = vendas sem vendedor identificado (RE/CP simples e históricos).</div></div>';
+  h+='<div class="ins"><div style="font-size:12px;color:#7E8892;line-height:1.6">Linhas do <b>Facturação</b> de <b>'+_yV+'</b>, valores <b>sem IVA</b>, pela '+(_base==="adj"?"data de adjudicação (col. G)":"data de fatura (col. I) — o total bate com H8+I8")+'. '+(_byP?'O país vem da ficha do cliente (Clientes › Diretório › editar cliente).':'Vendedor pela coluna P: CP-CV/RE-CV → Carlos Veneno · CP-PN/RE-PN/CP-NOR/RE-NOR → Pedro Nogueira · CP-AR/RE-AR → Ana Rita Rodrigues · A/O → Francisco Duarte · ES → Hugo Amaral.')+'</div></div>';
 } else if(cTab==="prospeccao"){
   h=pgHead("🗺️","Prospeção")+'<div class="kr">'+kpi("Hospitais",""+D.clients.length,"",GD,G)+kpi("Regiões",""+[...new Set(D.clients.map(function(c){return c.region}))].length,"",BLU,BLU)+kpi("Propostas",""+S.pN,fmt(D.deals.filter(function(d){return d.stage==="proposta"&&inYear(d.date)}).reduce(function(s,d){return s+d.value},0)),GD,G)+'</div>';
   h+='<div class="cd"><div style="overflow-x:auto"><table><tr><th>Hospital</th><th>Produto</th><th>Especialidade</th><th>Etapa (sincronizada c/ Pipeline)</th><th>Valor</th><th>Região</th></tr>';
@@ -1471,12 +1538,13 @@ if(cTab==="dashboard"){
   h+='<div class="ins'+(onTrack?"":" w")+'"><div style="font-weight:600;margin-bottom:4px">'+(onTrack?"✅":"📈")+' Ritmo vs objectivo</div><div style="font-size:13px;color:#7E8892;line-height:1.6">Ao ritmo actual, projecção de fecho do ano é ~'+fmt(runRate)+' ('+(onTrack?"acima":"abaixo")+' do objectivo de '+fmt(objYear())+'). Faltam '+fmt(Math.max(0,objYear()-S.inv))+', o que exige ~'+fmt(Math.round(Math.max(0,objYear()-S.inv)/ml))+'/mês nos próximos '+ml+' meses.</div></div>';
 
   var WT={projeto:0.75,proposta:0.4,lead:0.1};
-  var adjNoInv=D.deals.filter(function(d){return isWon(d)&&inYear(d.date)&&!D.invoices.find(function(i){return i.dealId===d.id})}).reduce(function(a,d){return a+d.value},0);
+  // Adjudicado = ainda por facturar no Facturação (F8+G8); pipeline ponderado só com oportunidades do CRM (não as linhas do Facturação)
+  var adjNoInv=porFacturarAno(activeYear()).total;
   var wProj=0,wProp=0,wLead=0;
-  D.deals.filter(function(d){return !isClosed(d)&&inYear(d.date)}).forEach(function(d){if(d.stage==="projeto")wProj+=d.value*WT.projeto;else if(d.stage==="proposta")wProp+=d.value*WT.proposta;else wLead+=d.value*WT.lead});
+  D.deals.filter(function(d){return d.src!=="pipe"&&!isClosed(d)&&inYear(d.date)}).forEach(function(d){if(d.stage==="projeto")wProj+=d.value*WT.projeto;else if(d.stage==="proposta")wProp+=d.value*WT.proposta;else wLead+=d.value*WT.lead});
   var wTotal=S.inv+adjNoInv+wProj+wProp+wLead;
-  h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">PREVISÃO PONDERADA DE FECHO '+activeYear()+'</div><div style="font-size:12px;color:#7E8892;margin-bottom:10px">Cenário realista: facturado + adjudicado a 100%, projetos a 75%, propostas a 40%, leads a 10%.</div>';
-  h+=barH("Facturado",S.inv,wTotal,GRN)+barH("Adjudicado",adjNoInv,wTotal,GD)+barH("Projetos ×75%",wProj,wTotal,PUR)+barH("Propostas ×40%",wProp,wTotal,G)+barH("Leads ×10%",wLead,wTotal,SL);
+  h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">PREVISÃO PONDERADA DE FECHO '+activeYear()+'</div><div style="font-size:12px;color:#7E8892;margin-bottom:10px">Cenário realista: facturado + adjudicado ainda por facturar a 100% (Facturação F8+G8), projetos a 75%, propostas a 40%, leads a 10% (oportunidades do CRM).</div>';
+  h+=barV("Facturado",S.inv,wTotal,GRN)+barV("Adjudicado por facturar",adjNoInv,wTotal,GD)+barV("Projetos ×75%",wProj,wTotal,PUR)+barV("Propostas ×40%",wProp,wTotal,G)+barV("Leads ×10%",wLead,wTotal,SL);
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:2px solid #E4E8EB"><span style="font-size:12px;font-weight:700">CENÁRIO PONDERADO</span><span style="font-size:18px;font-weight:700;font-family:\'Mulish\',system-ui,sans-serif;color:'+(wTotal>=objYear()?GRN:GD)+'">'+fmt(wTotal)+' <span style="font-size:11px;color:#7E8892;font-family:\'Mulish\',system-ui,sans-serif">('+pc(wTotal,objYear())+'% do objectivo)</span></span></div></div>';
 
   var openD=D.deals.filter(function(d){return !isClosed(d)&&inYear(d.date)}).sort(function(a,b){return b.value-a.value});
@@ -1484,9 +1552,10 @@ if(cTab==="dashboard"){
     var wo=S.inv+adjNoInv+openD.slice(2).reduce(function(a,d){return a+d.value*(d.stage==="projeto"?WT.projeto:d.stage==="proposta"?WT.proposta:WT.lead)},0);
     h+='<div class="ins'+(top2share>=60?" w":"")+'"><div style="font-weight:600;margin-bottom:4px">'+(top2share>=60?"⚠️":"🎲")+' Stress-test: e se os 2 maiores escorregarem?</div><div style="font-size:13px;color:#7E8892;line-height:1.6">'+cn(top2[0].clientId)+' ('+fmt(top2[0].value)+') e '+cn(top2[1].clientId)+' ('+fmt(top2[1].value)+') representam <b>'+top2share+'% do pipeline aberto</b>. Se ambos deslizarem para '+(activeYear()+1)+', o cenário ponderado cai para <b>'+fmt(wo)+'</b> ('+pc(wo,objYear())+'% do objectivo)'+(wo>=objYear()?" — mesmo assim acima do objectivo.":" — abaixo do objectivo, seria preciso reforçar o funil.")+'</div></div>'}
 
-  var arrWon=(typeof window.recurArrTotal==="function")?window.recurArrTotal():D.deals.filter(function(d){return isWon(d)}).reduce(function(a,d){return a+(d.arr||0)},0);
-  var arrPipe=D.deals.filter(function(d){return !isClosed(d)&&inYear(d.date)}).reduce(function(a,d){return a+(d.arr||0)},0);
-  if(arrWon+arrPipe>0){h+='<div class="ins"><div style="font-weight:600;margin-bottom:4px">🔁 Base de receita recorrente (ARR)</div><div style="font-size:13px;color:#7E8892;line-height:1.6">ARR garantido (vendas ganhas): <b>'+fmt(arrWon)+'/ano</b>. ARR em jogo no pipeline aberto: '+fmt(arrPipe)+'/ano'+(arrPipe>arrWon*2?' — o pipeline actual pode multiplicar a base recorrente; priorizar os deals com ARR alto tem efeito composto em 2027+.':'.')+'</div></div>'}
+  // ARR garantido = base recorrente que transita para o próximo ano, pela coluna S/T do Facturação (sem duplicados)
+  var _ppA=projProxAno();var arrWon=_ppA.total;
+  var arrPipe=D.deals.filter(function(d){return d.src!=="pipe"&&!isClosed(d)&&inYear(d.date)}).reduce(function(a,d){return a+(d.arr||0)},0);
+  if(arrWon+arrPipe>0){h+='<div class="ins"><div style="font-weight:600;margin-bottom:4px">🔁 Base de receita recorrente (ARR)</div><div style="font-size:13px;color:#7E8892;line-height:1.6">ARR garantido para '+_ppA.NY+' (coluna S do Facturação — 105% M/SUB, 100% já adjudicado, sem duplicados): <b>'+fmt(arrWon)+'/ano</b> — M/AT '+fmt(_ppA.at)+' · subscrições '+fmt(_ppA.nv)+' · já adjudicado '+_ppA.NY+' '+fmt(_ppA.carry)+'.'+(arrPipe>0?' ARR em jogo no pipeline do CRM: '+fmt(arrPipe)+'/ano.':'')+' Detalhe em Direção › Projeção próximo ano.</div></div>'}
 
   h+='<div class="ins"><div style="font-size:12.5px;color:#7E8892">💰 O detalhe das cobranças pendentes, aging e imparidades está agora em <b>Financeiro › Cobranças</b>.</div></div>';
 
@@ -1523,9 +1592,7 @@ if(cTab==="dashboard"){
   var stalled=D.deals.filter(function(d){return(d.stage==="lead"||d.stage==="proposta")&&d.date<=(activeYear()+"-05-01")&&inYear(d.date)});
   if(stalled.length){h+='<div class="ins w" style="margin-top:4px"><div style="font-weight:600;margin-bottom:4px">⏳ Leads/propostas paradas há mais tempo</div><div style="font-size:13px;color:#7E8892;line-height:1.6">'+stalled.map(function(d){return cn(d.clientId)+" ("+bdg(SL2[d.stage],SC[d.stage])+", desde "+fmtD(d.date)+")"}).join(" · ")+'</div></div>'}
 
-  var specByClient={};D.deals.filter(function(d){return isWon(d)}).forEach(function(d){specByClient[d.clientId]=specByClient[d.clientId]||new Set();specByClient[d.clientId].add(d.specialty)});
-  var upsellC=Object.keys(specByClient).filter(function(cid){return specByClient[cid].size===1&&!D.deals.find(function(d){return d.clientId===cid&&!isClosed(d)})});
-  if(upsellC.length){h+='<div class="ct2" style="margin:18px 0 10px">CANDIDATOS A UPSELL (só 1 especialidade activa)</div><div class="cd" style="padding:14px"><div style="font-size:13px;color:#7E8892;line-height:1.9">'+upsellC.map(function(cid){return cn(cid)+' <span style="color:#A6AEB6">— tem '+Array.from(specByClient[cid])[0]+'</span>'}).join("<br>")+'</div></div>'}
+  // (Candidatos a upsell removido a pedido da Direção)
 
   if(S.debt>0){var dbTxt=Object.entries(S.debtCh).sort(function(a,b){return b[1]-a[1]}).map(function(e){return e[0]+": "+fmt(e[1])}).join(" · ");h+='<div class="ins w" style="margin-top:14px"><div style="font-weight:600;margin-bottom:4px">⚠️ Dívida pendente '+fmt(S.debt)+'</div><div style="font-size:13px;color:#7E8892">'+dbTxt+(S.pendPrev>0?" · inclui "+fmt(S.pendPrev)+" de anos anteriores":"")+'</div></div>'}
   h+='<div class="cd" style="margin-top:14px"><div class="ct2" style="margin-bottom:10px">FACTURAÇÃO POR CANAL ('+activeYear()+')</div>';
@@ -1663,8 +1730,8 @@ function delIv(id){confirmM("Apagar esta factura?",function(){var iv=D.invoices.
 function svIv(editId){var g=function(id){var el=document.getElementById(id);return el?el.value:""};var cl=g("f4")==="1";var _cd=g("f5");var data={dealId:g("f1"),amount:Number(g("f2"))||0,date:g("f3")||new Date().toISOString().slice(0,10),collected:cl,collDate:cl?(_cd||new Date().toISOString().slice(0,10)):"",clienteNome:(g("f_cli")||"").trim(),descricao:(g("f_desc")||"").trim()};if(!data.dealId&&!data.clienteNome){if(typeof toast==="function")toast("Escolhe um negócio ou escreve o nome do cliente.",{type:"error"});return}if(!data.amount){if(typeof toast==="function")toast("Indica o valor da fatura.",{type:"error"});return}var dd=D.deals.find(function(x){return x.id===data.dealId});var nome=dd?cn(dd.clientId):(data.clienteNome||"—");if(editId){var iv=D.invoices.find(function(x){return x.id===editId});if(iv){Object.assign(iv,data);logAct("Factura","Factura editada: "+nome+" — "+fmt(data.amount))}}else{data.id=uid();D.invoices.push(data);logAct("Factura","Factura registada: "+nome+" — "+fmt(data.amount))}save();clM();ren()}
 function openAM(){document.getElementById("mArea").innerHTML=mWrap("Nova Atividade",'<div class="r2">'+fld("Tipo",sel("f1",["Nota","Visita","Proposta","Cobrança","Factura","Contacto"],"Nota"))+fld("Data",'<input type="date" id="f2" value="'+new Date().toISOString().slice(0,10)+'">')+'</div>'+fld("Descrição",'<textarea id="f3"></textarea>')+'<button class="btn" style="background:'+R+';width:100%;margin-top:6px" onclick="svAc()">Guardar</button>')}
 function svAc(){D.activities.unshift({id:uid(),type:document.getElementById("f1").value,date:document.getElementById("f2").value,desc:document.getElementById("f3").value});save();clM();ren()}
-function openCM(){document.getElementById("mArea").innerHTML=mWrap("Novo Cliente",fld("Nome",'<input id="f1">')+'<div class="r2">'+fld("Região",sel("f2",REGS,"Andaluzia"))+fld("Canal",sel("f3",["Parceiro","Canal","Directo"],"Parceiro"))+'</div>'+'<button class="btn" style="background:'+R+';width:100%;margin-top:6px" onclick="svCl()">Guardar</button>')}
-function svCl(){var nm=document.getElementById("f1").value;D.clients.push({id:uid(),name:nm,region:document.getElementById("f2").value,channel:document.getElementById("f3").value,lat:39,lng:-3});logAct("Cliente","Novo cliente: "+nm);save();clM();ren()}
+function openCM(){document.getElementById("mArea").innerHTML=mWrap("Novo Cliente",fld("Nome",'<input id="f1">')+'<div class="r2">'+fld("Região",sel("f2",REGS,"Andaluzia"))+fld("Canal",sel("f3",["Parceiro","Canal","Directo"],"Parceiro"))+'</div>'+fld("País",sel("f6",PAISES,"Portugal"))+'<button class="btn" style="background:'+R+';width:100%;margin-top:6px" onclick="svCl()">Guardar</button>')}
+function svCl(){var nm=document.getElementById("f1").value;D.clients.push({id:uid(),name:nm,region:document.getElementById("f2").value,channel:document.getElementById("f3").value,pais:(document.getElementById("f6")||{}).value||"Portugal",lat:39,lng:-3});logAct("Cliente","Novo cliente: "+nm);save();clM();ren()}
 
 function initMap(){var el=document.getElementById("leaflet-map");if(!el)return;
   try{if(window._map){window._map.remove();window._map=null}}catch(e){}
@@ -1766,6 +1833,58 @@ function parseCustos(wb){var ws=wb.Sheets["Custos"];if(!ws)return 0;var rows=XLS
   }
   return added;
 }
+// ===== Atualizar a partir do ficheiro Facturação AAAA.xlsx (folha "Pipe Line") — mantém a app dinâmica com o teu Excel =====
+// Substitui as linhas desse ano de ficheiro (fy) pelas do Excel, preservando ids (exclusões da projeção, lembretes de cobrança).
+function _xlDate(v){if(v==null||v==="")return "";if(typeof v==="number"&&v>20000&&v<80000){var dt=new Date(Math.round((v-25569)*86400000));return dt.toISOString().slice(0,10);}if(v instanceof Date&&!isNaN(v))return new Date(v.getTime()-v.getTimezoneOffset()*60000).toISOString().slice(0,10);var m=String(v).trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);if(m)return m[3]+"-"+("0"+m[2]).slice(-2)+"-"+("0"+m[1]).slice(-2);m=String(v).trim().match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[0]:"";}
+function _xlNum(v){if(typeof v==="number")return v;var n=parseFloat(String(v==null?"":v).replace(/\s/g,"").replace(",","."));return isNaN(n)?null:n;}
+function _fnorm(x){if(x==null||x==="")return "";var s=String(x).trim().replace(/,/g,".");var m=s.match(/(\d{4})\.0*(\d+)/);return m?m[1]+"."+m[2]:s;}
+function _comOf(v){v=String(v||"").toUpperCase();var suf=v.indexOf("-")>=0?v.split("-").pop():v;if(suf.indexOf("CV")>=0)return "Cv";if(suf.indexOf("PN")>=0||suf.indexOf("NOR")>=0)return "Pn";if(suf.indexOf("AR")>=0)return "Ar";if(suf==="ES"||suf.indexOf("ESP")>=0)return "Espanha";if(suf==="A"||suf.indexOf("ANG")>=0)return "Angola";return "Outros";}
+function syncFacturacaoWB(wb,fname){
+  var ws=wb.Sheets["Pipe Line"];if(!ws)throw new Error('Folha "Pipe Line" não encontrada.');
+  var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+  var fy=0;var mY=String(fname||"").match(/20\d\d/);if(mY)fy=+mY[0];
+  if(!fy&&wb.Sheets["DashVendas"]){var b4=(wb.Sheets["DashVendas"]["B4"]||{}).v;var m2=String(b4||"").match(/20\d\d/);if(m2)fy=+m2[0];}
+  if(!fy)fy=new Date().getFullYear();
+  var TM={M:"AT",SV:"SV",EV:"EV",DV:"DV",HV:"HV",SUV:"SV",SMV:"SV"};
+  var recs=[];
+  for(var r=12;r<rows.length;r++){var w=rows[r]||[];var cli=w[1];if(cli==null||!String(cli).trim())continue;
+    var F=String(w[5]||"").trim().toUpperCase();var val=_xlNum(w[12]);val=val==null?0:Math.round(val*100)/100;var q=_xlNum(w[16]);
+    var adj=_xlDate(w[6]),fd=_xlDate(w[8]),pd=_xlDate(w[11]);var stRaw=String(w[9]||"").trim();var st=stRaw?stRaw.charAt(0).toUpperCase()+stRaw.slice(1).toLowerCase():"";
+    var prod=String(w[2]==null?"":w[2]);var pl=prod.toLowerCase();var t=TM[F]||F||"AT";var dcl=_xlNum(w[3]);
+    var o={cliRaw:String(cli).trim(),product:prod,value:val,civa:q==null?Math.round(val*123)/100:Math.round(q*100)/100,type:t,nat:(F==="M"||!F)?"AT":"NV",fType:F,
+      stage:"ganho",date:adj||fd,specialty:pl.indexOf("gastro")>=0?"Gastro":pl.indexOf("pneumo")>=0?"Pneumo":pl.indexOf("orl")>=0?"ORL":pl.indexOf("gineco")>=0?"Gineco":"",
+      vendedor:String(w[15]||"").trim(),src:"pipe",factDate:fd,payDate:pd,paid:String(w[10]||"").trim().toLowerCase()==="pago",stFat:st,fatNum:_fnorm(w[7]),adj:adj,
+      sMult:_xlNum(w[18])||0,tProx:_xlNum(w[19])||0,pRow:r+1,cloud:!!(dcl&&dcl>0),fy:fy};
+    o.com=_comOf(o.vendedor);if(String(w[4]||"").toLowerCase().indexOf("sub")>=0)o.sub=true;if(t==="AT"){o.arr=val;o.renewDate=adj||fd;}
+    recs.push(o);}
+  if(!recs.length)throw new Error("Sem linhas no Pipe Line.");
+  // emparelhar com as linhas existentes deste ficheiro (preserva id e cliente)
+  var old=(D.deals||[]).filter(function(d){return _isPipeRow(d)&&(d.fy||2026)===fy;});
+  var byKey={};old.forEach(function(d){var k=[String(d.product||"").trim(),Number(d.value).toFixed(2),_padj(d),String(d.vendedor||"").trim()].join("|");(byKey[k]=byKey[k]||[]).push(d);});
+  var cliByNorm={};(D.clients||[]).forEach(function(c){var n=normName(c.name);if(n&&!cliByNorm[n])cliByNorm[n]=c;});
+  var kept=0,added=0,newCli=0;var used={};
+  var out=recs.map(function(o){var k=[o.product.trim(),o.value.toFixed(2),o.adj,o.vendedor].join("|");var lst=byKey[k]||[];var pick=null;
+    for(var i=0;i<lst.length;i++){if(!used[lst[i].id]&&lst[i].pRow===o.pRow){pick=lst[i];break;}}
+    if(!pick)for(var j=0;j<lst.length;j++){if(!used[lst[j].id]){pick=lst[j];break;}}
+    if(!pick){var _pt=o.product.replace(/\s+/g," ").trim();for(var q2=0;q2<old.length;q2++){var od=old[q2];if(!used[od.id]&&od.pRow===o.pRow&&String(od.product||"").replace(/\s+/g," ").trim()===_pt&&Math.abs((Number(od.value)||0)-o.value)<0.05){pick=od;break;}}}
+    var cid=null;if(pick){used[pick.id]=1;o.id=pick.id;cid=pick.clientId;kept++;}else{o.id="pl_f"+fy+"_"+o.pRow+"_"+Math.random().toString(36).slice(2,6);added++;}
+    if(!cid){var n=normName(o.cliRaw);var c=cliByNorm[n]||matchClient(o.cliRaw);if(!c){c={id:"cl_"+Math.random().toString(36).slice(2,9),name:o.cliRaw,channel:"Directo",region:"Portugal",pais:"Portugal",lat:39,lng:-8};D.clients.push(c);cliByNorm[n]=c;newCli++;}cid=c.id;}
+    o.clientId=cid;delete o.cliRaw;return o;});
+  var removed=old.filter(function(d){return !used[d.id];}).length;
+  var oldIds={};old.forEach(function(d){oldIds[d.id]=1;});
+  D.deals=(D.deals||[]).filter(function(d){return !oldIds[d.id];}).concat(out);
+  D.facturacaoSync=D.facturacaoSync||{};D.facturacaoSync[fy]={em:new Date().toISOString(),ficheiro:String(fname||""),linhas:out.length};
+  _idxClear();
+  return {fy:fy,linhas:out.length,mantidas:kept,novas:added,removidas:removed,novosClientes:newCli};
+}
+window.syncFacturacao=function(){if(typeof isReadOnlyNow==="function"&&isReadOnlyNow()){alert("Sem permissão.");return;}
+  var inp=document.createElement("input");inp.type="file";inp.accept=".xlsx,.xlsm,.xls";
+  inp.onchange=function(){var f=inp.files&&inp.files[0];if(!f)return;readFileWB(f).then(function(wb){var r;try{r=syncFacturacaoWB(wb,f.name);}catch(e){alert("Não foi possível ler o Facturação: "+e.message);return;}
+    var y=r.fy;var pf=porFacturarAno(y),pc=porCobrarRows();var pcT=pc.reduce(function(a,x){return a+x.civa;},0);
+    if(typeof logAct==="function")logAct("Financeiro","Facturação "+y+" atualizado ("+r.linhas+" linhas)");save();ren();
+    var body='<div style="font-size:13px;line-height:1.8">Ficheiro <b>'+esc(f.name)+'</b> (ano '+y+')<br>Linhas: <b>'+r.linhas+'</b> · mantidas '+r.mantidas+' · novas '+r.novas+' · removidas '+r.removidas+(r.novosClientes?' · novos clientes '+r.novosClientes:'')+'<br>NV facturado (H8): <b>'+fmt(nvFatAno(y))+'</b> · AT facturado (I8): <b>'+fmt(atFatAno(y))+'</b><br>Por facturar (F8+G8): <b>'+fmt(pf.total)+'</b> · Por cobrar (E8): <b>'+fmt(pcT)+'</b> · Cobrado '+y+': <b>'+fmt(cobradoAno(y))+'</b></div><div style="font-size:11.5px;color:#A6AEB6;margin-top:8px">Todas as vistas (Direção, Financeiro, Comercial, Objetivos) passam a usar estes valores.</div><button class="btn" style="background:'+R+';width:100%;margin-top:10px" onclick="clM()">OK</button>';
+    document.getElementById("mArea").innerHTML=mWrap("Facturação atualizado",body);}).catch(function(e){alert("Erro a ler o ficheiro: "+(e&&e.message||e));});};
+  inp.click();};
 function parsePipeLine(wb){var ws=wb.Sheets["Pipe Line"];if(!ws)return{items:[],excluded:0};var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false});var h=findHdrRow(rows,["cliente"]);if(h<0)return{items:[],excluded:0};var hdr=rows[h];var iCli=colIdx(hdr,"cliente"),iProd=colIdx(hdr,"produto"),iVal=colIdx(hdr,"s/"),iDate=colIdx(hdr,"adjud"),iFact=colIdx(hdr,"fact."),iPag=colIdx(hdr,"pagam");var out=[],excluded=0;
   for(var r=h+1;r<rows.length;r++){var row=rows[r];if(!row||!row[iCli])continue;var cliRaw=String(row[iCli]).trim();if(isExcludedClient(cliRaw)){excluded++;continue}var val=parseFloat(String(row[iVal]||"0").replace(",",""))||0;if(val<=0)continue;var prod=String(row[iProd]||"").trim();var dt=parseXlDate(row[iDate]);var pag=String(row[iPag]||"").toLowerCase();var fact=row[iFact];var stageGuess=fact?"ganho":"proposta";var match=matchClient(cliRaw);
     if(match){if(isExcludedDeal(match.id,val)){excluded++;continue}var exists=D.deals.some(function(d){return d.clientId===match.id&&Math.abs(d.value-val)<0.5});if(exists)continue}
@@ -1898,6 +2017,11 @@ function histYears(){
       nc:base.nc||0, obj:(objYear(y)||(base.obj||0)), ncli:Object.keys(b.cli).length,
       note:(y>=curY?"LIVE — dados da app":"LIVE — faturado"), partial:(y>=curY)};
   });
+  // Ano corrente (e seguintes): NV/AT exatamente como H8/I8 do Facturação (linhas do Pipe Line pela data de fatura), dinâmico
+  var _pipeYs={};(D.deals||[]).forEach(function(d){if(d.src==="pipe"){var fy=+String(d.factDate||"").slice(0,4);if(fy)_pipeYs[fy]=1;}});
+  Object.keys(_pipeYs).forEach(function(ys){var y=+ys;if(y<curY)return;var nv=nvFatAno(y),at=atFatAno(y);if(!(nv||at))return;var cli={};(D.deals||[]).forEach(function(d){if(d.src==="pipe"&&String(d.factDate||"").slice(0,4)===ys)cli[d.clientId]=1;});var base=out[y]||{nc:0};
+    out[y]={yr:y,tot:Math.round(nv+at),nv:Math.round(nv),at:Math.round(at),nc:base.nc||0,obj:(orcAno(y).total||objYear(y)||0),ncli:Object.keys(cli).length,note:"LIVE — Facturação (H8 NV / I8 AT)",partial:(y>=new Date().getFullYear())};});
+  Object.keys(out).forEach(function(y){var o=orcAno(+y);if(D.orcamento&&D.orcamento[y]&&o.total)out[y].obj=o.total;});
   return Object.keys(out).map(function(y){return out[y];}).sort(function(a,b){return a.yr-b.yr;});
 }
 function rHist(S){
@@ -4511,8 +4635,9 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   // ---- Painel executivo (Direção): alertas cruzados + tendência ----
   function execAlerts(){
     var today=todayISO();
-    var cobr=(D.invoices||[]).filter(function(i){return !i.collected&&i.date&&i.date<today;});
-    var cobrVal=cobr.reduce(function(a,i){return a+ivC(i);},0);
+    // vencidas = faturas do Facturação por pagar há mais de 30 dias (dinâmico com o ficheiro)
+    var cobr=(typeof porCobrarRows==="function"?porCobrarRows():[]).filter(function(r){return r.dias>30;});
+    var cobrVal=cobr.reduce(function(a,r){return a+r.civa;},0);
     var projRisco=(D.deals||[]).filter(function(d){return d.stage==="projeto";}).filter(function(d){try{return projHealth(projRec(d.id)).k==="risco";}catch(e){return false;}}).length;
     var slaVenc=(D.tickets||[]).filter(function(t){try{return tkSla(t).vencido;}catch(e){return false;}}).length;
     var ferPend=(D.absences||[]).filter(function(r){return r.status==="pendente";}).length;
@@ -4603,16 +4728,17 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     h+='</div>';h+=arrContratosCard(canEdit);app.innerHTML=app.innerHTML+h;
   }
   // ---- Cenários de orçamento (pessimista / base / otimista) ----
-  function scenData(){var arrBase=(D.deals||[]).filter(function(d){return d.stage==="ganho"||d.stage==="concluido"||d.stage==="projeto";}).reduce(function(a,d){return a+(Number(d.arr)||0);},0);var pipeOpen=(D.deals||[]).filter(function(d){return d.stage==="lead"||d.stage==="proposta";}).reduce(function(a,d){return a+(Number(d.value)||0);},0);return {arrBase:arrBase,pipeOpen:pipeOpen,obj:Number(D.budget)||0};}
-  function scenCfg(){if(!D.budgetScen)D.budgetScen={renov:{p:80,b:90,o:97},conv:{p:15,b:30,o:50},newBiz:{p:0,b:10000,o:25000}};return D.budgetScen;}
+  // Cenários para o próximo ano: base = projeção do Facturação (col. T, S=100%/105%, sem duplicados); pipeline = oportunidades CRM abertas; objetivo = orçamento do ano (ou ano corrente)
+  function scenData(){var pp=projProxAno();var arrBase=pp.total;var pipeOpen=(D.deals||[]).filter(function(d){return d.src!=="pipe"&&(d.stage==="lead"||d.stage==="proposta"||d.stage==="projeto");}).reduce(function(a,d){return a+(Number(d.value)||0);},0);var oN=orcAno(pp.NY),oC=orcAno(pp.NY-1);var obj=oN.total||oC.total||Number(D.budget)||0;return {arrBase:arrBase,pipeOpen:pipeOpen,obj:obj,NY:pp.NY,objLbl:oN.total?("orçamento "+pp.NY):("orçamento "+(pp.NY-1)+" (ainda sem orçamento "+pp.NY+")")};}
+  function scenCfg(){if(!D.budgetScen)D.budgetScen={renov:{p:90,b:100,o:100},conv:{p:15,b:30,o:50},newBiz:{p:0,b:10000,o:25000}};return D.budgetScen;}
   function scenCalc(k){var d=scenData(),c=scenCfg();var arrR=d.arrBase*((c.renov[k]||0)/100),pipeC=d.pipeOpen*((c.conv[k]||0)/100),nb=Number(c.newBiz[k])||0;return {arrR:arrR,pipeC:pipeC,nb:nb,total:arrR+pipeC+nb};}
   function injectScenariosCard(){
     try{if(!(currentRole==="admin"||canSeeTab("financeiro")))return;}catch(e){}
     var app=document.getElementById("app");if(!app)return;var d=scenData(),canEdit=!isReadOnlyNow();
     var cols=[["p","Pessimista",R],["b","Base",GD],["o","Otimista",GRN]];
     var maxT=Math.max.apply(null,cols.map(function(x){return scenCalc(x[0]).total;}).concat([d.obj,1]));
-    var h='<div class="cd" style="border-left:3px solid '+PUR+';margin-bottom:14px"><div class="ch"><div class="ct2">🎯 Cenários de orçamento</div>'+(canEdit?'<button class="btn bs" style="background:'+SL+'" onclick="openScenM()">Ajustar pressupostos</button>':'')+'</div>';
-    h+='<div style="font-size:11.5px;color:#A6AEB6;margin-bottom:10px">Projeção anual = ARR renovado + pipeline convertido + novo negócio · Objetivo: '+fmt(d.obj)+'</div>';
+    var h='<div class="cd" style="border-left:3px solid '+PUR+';margin-bottom:14px"><div class="ch"><div class="ct2">🎯 Cenários '+d.NY+'</div>'+(canEdit?'<button class="btn bs" style="background:'+SL+'" onclick="openScenM()">Ajustar pressupostos</button>':'')+'</div>';
+    h+='<div style="font-size:11.5px;color:#A6AEB6;margin-bottom:10px">Projeção '+d.NY+' = base recorrente já garantida ('+fmt(d.arrBase)+', col. T do Facturação sem duplicados) × % renovação + pipeline CRM aberto ('+fmt(d.pipeOpen)+') × % conversão + novo negócio · Objetivo: '+fmt(d.obj)+' ('+d.objLbl+')</div>';
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:12px">';
     cols.forEach(function(c){var r=scenCalc(c[0]);var pct=d.obj>0?Math.round(r.total/d.obj*100):0;
       h+='<div style="background:#fff;border:1px solid #E4E8EB;border-top:3px solid '+c[2]+';border-radius:12px;padding:13px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;color:'+c[2]+'">'+c[1]+'</div><div style="font-size:20px;font-weight:800;margin:3px 0">'+fmt(r.total)+'</div><div style="font-size:11px;color:'+(pct>=100?GRN:"#A6AEB6")+';font-weight:600">'+pct+'% do objetivo</div><div style="height:6px;background:#efe9df;border-radius:4px;margin-top:7px;overflow:hidden"><i style="display:block;height:100%;width:'+Math.min(100,Math.round(r.total/maxT*100))+'%;background:'+c[2]+'"></i></div><div style="font-size:10.5px;color:#7E8892;margin-top:7px;line-height:1.6">ARR renov.: <b>'+fmt(r.arrR)+'</b><br>Pipeline: <b>'+fmt(r.pipeC)+'</b><br>Novo negócio: <b>'+fmt(r.nb)+'</b></div></div>';});
@@ -5853,7 +5979,12 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   }
 
   // ===================== COBRANÇA DE VENCIDOS (dunning) =====================
-  function dunTerm(){return Number(D.paymentTermDays)||30;}
+  function dunTerm(){return Number(D.dunTermDays)||30;} // prazo de vencimento contratual (não o prazo médio real)
+  // Faturas em dívida = linhas do Facturação (Pipe Line) com estado Facturado e sem pagamento (col. K) — dinâmico com o import
+  function dunInvoices(){var out=[];try{porCobrarRows().forEach(function(r){out.push({id:"pl_"+r.d.id,dealId:r.d.id,date:r.date,amount:r.civa,num:r.num,collected:false});});}catch(e){}
+    if(!out.length)out=(D.invoices||[]).filter(function(i){return !i.collected&&!i.preERP;});return out;}
+  function dunFind(id){return dunInvoices().filter(function(i){return i.id===id;})[0]||(D.invoices||[]).filter(function(i){return i.id===id;})[0];}
+  function dunRef(iv){return String(iv.num||iv.id.replace(/^pl_/,"").slice(0,8)).toUpperCase();}
   function dunList(){return Array.isArray(D.dunning)?D.dunning:(D.dunning=[]);}
   function dunDue(iv){return addDays(iv.date||todayISO(),dunTerm());}
   function dunOverdue(iv){var d=Math.floor((new Date(todayISO())-new Date(dunDue(iv)))/86400000);return d;}
@@ -5867,7 +5998,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   function renderDunning(){
     var app=document.getElementById("app");if(!app)return;
     var canEdit=(currentRole==="admin"||canSeeTab("financeiro"))&&!isReadOnlyNow();
-    var unpaid=(D.invoices||[]).filter(function(i){return !i.collected;});
+    var unpaid=dunInvoices();
     var totDiv=unpaid.reduce(function(a,i){return a+(Number(i.amount)||0);},0);
     var venc=unpaid.filter(function(i){return dunOverdue(i)>0;});
     var totVenc=venc.reduce(function(a,i){return a+(Number(i.amount)||0);},0);
@@ -5889,7 +6020,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">Antiguidade de saldos</div>';
     ["corrente","d30","d60","d90","d90p"].forEach(function(k){var b=buckets[k];
       h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><div style="width:90px;font-size:12px;font-weight:600">'+b.l+'</div><div style="flex:1;height:8px;background:#efe9df;border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:'+Math.round(b.v/maxB*100)+'%;background:'+b.c+'"></i></div><div style="width:90px;text-align:right;font-weight:700">'+fmt(b.v)+'</div><div style="width:64px;text-align:right;font-size:11px;color:#A6AEB6">'+b.n+' fat.</div></div>';});
-    h+='<div style="font-size:11px;color:#A6AEB6;margin-top:6px">Vencimento = data da fatura + prazo de '+dunTerm()+' dias.</div></div>';
+    h+='<div style="font-size:11px;color:#A6AEB6;margin-top:6px">Vencimento = data da fatura + prazo de '+dunTerm()+' dias. Fonte: linhas do Facturação com estado Facturado e sem pagamento (coluna K) — atualiza ao importar.</div></div>';
 
     // tabela de vencidas
     h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">Faturas em dívida</div>';
@@ -5898,7 +6029,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
       unpaid.slice().sort(function(a,b){return dunOverdue(b)-dunOverdue(a);}).forEach(function(i){var cli=dunInvClient(i);var od=dunOverdue(i);var lv=dunLevelOf(i);
         var atraso=od>0?('<span style="color:'+(od>60?DNG:GD)+';font-weight:700">'+od+'d</span>'):'<span style="color:#A6AEB6">—</span>';
         var lvl=lv?bdg("Nível "+lv,lv>=3?DNG:GD):(od>0?bdg("Por enviar",SL):'<span style="color:#C6CDD4">—</span>');
-        h+='<tr><td style="font-weight:600">'+esc(cli?(cli.name||cli.nome||"—"):"—")+'</td><td style="font-size:11.5px;color:#7E8892">'+esc(i.id.slice(0,8))+'</td><td style="text-align:right;font-weight:700">'+fmt(i.amount)+'</td><td style="font-size:12px">'+esc(fmtD?fmtD(dunDue(i)):dunDue(i))+'</td><td style="text-align:right">'+atraso+'</td><td>'+lvl+'</td>'+(canEdit?('<td style="white-space:nowrap">'+(od>0?'<button class="btn bs" style="background:'+SL+'" onclick="dunEmail(\''+i.id+'\')">Lembrete</button>':'')+'</td>'):'')+'</tr>';});
+        h+='<tr><td style="font-weight:600">'+esc(cli?(cli.name||cli.nome||"—"):"—")+'</td><td style="font-size:11.5px;color:#7E8892">'+esc(dunRef(i))+'</td><td style="text-align:right;font-weight:700">'+fmt(i.amount)+'</td><td style="font-size:12px">'+esc(fmtD?fmtD(dunDue(i)):dunDue(i))+'</td><td style="text-align:right">'+atraso+'</td><td>'+lvl+'</td>'+(canEdit?('<td style="white-space:nowrap">'+(od>0?'<button class="btn bs" style="background:'+SL+'" onclick="dunEmail(\''+i.id+'\')">Lembrete</button>':'')+'</td>'):'')+'</tr>';});
       h+='</tbody></table></div>';}
     h+='</div>';
     app.innerHTML=h;
@@ -5907,7 +6038,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   function dunMsg(iv,level){
     var cli=dunInvClient(iv);var nome=cli?(cli.name||cli.nome||"Cliente"):"Cliente";
     var empresa=(D.fiscal&&D.fiscal.empresa&&D.fiscal.empresa.nome)||"a nossa empresa";
-    var od=dunOverdue(iv);var ref=iv.id.slice(0,8).toUpperCase();
+    var od=dunOverdue(iv);var ref=dunRef(iv);
     var head,body;
     if(level>=3){head="Aviso final — fatura "+ref+" em dívida";
       body="Exmos. Senhores de "+nome+",\n\nApesar dos nossos contactos anteriores, a fatura "+ref+" no valor de "+fmt(iv.amount)+", vencida a "+fmtD(dunDue(iv))+" ("+od+" dias em atraso), continua por liquidar.\n\nSolicitamos a regularização no prazo de 5 dias úteis. Na ausência de pagamento, seremos obrigados a suspender o serviço e a encaminhar o processo para cobrança.\n\nCaso o pagamento já tenha sido efetuado, agradecemos que ignore este aviso.\n\nCom os melhores cumprimentos,\n"+empresa;}
@@ -5919,7 +6050,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   }
 
   window.dunEmail=function(invId){
-    var iv=(D.invoices||[]).filter(function(i){return i.id===invId;})[0];if(!iv)return;
+    var iv=dunFind(invId);if(!iv)return;
     var next=dunLevelOf(iv)+1;if(next>3)next=3;
     var cli=dunInvClient(iv);var to=(cli&&(cli.email||cli.contactoEmail))||"";
     var m=dunMsg(iv,next);
@@ -5931,7 +6062,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
       '<div id="dun_msg" style="font-size:11.5px;color:#A6AEB6;margin-top:6px">O envio direto requer a função <code>send-email</code> publicada no Supabase. Sem ela, copia o texto e envia pelo teu email; depois usa "Registar como enviado".</div>';
     document.getElementById("mArea").innerHTML=mWrap("Lembrete de cobrança",body);
   };
-  window.dunRefresh=function(invId){var iv=(D.invoices||[]).filter(function(i){return i.id===invId;})[0];if(!iv)return;var lvl=Number((document.getElementById("dun_lvl")||{}).value)||1;var m=dunMsg(iv,lvl);var s=document.getElementById("dun_sub"),b=document.getElementById("dun_body");if(s)s.value=m.subject;if(b)b.value=m.body;};
+  window.dunRefresh=function(invId){var iv=dunFind(invId);if(!iv)return;var lvl=Number((document.getElementById("dun_lvl")||{}).value)||1;var m=dunMsg(iv,lvl);var s=document.getElementById("dun_sub"),b=document.getElementById("dun_body");if(s)s.value=m.subject;if(b)b.value=m.body;};
   window.dunCopy=function(){var b=document.getElementById("dun_body");if(!b)return;try{b.select();document.execCommand("copy");toastSafe("Texto copiado.","ok");}catch(e){toastSafe("Seleciona e copia manualmente.");}};
   function dunRecord(invId,level,to){if(!Array.isArray(D.dunning))D.dunning=[];D.dunning.push({id:"dn"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),invoiceId:invId,level:Number(level)||1,sentAt:new Date().toISOString(),to:to||""});}
   window.dunMark=function(invId){
@@ -5949,7 +6080,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     }catch(err){var mm4=document.getElementById("dun_msg");if(mm4)mm4.textContent="A função 'send-email' não está publicada/acessível. Copia o texto e envia manualmente; depois usa 'Registar como enviado'.";}
   };
   window.dunMarkAll=function(){
-    var unpaid=(D.invoices||[]).filter(function(i){return !i.collected&&dunDueForReminder(i);});
+    var unpaid=dunInvoices().filter(dunDueForReminder);
     if(!unpaid.length){toastSafe("Nada a lembrar.");return;}
     var doIt=function(){unpaid.forEach(function(iv){var next=dunLevelOf(iv)+1;if(next>3)next=3;var cli=dunInvClient(iv);dunRecord(iv.id,next,(cli&&cli.email)||"");});if(typeof logAct==="function")logAct("Cobrança",unpaid.length+" lembretes registados");save();ren();toastSafe(unpaid.length+" lembretes registados.","ok");};
     if(typeof confirmM==="function")confirmM("Registar lembretes para as <b>"+unpaid.length+"</b> faturas vencidas sem aviso recente? Sobe o nível de cada uma.",doIt,{yesLabel:"Registar"});else doIt();
@@ -7164,12 +7295,13 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   function renderForecast(){
     var app=document.getElementById("app");if(!app)return;var canEdit=!isReadOnlyNow();
     var y=(typeof activeYear==="function"?activeYear():new Date().getFullYear());
-    var open=(D.deals||[]).filter(function(d){return typeof isClosed==="function"?!isClosed(d):(d.stage!=="concluido"&&d.stage!=="perdido"&&d.stage!=="ganho");});
+    // pipeline = oportunidades do CRM em aberto (as linhas do Facturação são vendas já adjudicadas, não pipeline)
+    var open=(D.deals||[]).filter(function(d){if(d.src==="pipe")return false;return typeof isClosed==="function"?!isClosed(d):(d.stage!=="concluido"&&d.stage!=="perdido"&&d.stage!=="ganho");});
     var pond=open.reduce(function(a,d){return a+(d.value||0)*fcProb(d);},0);
     var bruto=open.reduce(function(a,d){return a+(d.value||0);},0);
-    var goal=Number(D.salesGoal)||Number(D.budget)||0;
-    // ganho/faturado este ano (realizado) — deals ganhos/concluidos com data no ano
-    var realizado=(D.deals||[]).filter(function(d){return (typeof isWon==="function"&&isWon(d))&&(d.date||"").slice(0,4)==String(y);}).reduce(function(a,d){return a+(d.value||0);},0);
+    var goal=Number(D.salesGoal)||objYear(y)||0; // orçamento do ano (ficheiro Orçamento: NV+AT)
+    // realizado = facturado no ano (H8+I8) + adjudicado ainda por facturar (F8+G8) — linhas do Facturação
+    var _fY=nvFatAno(y)+atFatAno(y),_pfY=porFacturarAno(y).total;var realizado=_fY+_pfY;
     // forecast ponderado do ano corrente por mês de fecho previsto
     var byMonth={};for(var m=0;m<12;m++)byMonth[m]={pond:0,bruto:0,n:0};
     open.forEach(function(d){var iso=fcCloseISO(d);if((iso||"").slice(0,4)!=String(y))return;var mm=parseInt(iso.slice(5,7),10)-1;if(mm<0||mm>11)return;byMonth[mm].pond+=(d.value||0)*fcProb(d);byMonth[mm].bruto+=(d.value||0);byMonth[mm].n++;});
@@ -7177,10 +7309,10 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     var previsaoAno=realizado+fcAno;
     var maxM=Math.max(1,Object.keys(byMonth).reduce(function(a,m){return Math.max(a,byMonth[m].bruto);},0));
     var h=pgHead("📈","Comercial — Forecast",canEdit?'<button class="btn" style="background:'+R+'" onclick="openGoal()">Objetivo anual</button>':'');
-    h+='<div class="kr">'+kpi("Pipeline ponderado",fmt(pond),"valor esperado em aberto",GRN,GRN)+kpi("Pipeline bruto",fmt(bruto),""+open.length+" oportunidades",BLU,BLU)+kpi("Realizado "+y,fmt(realizado),"já ganho",GRN,GRN)+kpi("Objetivo "+y,goal?fmt(goal):"—",goal?Math.round(previsaoAno/goal*100)+"% previsto":"define o objetivo",goal?(previsaoAno>=goal?GRN:GD):SL,goal?(previsaoAno>=goal?GRN:GD):SL)+'</div>';
+    h+='<div class="kr">'+kpi("Pipeline ponderado",fmt(pond),"valor esperado em aberto",GRN,GRN)+kpi("Pipeline bruto",fmt(bruto),""+open.length+" oportunidades",BLU,BLU)+kpi("Adjudicado "+y,fmt(realizado),"facturado "+fmt(_fY)+" + por facturar "+fmt(_pfY),GRN,GRN)+kpi("Objetivo "+y,goal?fmt(goal):"—",goal?Math.round(previsaoAno/goal*100)+"% previsto":"define o objetivo",goal?(previsaoAno>=goal?GRN:GD):SL,goal?(previsaoAno>=goal?GRN:GD):SL)+'</div>';
     // barra previsão vs objetivo
     if(goal){var pct=Math.min(100,Math.round(previsaoAno/goal*100));
-      h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">Previsão do ano vs objetivo</div><div style="font-size:12px;color:#7E8892;margin-bottom:6px">Realizado '+fmt(realizado)+' + forecast ponderado '+fmt(fcAno)+' = <b>'+fmt(previsaoAno)+'</b> · objetivo '+fmt(goal)+'</div>'+hbar(pct,previsaoAno>=goal?GRN:GD)+'</div>';}
+      h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">Previsão do ano vs objetivo</div><div style="font-size:12px;color:#7E8892;margin-bottom:6px">Facturado '+fmt(_fY)+' + adjudicado por facturar '+fmt(_pfY)+' + forecast ponderado (CRM) '+fmt(fcAno)+' = <b>'+fmt(previsaoAno)+'</b> · orçamento '+y+' '+fmt(goal)+'</div>'+hbar(pct,previsaoAno>=goal?GRN:GD)+'</div>';}
     // forecast por mês
     h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">Forecast ponderado por mês de fecho ('+y+')</div>';
     var any=false;
@@ -7224,7 +7356,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   }
   window.openGoal=function(){
     if(isReadOnlyNow()){toastSafe("Sem permissão.");return;}
-    var body=fld("Objetivo anual de vendas €",'<input type="number" id="gl_v" value="'+(Number(D.salesGoal)||Number(D.budget)||0)+'">')
+    var body=fld("Objetivo anual de vendas € (vazio/0 = usa o orçamento do ano)",'<input type="number" id="gl_v" value="'+(Number(D.salesGoal)||0)+'" placeholder="'+objYear()+'">')
       +'<div style="font-size:11.5px;color:#A6AEB6;margin:2px 0 10px">Serve de meta ao forecast. Por omissão usa o objetivo anual das Definições.</div>'
       +'<button class="btn" style="background:'+R+';width:100%" onclick="svGoal()">Guardar</button>';
     document.getElementById("mArea").innerHTML=mWrap("Objetivo de vendas",body);
@@ -7243,50 +7375,50 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   }
   function renderTesouraria(){
     var app=document.getElementById("app");if(!app)return;
-    var today=todayISO();
-    var termo=Number(D.paymentTermDays)||30; // prazo médio de recebimento
-    var unpaid=(D.invoices||[]).filter(function(i){return !i.collected;});
-    var porReceber=unpaid.reduce(function(a,i){return a+(Number(i.amount)||0);},0);
-    var pessoal=hrCustoTotalMes();var despMes=despesaMediaMes();var saidaMes=pessoal+despMes;
-    // janelas 30/60/90 dias
-    function invExpected(iso){return addDays(iso||today,termo);}
-    function windowSum(days){var lim=addDays(today,days);return unpaid.filter(function(i){var e=invExpected(i.date);return e<=lim;}).reduce(function(a,i){return a+(Number(i.amount)||0);},0);}
-    var wins=[30,60,90];
-    var h=pgHead("🏦","Operações — Tesouraria");
-    h+='<div class="kr">'+kpi("Por receber",fmt(porReceber),""+unpaid.length+" faturas em aberto",GD,GD)+kpi("Custo com pessoal",fmt(pessoal),"por mês (RH)",BLU,BLU)+kpi("Outras despesas",fmt(despMes),"média mensal",SL,SL)+kpi("Saída mensal estimada",fmt(saidaMes),"pessoal + despesas",R,R)+'</div>';
-    // orçamento vs real (mês a mês) — Passo 1 Operações
-    var yT=new Date().getFullYear();var mNow=new Date().getMonth();
-    var planoMes=(Number(D.budget)||Number(D.salesGoal)||0)/12;
-    var realMes={};for(var mi=0;mi<12;mi++)realMes[mi]=0;
-    (D.invoices||[]).forEach(function(i){if((i.date||"").slice(0,4)==String(yT)){var mm=parseInt(i.date.slice(5,7),10)-1;if(mm>=0&&mm<12)realMes[mm]+=(Number(i.amount)||0);}});
-    var maxMR=Math.max(planoMes,1);for(var mi2=0;mi2<12;mi2++)maxMR=Math.max(maxMR,realMes[mi2]);
+    var today=todayISO();var yT=activeYear();var yS=String(yT);var hoje=new Date();
+    var mNow=(yT===hoje.getFullYear())?hoje.getMonth():11;
+    var pm=prazoMedioCob(yT);var termo=Number(D.paymentTermDays)||pm.dias||60; // prazo médio de recebimento (real, calculado)
+    if(!D.paymentTermDays&&pm.dias)termo=pm.dias;
+    var pc=porCobrarRows();var porReceber=pc.reduce(function(a,r){return a+r.civa;},0);
+    var pf=porFacturarAno(yT);
+    // saídas reais do ano (pagamentos por data) → média mensal
+    var pg=pagamentosMes(yT);var nM=mNow+1;var opTot=0,impTot=0;for(var k=0;k<nM;k++){opTot+=pg.op[k];impTot+=pg.imp[k];}
+    var saidaMes=opTot/nM,impMes=impTot/nM;var cobM=cobradoMes(yT);var cobTot=0;for(var k2=0;k2<nM;k2++)cobTot+=cobM[k2];
+    var h=pgHead("🏦","Operações — Tesouraria",isReadOnlyNow()?"":'<button class="btn bs" style="background:'+TEAL+'" onclick="syncFacturacao()">📥 Atualizar com o Facturação</button>');
+    h+='<div class="kr">'+kpi("Por cobrar (faturado)",fmt(porReceber),pc.length+" faturas c/IVA",GD,GD)+kpi("Por facturar (adjudicado)",fmt(pf.total),"s/IVA — ainda sem fatura",PUR,PUR)+kpi("Recebido "+yS,fmt(cobTot),"média "+fmt(cobTot/nM)+"/mês",GRN,GRN)+kpi("Pagamentos operacionais",fmt(saidaMes),"média mensal "+yS+" (c/IVA)",R,R)+kpi("IVA/IRC entregues",fmt(impMes),"média mensal",SL,SL)+'</div>';
+    // ---------- Orçamento vs real (faturação mensal) ----------
+    var orc=orcAno(yT);var planoMes=orc.total/12;
+    var realMes=[0,0,0,0,0,0,0,0,0,0,0,0];(D.deals||[]).forEach(function(d){if(!_pr(d,yT))return;var f=String(d.factDate||"");if(f.slice(0,4)!==yS)return;var mm=+f.slice(5,7)-1;if(mm>=0&&mm<12)realMes[mm]+=Number(d.value)||0;});
     var cumP=0,cumR=0;
-    h+='<div class="cd"><div class="ct2" style="margin-bottom:6px">Orçamento vs real — faturação '+yT+'</div><div style="font-size:12px;color:#A6AEB6;margin-bottom:12px">Plano mensal '+fmt(planoMes)+' (objetivo anual ÷ 12) contra o faturado de cada mês. O desvio é acumulado.</div>';
-    if(planoMes<=0)h+='<div style="font-size:12.5px;color:#A6AEB6;margin-bottom:6px">Define o objetivo anual nas Definições (ou o objetivo de vendas no Forecast) para veres o plano.</div>';
-    h+='<div style="overflow-x:auto"><table><thead><tr><th>Mês</th><th style="text-align:right">Plano</th><th style="text-align:right">Real</th><th style="text-align:right">Desvio acum.</th></tr></thead><tbody>';
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:6px">Orçamento vs real — faturação '+yS+'</div><div style="font-size:12px;color:#A6AEB6;margin-bottom:12px">Plano mensal '+fmt(planoMes)+' = orçamento '+yS+' ('+fmt(orc.total)+': NV '+fmt(orc.nv)+' + AT '+fmt(orc.at)+') ÷ 12, contra o faturado (NV+AT, s/IVA, data de fatura do Facturação). O desvio é acumulado.</div>';
+    if(planoMes<=0)h+='<div style="font-size:12.5px;color:#A6AEB6;margin-bottom:6px">Sem orçamento para '+yS+' — importa o ficheiro Orçamento.</div>';
+    h+='<div style="overflow-x:auto"><table><thead><tr><th>Mês</th><th style="text-align:right">Plano</th><th style="text-align:right">Real</th><th style="text-align:right">Plano acum.</th><th style="text-align:right">Real acum.</th><th style="text-align:right">Desvio acum.</th></tr></thead><tbody>';
     for(var m2=0;m2<=mNow;m2++){cumP+=planoMes;cumR+=realMes[m2];var dev=cumR-cumP;
-      h+='<tr><td style="font-weight:600">'+MESES_F[m2]+'</td><td style="text-align:right;color:#A6AEB6">'+fmt(planoMes)+'</td><td style="text-align:right;font-weight:600">'+fmt(realMes[m2])+'</td><td style="text-align:right;font-weight:700;color:'+(dev>=0?GRN:DNG)+'">'+(dev>=0?"+":"−")+fmt(Math.abs(dev))+'</td></tr>';
-    }
+      h+='<tr><td style="font-weight:600">'+MESES_F[m2]+'</td><td style="text-align:right;color:#A6AEB6">'+fmt(planoMes)+'</td><td style="text-align:right;font-weight:600">'+fmt(realMes[m2])+'</td><td style="text-align:right;color:#A6AEB6">'+fmt(cumP)+'</td><td style="text-align:right">'+fmt(cumR)+'</td><td style="text-align:right;font-weight:700;color:'+(dev>=0?GRN:DNG)+'">'+(dev>=0?"+":"−")+fmt(Math.abs(dev))+'</td></tr>';}
     h+='</tbody></table></div></div>';
-    h+='<div class="cd"><div class="ct2" style="margin-bottom:6px">Previsão de caixa</div><div style="font-size:12px;color:#A6AEB6;margin-bottom:12px">Entradas esperadas (faturas por receber, com prazo médio de '+termo+' dias) menos saídas estimadas (pessoal + despesas). Não inclui o saldo bancário atual.</div>';
-    h+='<div style="overflow-x:auto"><table><thead><tr><th>Janela</th><th style="text-align:right">Entradas esperadas</th><th style="text-align:right">Saídas estimadas</th><th style="text-align:right">Saldo do período</th></tr></thead><tbody>';
-    wins.forEach(function(days){var meses=days/30;var ent=windowSum(days);var sai=saidaMes*meses;var net=ent-sai;
-      h+='<tr><td style="font-weight:600">Próximos '+days+' dias</td><td style="text-align:right;color:'+GRN+';font-weight:600">+'+fmt(ent)+'</td><td style="text-align:right;color:'+R+';font-weight:600">−'+fmt(sai)+'</td><td style="text-align:right;font-weight:700;color:'+(net>=0?GRN:DNG)+'">'+(net>=0?"+":"−")+fmt(Math.abs(net))+'</td></tr>';
-    });
+    // ---------- Previsão de caixa ----------
+    function exp(r){return addDays(r.date||today,termo);}
+    var venc=pc.filter(function(r){return exp(r)<today;});var vencTot=venc.reduce(function(a,r){return a+r.civa;},0);
+    var fut=pc.filter(function(r){return exp(r)>=today;});
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:6px">Previsão de caixa</div>';
+    h+='<div style="font-size:12px;color:#7E8892;line-height:1.6;margin-bottom:12px"><b>Como funciona:</b> as <b>entradas</b> são as faturas ainda por cobrar (c/IVA), com recebimento esperado em <b>data da fatura + '+termo+' dias</b> (prazo médio real de cobrança '+yS+': '+pm.dias+' dias, '+pm.n+' faturas pagas). As <b>saídas</b> são a média mensal real dos pagamentos operacionais de '+yS+' ('+fmt(saidaMes)+') mais a média de IVA/IRC entregues ('+fmt(impMes)+'). As faturas já <b>vencidas</b> ('+venc.length+', '+fmt(vencTot)+') não entram nas janelas porque a data é incerta — aparecem à parte. Não inclui saldo bancário nem o adjudicado ainda por facturar.</div>';
+    h+='<div style="overflow-x:auto"><table><thead><tr><th>Janela</th><th style="text-align:right">Entradas esperadas</th><th style="text-align:right">Saídas estimadas</th><th style="text-align:right">Saldo do período</th><th style="text-align:right">+ se cobrar vencidas</th></tr></thead><tbody>';
+    [30,60,90].forEach(function(days){var lim=addDays(today,days);var ent=fut.filter(function(r){return exp(r)<=lim;}).reduce(function(a,r){return a+r.civa;},0);var sai=(saidaMes+impMes)*days/30;var net=ent-sai;var net2=net+vencTot;
+      h+='<tr><td style="font-weight:600">Próximos '+days+' dias</td><td style="text-align:right;color:'+GRN+';font-weight:600">+'+fmt(ent)+'</td><td style="text-align:right;color:'+R+';font-weight:600">−'+fmt(sai)+'</td><td style="text-align:right;font-weight:700;color:'+(net>=0?GRN:DNG)+'">'+(net>=0?"+":"−")+fmt(Math.abs(net))+'</td><td style="text-align:right;color:'+(net2>=0?GRN:DNG)+'">'+(net2>=0?"+":"−")+fmt(Math.abs(net2))+'</td></tr>';});
     h+='</tbody></table></div>';
-    if(!isReadOnlyNow())h+='<div style="margin-top:10px;font-size:11.5px;color:#A6AEB6">Prazo médio de recebimento: <input type="number" value="'+termo+'" onchange="setPaymentTerm(this.value)" style="width:60px;border:1px solid #E4E8EB;border-radius:6px;padding:3px 6px;font-size:12px;font-family:inherit"> dias</div>';
+    if(!isReadOnlyNow())h+='<div style="margin-top:10px;font-size:11.5px;color:#A6AEB6">Prazo de recebimento usado: <input type="number" value="'+termo+'" onchange="setPaymentTerm(this.value)" style="width:60px;border:1px solid #E4E8EB;border-radius:6px;padding:3px 6px;font-size:12px;font-family:inherit"> dias '+(D.paymentTermDays?'<a style="color:'+R+';cursor:pointer" onclick="D.paymentTermDays=0;save();ren()">(repor prazo real '+pm.dias+'d)</a>':'(prazo real calculado)')+'</div>';
     h+='</div>';
-    // faturas por receber
-    h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">Faturas por receber ('+unpaid.length+')</div><div style="overflow-x:auto"><table><thead><tr><th>Cliente</th><th>Data fatura</th><th>Receb. esperado</th><th style="text-align:right">Valor</th></tr></thead><tbody>';
-    if(!unpaid.length)h+='<tr><td colspan="4" style="text-align:center;padding:20px;color:#A6AEB6">Sem faturas por receber. 🎉</td></tr>';
-    unpaid.slice().sort(function(a,b){return (a.date||"").localeCompare(b.date||"");}).forEach(function(i){
-      var dl=(D.deals||[]).filter(function(d){return d.id===i.dealId;})[0]||{};var exp=addDays(i.date||today,termo);var late=exp<today;
-      h+='<tr><td style="font-weight:600">'+esc(cn(dl.clientId)||"—")+'</td><td style="font-size:12px">'+(i.date?fmtD(i.date):"—")+'</td><td style="font-size:12px;color:'+(late?R:"#7E8892")+';font-weight:'+(late?700:400)+'">'+fmtD(exp)+(late?" (vencido)":"")+'</td><td style="text-align:right;font-weight:700">'+fmt(i.amount||0)+'</td></tr>';
-    });
+    // ---------- Faturas por receber (Facturação 2024/2025/2026: J=Facturado, K≠pago) ----------
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">Faturas por receber ('+pc.length+' · '+fmt(porReceber)+')</div><div style="font-size:11.5px;color:#A6AEB6;margin-bottom:8px">Linhas do Facturação com estado <b>Facturado</b> e ainda sem pagamento (coluna K). Atualiza sozinho quando importas o Facturação com os pagamentos.</div><div style="overflow-x:auto"><table><thead><tr><th>Cliente</th><th>Fatura</th><th>Data fatura</th><th style="text-align:right">Dias</th><th>Receb. esperado</th><th style="text-align:right">Valor c/IVA</th></tr></thead><tbody>';
+    if(!pc.length)h+='<tr><td colspan="6" style="text-align:center;padding:20px;color:#A6AEB6">Sem faturas por receber. 🎉</td></tr>';
+    pc.slice(0,400).forEach(function(r){var e=exp(r);var late=e<today;
+      h+='<tr style="cursor:pointer" onclick="openClient(\''+r.d.clientId+'\')"><td style="font-weight:600">'+esc(r.cli||"—")+'</td><td style="font-size:12px;color:#7E8892">'+esc(r.num||"—")+'</td><td style="font-size:12px">'+(r.date?fmtD(r.date):"—")+'</td><td style="text-align:right;color:'+(r.dias>180?DNG:r.dias>90?GD:"#7E8892")+';font-weight:600">'+r.dias+'</td><td style="font-size:12px;color:'+(late?R:"#7E8892")+';font-weight:'+(late?700:400)+'">'+fmtD(e)+(late?" (vencido)":"")+'</td><td style="text-align:right;font-weight:700">'+fmt(r.civa)+'</td></tr>';});
+    if(pc.length>400)h+='<tr><td colspan="6" style="text-align:center;color:#A6AEB6;font-size:12px">A mostrar as 400 mais antigas de '+pc.length+'.</td></tr>';
     h+='</tbody></table></div></div>';
     app.innerHTML=h;
   }
-  window.setPaymentTerm=function(v){if(isReadOnlyNow())return;D.paymentTermDays=Number(v)||30;save();ren();};
+  window.pipeMarkPaid=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyNow())return;var d=dealById(id);if(!d)return;if(!confirm("Marcar esta fatura como recebida hoje? (No próximo import do Facturação prevalece a coluna K/L do ficheiro.)"))return;d.paid=true;d.payDate=todayISO();if(typeof logAct==="function")logAct("Financeiro","Fatura marcada como recebida — "+cn(d.clientId)+" "+(d.fatNum||""));save();ren();};
+  window.setPaymentTerm=function(v){if(isReadOnlyNow())return;D.paymentTermDays=Number(v)||0;save();ren();};
 
   // ===================== CLIENTES · MAPA & CARTEIRA (Passo 3) =====================
   function clientValor(clientId){var ds=(D.deals||[]).filter(function(d){return d.clientId===clientId;});return ds.filter(function(d){return typeof isWon==="function"?isWon(d):false;}).reduce(function(a,d){return a+(d.value||0);},0);}
@@ -7331,11 +7463,23 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   window.clientCustoComercial=clientCustoComercial;
   function renderRentabilidade(){
     var app=document.getElementById("app");if(!app)return;
-    var cls=(D.clients||[]).map(function(c){var fat=clientFaturado(c.id)-((typeof clientNClegal==="function")?clientNClegal(c.id):0);var cst=clientCustoProjetos(c.id);var com=(typeof clientCustoComercial==="function")?clientCustoComercial(c.id):0;return {c:c,fat:fat,cst:cst,com:com,mrg:fat-cst-com};}).filter(function(x){return x.fat!==0||x.cst>0;});
+    // Filtro: total (todos os anos) ou por ano. Por ano: faturado = linhas do Facturação pela data de fatura (sem IVA); custos pela data do registo/projeto.
+    var _ry=window.__rentAno||"";var yrs=(typeof yearsInData==="function"?yearsInData():[]).map(String);
+    var _fatY=null;if(_ry){_fatY={};var _hasPipe=false;(D.deals||[]).forEach(function(d){if(_pr(d,_ry)&&String(d.factDate||"").slice(0,4)===_ry&&d.stFat==="Facturado"){_hasPipe=true;_fatY[d.clientId]=(_fatY[d.clientId]||0)+(Number(d.value)||0);}});
+      if(!_hasPipe){(D.invoices||[]).forEach(function(i){if(String(i.date||"").slice(0,4)!==_ry)return;var dd=dealById(i.dealId);if(dd)_fatY[dd.clientId]=(_fatY[dd.clientId]||0)+(Number(i.amount)||0);});}}
+    function _yOf(x){return String(x||"").slice(0,4);}
+    function _cstY(cid){var ds=(D.deals||[]).filter(function(d){return d.clientId===cid;});var byD={};ds.forEach(function(d){byD[d.id]=d;});var withProj={};var c=0;
+      (D.projectos||[]).forEach(function(p){var d=byD[p.dealId];if(!d)return;withProj[p.dealId]=1;var y=_yOf(p.inicio||p.dataInicio||p.start||d.factDate||d.adj||d.date);if(y===_ry)c+=projMaoObra(p);});
+      (D.timesheets||[]).forEach(function(t){if(!byD[t.dealId]||withProj[t.dealId])return;if(_yOf(t.data||t.date)!==_ry)return;c+=(Number(t.horas)||0)*((t.valorHora!=null&&t.valorHora!=="")?Number(t.valorHora):hrRate());});return c;}
+    function _comY(cid){return (typeof reuList==="function"?reuList():[]).filter(function(r){return r.clientId===cid&&_yOf(r.data||r.date)===_ry;}).reduce(function(a,r){return a+((typeof reuCusto==="function")?reuCusto(r):0);},0);}
+    var cls=(D.clients||[]).map(function(c){var fat,cst,com;if(_ry){fat=_fatY[c.id]||0;cst=_cstY(c.id);com=_comY(c.id);}else{fat=clientFaturado(c.id)-((typeof clientNClegal==="function")?clientNClegal(c.id):0);cst=clientCustoProjetos(c.id);com=(typeof clientCustoComercial==="function")?clientCustoComercial(c.id):0;}return {c:c,fat:fat,cst:cst,com:com,mrg:fat-cst-com};}).filter(function(x){return x.fat!==0||x.cst>0||x.com>0;});
     cls.sort(function(a,b){return b.mrg-a.mrg;});
     var totFat=cls.reduce(function(a,x){return a+x.fat;},0);var totCst=cls.reduce(function(a,x){return a+x.cst;},0);var totCom=cls.reduce(function(a,x){return a+(x.com||0);},0);var totMrg=totFat-totCst-totCom;
     var h=pgHead("📊","Operações — Rentabilidade por cliente");
-    h+='<div class="kr">'+kpi("Faturado",fmt(totFat),"total",BLU,BLU)+kpi("Custo de projetos",fmt(totCst),"horas × custo/hora",GD,GD)+kpi("Custo comercial",fmt(totCom),"visitas & reuniões",PUR,PUR)+kpi("Margem",fmt(totMrg),totFat>0?Math.round(totMrg/totFat*100)+"%":"",totMrg>=0?GRN:DNG,totMrg>=0?GRN:DNG)+kpi("Clientes",""+cls.length,"com atividade",PUR,PUR)+'</div>';
+    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px"><span style="font-size:11px;color:#7E8892;font-weight:600">Período:</span>';
+    [""].concat(yrs).forEach(function(y){var on=(_ry===y);h+='<button onclick="window.__rentAno=\''+y+'\';rPnl()" style="padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid '+(on?R:"#E4E8EB")+';background:'+(on?R:"#fff")+';color:'+(on?"#fff":"#1B2733")+'">'+(y||"Total")+'</button>';});
+    h+='</div>';
+    h+='<div class="kr">'+kpi("Faturado",fmt(totFat),_ry?("faturado em "+_ry+" (s/IVA)"):"total todos os anos",BLU,BLU)+kpi("Custo de projetos",fmt(totCst),"horas × custo/hora",GD,GD)+kpi("Custo comercial",fmt(totCom),"visitas & reuniões",PUR,PUR)+kpi("Margem",fmt(totMrg),totFat>0?Math.round(totMrg/totFat*100)+"%":"",totMrg>=0?GRN:DNG,totMrg>=0?GRN:DNG)+kpi("Clientes",""+cls.length,"com atividade",PUR,PUR)+'</div>';
     // mapa de custos consolidado (Passo 4)
     var custoPessoal=hrCustoTotalMes();var custoDesp=despesaMediaMes();var custoTotalMes=custoPessoal+custoDesp;
     if(custoTotalMes>0){var maxCst=Math.max(custoPessoal,custoDesp,1);
@@ -8900,17 +9044,21 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   function renderSubscricoes(){
     var app=document.getElementById("app");if(!app)return;
     var canEdit=!(typeof isReadOnlyNow==="function"&&isReadOnlyNow());
-    var fCli=window.__subCli||"";
-    var list=recurItems(fCli).sort(function(a,b){var ra=a.renov||"9999-99",rb=b.renov||"9999-99";return ra.localeCompare(rb);});
-    var allF=recurItems("");
+    var fCli=window.__subCli||"";var _sy=String(activeYear());var _sAll=!!window.__subAll;
+    // por omissão só as renovações do ano ativo (ex.: 2026); "Todas" mostra toda a recorrência
+    var _inY=function(x){return _sAll||String(x.renov||"").slice(0,4)===_sy;};
+    var list=recurItems(fCli).filter(_inY).sort(function(a,b){var ra=a.renov||"9999-99",rb=b.renov||"9999-99";return ra.localeCompare(rb);});
+    var allF=recurItems("").filter(_inY);
     var arrTot=allF.reduce(function(a,x){return a+(Number(x.arr)||0);},0);
     var arrNext=allF.reduce(function(a,x){return a+(Number(x.arr)||0)*(1+(Number(x.aum)||0)/100);},0);
     var valTot=allF.reduce(function(a,x){return a+(Number(x.valor)||0);},0);
     var days=function(dt){return dt?Math.round((new Date(dt+"T00:00:00")-new Date(todayISO()+"T00:00:00"))/86400000):null;};
-    var soon=allF.filter(function(x){var dd=days(x.renov);return dd!=null&&dd<=60;});
+    // a renovar: só o que ainda não foi facturado (as linhas do Facturação já facturadas estão renovadas)
+    var soon=allF.filter(function(x){var dd=days(x.renov);if(x.obj&&x.obj.stFat==="Facturado")return false;return dd!=null&&dd<=60;});
     var h=pgHead("🔁","Subscrições / AT & Contratos",canEdit?'<button class="btn bs" style="background:'+TEAL+'" onclick="openUnirSub()">⤵ Unir subscrições</button>':"");
+    h+='<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px"><span style="font-size:11px;color:#7E8892;font-weight:600">Renovações:</span>'+[[false,"Só "+_sy],[true,"Todas"]].map(function(o){var on=_sAll===o[0];return '<button onclick="window.__subAll='+o[0]+';rPnl()" style="padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid '+(on?R:"#E4E8EB")+';background:'+(on?R:"#fff")+';color:'+(on?"#fff":"#1B2733")+'">'+o[1]+'</button>';}).join("")+'</div>';
     h+='<div style="font-size:12px;color:#7E8892;margin:-4px 0 12px">Receita recorrente do cliente num só sítio — subscrições/AT (negócios ganhos) e contratos/licenças. Não geram projeto. O <b>ARR</b> daqui é a base dos orçamentos; a <b>caixa de aumento (%)</b> projeta o ARR do próximo ano.</div>';
-    h+='<div class="kr">'+kpi("Itens",String(allF.length),"subscrições + contratos",PUR,PUR)+kpi("ARR total",fmt(arrTot),"receita recorrente/ano",GRN,GRN)+kpi("ARR próx. ano",fmt(Math.round(arrNext)),"com aumentos aplicados",BLU,BLU)+kpi("A renovar (60d)",String(soon.length),"próximas renovações",soon.length?GD:SL,soon.length?GD:SL)+'</div>';
+    h+='<div class="kr">'+kpi("Itens",String(allF.length),_sAll?"subscrições + contratos":"renovam em "+_sy,PUR,PUR)+kpi(_sAll?"ARR total":"ARR a renovar "+_sy,fmt(arrTot),"receita recorrente/ano",GRN,GRN)+kpi("ARR próx. ano",fmt(Math.round(arrNext)),"com aumentos aplicados",BLU,BLU)+kpi("A renovar (60d)",String(soon.length),"por facturar · próximas/atrasadas",soon.length?GD:SL,soon.length?GD:SL)+'</div>';
     if(soon.length){
       h+='<div style="background:'+rgba(GD,.1)+';border:1px solid '+rgba(GD,.35)+';border-radius:10px;padding:11px 13px;margin-bottom:12px"><div style="font-weight:700;font-size:12.5px;color:#8a6d1a;margin-bottom:5px">⏰ Renovações nos próximos 60 dias ('+soon.length+')</div>';
       soon.slice().sort(function(a,b){return (a.renov||"").localeCompare(b.renov||"");}).forEach(function(x){var dd=days(x.renov);h+='<div style="font-size:12px;color:#414D57;padding:2px 0">'+esc(cn(x.clientId))+' — '+esc(String(x.nome||"").slice(0,44))+' · <b>'+fmtD(x.renov)+'</b> '+(dd<0?'<span style="color:'+R+'">(em atraso '+(-dd)+'d)</span>':'<span style="color:#8a6d1a">(faltam '+dd+'d)</span>')+'</div>';});
@@ -9138,55 +9286,49 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     h+='<tr style="font-weight:700;border-top:2px solid #E4E8EB;color:'+GD+'"><td>FSE que é internamente vencimento</td>'+Y.map(function(y){return '<td style="text-align:right">'+fmt(fseTot[y])+'</td>';}).join("")+'</tr>';
     h+='<tr style="font-weight:700"><td>TOTAL pago</td>'+Y.map(function(y){return '<td style="text-align:right">'+fmt(pagTot[y])+'</td>';}).join("")+'</tr>';
     h+='</table></div></div>';
-    // per person
-    var ppl=Object.keys(g.persons).map(function(k){var pp=g.persons[k];var tc=0,td=0;Y.forEach(function(y){var e=pp.y[y]||{};tc+=e.cred||0;td+=e.deb||0;});return{k:k,nome:pp.nome||k,y:pp.y,tc:tc,td:td};}).filter(function(x){return x.tc||x.td;}).sort(function(a,b){return b.tc-a.tc;});
-    h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">POR COLABORADOR — atribuído (crédito) vs pago (débito)</div><div style="overflow-x:auto"><table><tr><th>Colaborador</th>'+Y.map(function(y){return '<th style="text-align:right">'+y+' atrib.</th><th style="text-align:right">'+y+' pago</th>';}).join("")+'<th style="text-align:right">Saldo aprox.</th></tr>';
-    ppl.forEach(function(x){h+='<tr><td style="font-size:12px">'+esc(x.nome)+'</td>'+Y.map(function(y){var e=x.y[y]||{};return '<td style="text-align:right;color:'+GRN+'">'+(e.cred?fmt(e.cred):"—")+'</td><td style="text-align:right;color:#7E8892">'+(e.deb?fmt(e.deb):"—")+'</td>';}).join("")+'<td style="text-align:right;font-weight:600">'+fmt(x.tc-x.td)+'</td></tr>';});
-    h+='</table></div><div style="font-size:11px;color:#A6AEB6;margin-top:8px">Crédito = gratificação atribuída no ano (custo). Débito = pago no ano. Saldo aprox. = por liquidar no período em vista.</div></div>';
+    // por colaborador — conta-corrente do ano: saldo inicial (Transporte) + atribuído − pago = saldo final
+    var gy=window.__gratAno||lastY;
+    h+='<div class="cd" style="padding:10px 12px;margin-bottom:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:11px;color:#7E8892;font-weight:700">Ano:</span>'+Y.map(function(y){var on=(y===gy);return '<button onclick="window.__gratAno=\''+y+'\';rPnl()" style="padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid '+(on?TEAL:"#E4E8EB")+';background:'+(on?TEAL:"#fff")+';color:'+(on?"#fff":"#1B2733")+'">'+y+'</button>';}).join("")+'</div>';
+    var ppl=Object.keys(g.persons).map(function(k){var pp=g.persons[k];var e=(pp.y||{})[gy]||null;return {k:k,nome:pp.nome||k,saiu:!!pp.saiu,e:e};}).filter(function(x){return x.e&&(x.e.ini||x.e.cred||x.e.deb||x.e.fim);}).sort(function(a,b){return (b.e.fim||0)-(a.e.fim||0);});
+    var T={ini:0,cred:0,deb:0,fim:0};ppl.forEach(function(x){T.ini+=x.e.ini||0;T.cred+=x.e.cred||0;T.deb+=x.e.deb||0;T.fim+=x.e.fim||0;});
+    h+='<div class="kr">'+kpi("Saldo inicial "+gy,fmt(T.ini),"transporte do ano anterior",SL,SL)+kpi("Atribuído "+gy,fmt(T.cred),"crédito",GRN,GRN)+kpi("Pago "+gy,fmt(T.deb),"débito",BLU,BLU)+kpi("Saldo por liquidar",fmt(T.fim),"fim de "+gy,PUR,PUR)+'</div>';
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">CONTA-CORRENTE POR COLABORADOR — '+gy+'</div><div style="overflow-x:auto"><table><tr><th>Colaborador</th><th style="text-align:right">Saldo inicial</th><th style="text-align:right">Atribuído</th><th style="text-align:right">Pago</th><th style="text-align:right">Saldo final</th></tr>';
+    ppl.forEach(function(x){var e=x.e;h+='<tr><td style="font-size:12px;font-weight:600">'+esc(x.nome)+' <span style="font-size:10px;color:#A6AEB6">'+esc(x.k)+'</span>'+(x.saiu?' <span style="font-size:9.5px;color:'+SL+';border:1px solid #E4E8EB;border-radius:6px;padding:0 5px">saiu</span>':'')+'</td><td style="text-align:right;color:#7E8892">'+fmt(e.ini||0)+'</td><td style="text-align:right;color:'+GRN+'">'+(e.cred?fmt(e.cred):"—")+'</td><td style="text-align:right">'+(e.deb?fmt(e.deb):"—")+'</td><td style="text-align:right;font-weight:700;color:'+((e.fim||0)<0?DNG:"#1B2733")+'">'+fmt(e.fim||0)+'</td></tr>';});
+    h+='<tr style="font-weight:800;border-top:2px solid #E4E8EB"><td>TOTAL</td><td style="text-align:right">'+fmt(T.ini)+'</td><td style="text-align:right">'+fmt(T.cred)+'</td><td style="text-align:right">'+fmt(T.deb)+'</td><td style="text-align:right">'+fmt(T.fim)+'</td></tr>';
+    h+='</table></div><div style="font-size:11px;color:#A6AEB6;margin-top:8px">Cada ano começa no <b>Transporte</b> (saldo que vem do ano anterior) — sem ele 2023 ficaria errado. Os anos são lidos do cabeçalho de cada bloco da folha CC, por isso quem saiu da empresa fica no último ano em que teve movimentos (ex.: Mónica Martins até 2024).'+(g.resumo2026&&gy==="2026"?' Saldo por liquidar 2026 confere com o RESUMO do ficheiro: '+fmt(g.resumo2026.saldoPorLiquidar)+'.':'')+'</div></div>';
     app.innerHTML=h;
   }
   window.renderGratificacoes=renderGratificacoes;
   // ===== Simulação AT do próximo ano (réplica das colunas S/T do Facturação · Pipe Line) =====
   // Regra do ficheiro: S = aumento; T = S × valor(s/IVA). Adjudicação>=NY → ×1 (0%, mantém); <NY-1 → ×0 (não transita);
   // tipo M(=AT) ou SUB no ano NY-1 → ×(1+aumento%); one-shots (SV/HV/SMV/SUV/EV/DV s/ sub) → ×0.
-  function simProxAno(aumPct){
-    var NY=(new Date().getFullYear())+1;
-    if(aumPct==null)aumPct=(D.projSimAum!=null?D.projSimAum:5);
-    var f=1+(Number(aumPct)||0)/100;
-    var o={NY:NY,aum:Number(aumPct)||0,total:0,at:0,sub:0,carry:0,n5:0,n0:0,nEx:0,rows:[]};
-    (D.deals||[]).forEach(function(dl){
-      if(dl.src!=="pipe")return;
-      var adj=String(dl.adj||dl.date||"").slice(0,10);if(!adj)return;
-      var v=Number(dl.value)||0,mult,cat;
-      if(adj>=NY+"-01-01"){mult=1;cat="carry";o.n0++;o.carry+=v;}
-      else if(adj<(NY-1)+"-01-01"){mult=0;cat="ex";o.nEx++;}
-      else if(dl.type==="AT"){mult=f;cat="at";o.n5++;o.at+=v*f;}
-      else if(dl.sub){mult=f;cat="sub";o.n5++;o.sub+=v*f;}
-      else{mult=0;cat="ex";o.nEx++;}
-      if(mult>0){var proj=v*mult;o.total+=proj;o.rows.push({cli:cn(dl.clientId),prod:String(dl.product||""),tipo:(dl.type||"")+(dl.sub?"·SUB":""),val:v,mult:mult,proj:proj,cat:cat});}
-    });
-    o.rows.sort(function(a,b){return b.proj-a.proj;});
-    return o;
-  }
+  // Compatibilidade: simProxAno passa a ser a projeção pela coluna T do Facturação (projProxAno)
+  function simProxAno(aumPct){var p=projProxAno(aumPct);return {NY:p.NY,aum:(aumPct==null?5:aumPct),total:p.total,at:p.at,sub:p.nv,carry:p.carry,rows:p.rows};}
   window.simProxAno=simProxAno;
-  var AT_NY_REF=1387947.32; // alvo do teu ficheiro Facturação 2026 (a3a97d8f) — AT2027 = SUM(T)
+  window.projToggleExcl=function(id,val){if(typeof isReadOnlyNow==="function"&&isReadOnlyNow()){toastSafe("Sem permissão.");return;}D.projExcl=D.projExcl||{};D.projExcl[id]=!!val;save();rPnl();};
   function renderProjProxAno(){
     var app=document.getElementById("app");if(!app)return;
-    var aum=(window.__projSimAum!=null?window.__projSimAum:(D.projSimAum!=null?D.projSimAum:5));
-    var s=simProxAno(aum);var NY=s.NY;
+    var aum=(window.__projSimAum!=null?window.__projSimAum:null); // null = valores do ficheiro (coluna S: 105%)
+    var s=projProxAno(aum);var NY=s.NY;
     var objAT=(D.orcamento&&D.orcamento[String(NY)]&&Number(D.orcamento[String(NY)].at))||0;
-    function btn(p){return '<button onclick="window.__projSimAum='+p+';rPnl()" style="padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid '+(aum===p?TEAL:"#E4E8EB")+';background:'+(aum===p?TEAL:"#fff")+';color:'+(aum===p?"#fff":"#1B2733")+'">'+p+'%</button>';}
+    var fileTot=0;(D.deals||[]).forEach(function(d){if(_pr(d))fileTot+=Number(d.tProx)||0;});
+    function btn(p,lbl){var on=(aum===p);return '<button onclick="window.__projSimAum='+(p===null?'null':p)+';rPnl()" style="padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid '+(on?TEAL:"#E4E8EB")+';background:'+(on?TEAL:"#fff")+';color:'+(on?"#fff":"#1B2733")+'">'+lbl+'</button>';}
     var h=pgHead("🔮","Projeção próximo ano · "+NY,'<button class="btn bs" style="background:#7E8892" onclick="window.print()">🖨️ Imprimir</button>');
-    h+='<div class="ins"><div style="font-size:12.5px;color:#7E8892;line-height:1.7">Simulação da <b>base recorrente que transita para '+NY+'</b>, réplica das colunas <b>S (Aumento)</b> e <b>T (Valor)</b> do teu Facturação · Pipe Line.<br>Regra: cada <b>M/AT</b> e <b>subscrição</b> adjudicada em '+(NY-1)+' renova com o aumento escolhido; o que já está adjudicado para '+NY+' mantém o valor (0%); <b>one-shots</b> (SV/HV/SMV/SUV) e anteriores a '+(NY-1)+' não transitam.</div></div>';
-    h+='<div class="cd" style="padding:12px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="font-size:11px;color:#7E8892;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Aumento aplicado</span>'+btn(0)+btn(5)+btn(10)+'<span style="font-size:11px;color:#A6AEB6;margin-left:8px">no ficheiro é 5% na maioria das linhas e 0% nas já adjudicadas para '+NY+'</span></div>';
+    h+='<div class="ins"><div style="font-size:12.5px;color:#7E8892;line-height:1.7">Base recorrente que transita para <b>'+NY+'</b> = <b>coluna T do Facturação</b> (S × valor): <b>105%</b> para M/AT e subscrições do ano, <b>100%</b> para o que já está adjudicado para '+NY+', <b>0</b> não transita (one-shots, anteriores). Respeita os zeros que puseste à mão no ficheiro. Retiro ainda os <b>duplicados</b>: cliente que já tem valor '+NY+' e a mesma linha do ano corrente ×1,05 (ou nota de crédito).</div></div>';
+    h+='<div class="cd" style="padding:12px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="font-size:11px;color:#7E8892;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Aumento nas renovações</span>'+btn(null,"Ficheiro (5%)")+btn(0,"0%")+btn(10,"10%")+'<span style="font-size:11px;color:#A6AEB6;margin-left:8px">o que já está adjudicado para '+NY+' mantém sempre o valor</span></div>';
     var pctObj=objAT>0?Math.round(s.total/objAT*100):0;
-    h+='<div class="kr">'+kpi("Base recorrente "+NY,fmt(s.total),s.n5+" a "+aum+"% · "+s.n0+" a manter",TEAL,TEAL)+kpi("M / AT",fmt(s.at),"manutenções",BLU,BLU)+kpi("Subscrições",fmt(s.sub),"SUB",PUR,PUR)+kpi("Já adjudicado "+NY,fmt(s.carry),"mantém valor (0%)",GRN,GRN)+'</div>';
-    h+='<div class="kr">'+kpi("Objetivo AT "+NY,fmt(objAT),objAT?pctObj+"% já projetado":"sem objetivo",GD,G)+kpi("Alvo ficheiro (5%)",fmt(AT_NY_REF),"AT2027 no teu Facturação",SL,SL)+kpi("Diferença p/ ficheiro",fmt(s.total-AT_NY_REF),Math.abs(s.total-AT_NY_REF)<50000?"alinhado":"deals a mais no ERP",Math.abs(s.total-AT_NY_REF)<50000?GRN:GD,Math.abs(s.total-AT_NY_REF)<50000?GRN:GD)+'</div>';
+    h+='<div class="kr">'+kpi("Base recorrente "+NY,fmt(s.total),"sem duplicados",TEAL,TEAL)+kpi("M / AT",fmt(s.at),"renovações do ano",BLU,BLU)+kpi("Subscrições",fmt(s.nv),"SUB renovam",PUR,PUR)+kpi("Já adjudicado "+NY,fmt(s.carry),"100% (mantém valor)",GRN,GRN)+'</div>';
+    h+='<div class="kr">'+kpi("Objetivo AT "+NY,fmt(objAT),objAT?pctObj+"% já assegurado":"sem objetivo",GD,G)+kpi("Coluna T do ficheiro",fmt(fileTot),"todas as linhas",SL,SL)+kpi("Duplicados retirados",fmt(s.excl),s.cand.filter(function(c){return c.excl;}).length+" linhas",DNG,DNG)+'</div>';
+    // duplicados
+    if(s.cand.length){
+      h+='<div class="cd" style="border-left:3px solid '+GD+'"><div class="ct2" style="margin-bottom:6px">POSSÍVEIS DUPLICADOS — clientes que já têm valor '+NY+'</div><div style="font-size:12px;color:#7E8892;margin-bottom:10px">Os marcados <b>saem</b> da projeção. Marquei automaticamente os claros (mesmo produto, ou nota de crédito). Os outros ficam contados — se algum for renovação já incluída no valor '+NY+', marca-o.</div><div style="overflow-x:auto"><table><tr><th style="width:40px">Sai</th><th>Cliente</th><th>Linha '+(NY-1)+' (×1,05)</th><th style="text-align:right">Valor '+NY+'</th><th>Já tem em '+NY+'</th></tr>';
+      s.cand.slice().sort(function(a,b){return (b.auto-a.auto)||(cn(a.d.clientId)<cn(b.d.clientId)?-1:1);}).forEach(function(c){var n27=(D.deals||[]).filter(function(x){return _pr(x)&&x.clientId===c.d.clientId&&_padj(x)>=NY+"-01-01"&&Number(x.tProx);}).map(function(x){return esc(String(x.product||"").slice(0,40))+" ("+fmt(x.tProx)+")";}).join("<br>");
+        h+='<tr style="'+(c.excl?'background:#FBF3F2':'')+'"><td style="text-align:center"><input type="checkbox" '+(c.excl?'checked':'')+' onchange="projToggleExcl(\''+c.d.id+'\',this.checked)"></td><td style="font-weight:600">'+esc(cn(c.d.clientId))+(c.auto?' <span style="font-size:9.5px;color:'+GD+';font-weight:700">auto</span>':'')+'</td><td style="color:#7E8892">'+esc(String(c.d.product||"").slice(0,48))+'</td><td style="text-align:right;font-weight:700;'+(c.excl?'text-decoration:line-through;color:#A6AEB6':'')+'">'+fmt(c.t)+'</td><td style="font-size:11.5px;color:#414D57">'+n27+'</td></tr>';});
+      h+='</table></div></div>';}
     var cap=400,shown=s.rows.slice(0,cap);
-    h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">SIMULAÇÃO POR CONTRATO — '+s.rows.length+' linhas recorrentes</div><div style="overflow-x:auto"><table><tr><th>Cliente</th><th>Produto</th><th>Tipo</th><th style="text-align:right">Valor atual</th><th style="text-align:center">Aumento</th><th style="text-align:right">Valor '+NY+'</th></tr>';
-    shown.forEach(function(r){var pctlbl=r.cat==="carry"?"0%":(Math.round((r.mult-1)*100)+"%");h+='<tr><td style="font-weight:600">'+esc(r.cli)+'</td><td style="color:#7E8892">'+esc(r.prod.slice(0,38))+'</td><td><span style="font-size:10px;font-weight:700;color:'+(r.cat==="carry"?GRN:(r.cat==="sub"?PUR:BLU))+'">'+esc(r.tipo)+'</span></td><td style="text-align:right">'+fmt(r.val)+'</td><td style="text-align:center;color:'+(r.mult>1?GRN:SL)+';font-weight:600">'+pctlbl+'</td><td style="text-align:right;font-weight:700">'+fmt(r.proj)+'</td></tr>';});
-    h+='<tr style="border-top:2px solid #E4E8EB"><td colspan="5" style="text-align:right;font-weight:700">TOTAL BASE RECORRENTE '+NY+'</td><td style="text-align:right;font-weight:800;color:'+TEAL+'">'+fmt(s.total)+'</td></tr>';
-    h+='</table></div>';
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">BASE RECORRENTE '+NY+' POR CONTRATO — '+s.rows.length+' linhas</div><div style="overflow-x:auto"><table><tr><th>Cliente</th><th>Produto</th><th>Tipo</th><th style="text-align:right">Valor '+(NY-1)+'</th><th style="text-align:center">S</th><th style="text-align:right">Valor '+NY+'</th></tr>';
+    shown.forEach(function(r){var d=r.d;var m=Number(d.sMult)||0;var lbl=_padj(d)>=NY+"-01-01"?"100%":(aum==null?Math.round(m*100)+"%":(100+aum)+"%");h+='<tr><td style="font-weight:600">'+esc(cn(d.clientId))+'</td><td style="color:#7E8892">'+esc(String(d.product||"").slice(0,40))+'</td><td><span style="font-size:10px;font-weight:700;color:'+(_padj(d)>=NY+"-01-01"?GRN:(d.nat==="AT"?BLU:PUR))+'">'+esc((d.type||"")+(d.sub?"·SUB":""))+'</span></td><td style="text-align:right">'+fmt(d.value)+'</td><td style="text-align:center;color:#7E8892">'+lbl+'</td><td style="text-align:right;font-weight:700">'+fmt(r.t)+'</td></tr>';});
+    h+='<tr style="border-top:2px solid #E4E8EB"><td colspan="5" style="text-align:right;font-weight:700">TOTAL BASE RECORRENTE '+NY+'</td><td style="text-align:right;font-weight:800;color:'+TEAL+'">'+fmt(s.total)+'</td></tr></table></div>';
     if(s.rows.length>cap)h+='<div style="font-size:11px;color:#A6AEB6;margin-top:8px">A mostrar as '+cap+' maiores de '+s.rows.length+'. O total inclui todas.</div>';
     h+='</div>';
     app.innerHTML=h;
@@ -9239,72 +9381,79 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     var COMS=["Cv","Pn","Ar","Espanha","Angola","Outros"];
     var V={SV:1,EV:1,DV:1,HV:1};
     function comOf(dl){return dl.com||"Outros";}
-    // invoice por dealId (facturado)
-    var invByDeal={};D.invoices.forEach(function(i){if(i.dealId)invByDeal[i.dealId]=i;});
-    // acumular adjudicadas e facturadas
+    // Réplica exata da DashVendas do Facturação: SUMIFS sobre o Pipe Line com os padrões da coluna P de cada linha
+    // (wildcards do Excel, sem distinção de maiúsculas). K/L: F="*V" e G no ano; O/P: F="*V" e I>=1/jan; SUB conta ×2.
+    function _pm(pat){if(Array.isArray(pat)){var fs=pat.map(_pm);return function(v){return fs.some(function(f){return f(v);});};}if(pat==="*O*-NOR"){return function(v){v=String(v||"").toUpperCase();return v.indexOf("O")>=0&&v.indexOf("NOR")<0;};}pat=String(pat).toUpperCase();if(pat.charAt(0)==="*"&&pat.slice(-1)==="*"){var core=pat.slice(1,-1);return function(v){return String(v||"").toUpperCase().indexOf(core)>=0;};}return function(v){return String(v||"").toUpperCase().trim()===pat;};}
+    // CP-NOR / RE-NOR contam para o Pedro Nogueira (PN)
+    var _PN=["*PN*","*NOR*"];
+    var PAT={adjK:{Cv:"*CV*",Pn:_PN,Ar:"*AR*",Espanha:"ES",Angola:"A",Outros:"O"},adjL:{Cv:"*CV*",Pn:_PN,Ar:"*AR*",Espanha:"*ES*",Angola:"A",Outros:"O"},
+             fat:{Cv:"*CV*",Pn:_PN,Ar:"*AR*",Espanha:"*ES*",Angola:"A",Outros:"*O*-NOR"},atT:{Cv:"*CV*",Pn:_PN,Ar:"*AR*",Espanha:"ES",Angola:"A"},atU:{Cv:"*CV*",Pn:_PN,Ar:"*AR*",Espanha:"ES",Angola:"A",Outros:"O"}};
+    var _a1=_y+"-01-01",_a2=(+_y+1)+"-01-01";
+    var _PL=(D.deals||[]).filter(function(dl){return _pr(dl,_y);});
+    function _sum(cond){var t=0;_PL.forEach(function(dl){if(cond(dl))t+=Number(dl.value)||0;});return t;}
     function calc(mode){
-      var res={};COMS.forEach(function(c){res[c]={lic:0,sub:0,fat:0};});
-      D.deals.forEach(function(dl){
-        if(dl.src!=="pipe"||!V[dl.type])return;
-        var c=comOf(dl);if(!res[c])res[c]={lic:0,sub:0,fat:0};
-        var v=Number(dl.value)||0;
-        if(mode==="adj"){if(String(dl.date||"").slice(0,4)!==_y)return;}
-        else{var inv=invByDeal[dl.id];var fd=inv?(inv.date||""):"";if(!dl.fatNum||fd.slice(0,4)!==_y)return;}
-        if(dl.sub)res[c].sub+=v;else res[c].lic+=v;
-        var inv2=invByDeal[dl.id];if(inv2&&String(inv2.date||"").slice(0,4)===_y)res[c].fat+=Number(inv2.amount)||0;
-      });
+      var res={};COMS.forEach(function(c){var tot,sub;
+        if(mode==="adj"){var mK=_pm(PAT.adjK[c]),mL=_pm(PAT.adjL[c]);
+          tot=_sum(function(dl){var g=_padj(dl);return dl.nat==="NV"&&mK(dl.vendedor)&&g>=_a1&&g<_a2;});
+          sub=_sum(function(dl){var g=_padj(dl);return dl.nat==="NV"&&dl.sub&&mL(dl.vendedor)&&g>=_a1&&g<_a2;});}
+        else{var mF=_pm(PAT.fat[c]);
+          tot=_sum(function(dl){return dl.nat==="NV"&&mF(dl.vendedor)&&String(dl.factDate||"")>=_a1;});
+          sub=_sum(function(dl){return dl.nat==="NV"&&dl.sub&&mF(dl.vendedor)&&String(dl.factDate||"")>=_a1;});}
+        // K = total − L/2 (licenciamentos) ; L = SUB×2 ; fat = valor real facturado (sem ×2)
+        res[c]={lic:tot-sub,sub:sub,fat:tot};});
       return res;
     }
     var adj=calc("adj"),fat=calc("fat");
+    var CNM={Cv:"CV · Carlos Veneno",Pn:"PN · Pedro Nogueira (inclui CP-NOR/RE-NOR)",Ar:"AR · Ana Rita Rodrigues",Espanha:"Espanha · Hugo Amaral (ES)",Angola:"Angola · Francisco Duarte (A)",Outros:"Outros · Francisco Duarte (O)"};
     function tot(res){var o={lic:0,sub:0,fat:0,orc:0,nv:0};COMS.forEach(function(c){o.lic+=res[c].lic;o.sub+=res[c].sub;o.fat+=res[c].fat;o.orc+=(PO[c]||0);o.nv+=res[c].lic+res[c].sub*2;});return o;}
-    var tA=tot(adj);
+    var tA=tot(adj),tF=tot(fat);
     var h=pgHead("🎯","Objetivos Comerciais (Prémio) — "+_y,yearPicker());
-    // metric cards
-    h+='<div class="kr">'+kpi("Licenciamentos",fmt(tA.lic),"conta × 1",BLU,BLU)+kpi("Subscrições ×2",fmt(tA.sub*2),"col. SUB conta × 2",BLU,BLU)+kpi("Total NV para prémio",fmt(tA.nv),(tA.orc?pc(tA.nv,tA.orc)+"% do orç. "+fmt(tA.orc):""),GRN,GRN)+kpi("NV facturado",fmt(tA.fat),(tA.orc?pc(tA.fat,tA.orc)+"% do orçamento":""),GD,GD)+'</div>';
-    // regra
-    h+='<div class="ins" style="margin-bottom:14px;border-left:3px solid '+BLU+'"><div style="font-size:12.5px;color:#4a453d;line-height:1.7"><b>Regra do prémio:</b> novas vendas (tipo termina em <b>V</b>: SV/EV/DV/HV) adjudicadas no ano. <b>Licenciamentos</b> (col. SUB vazia) contam ×1; <b>Subscrições</b> (col. SUB) contam <b>×2</b>. Total NV = licenciamentos + subscrições×2, comparado com o orçamento de cada comercial.</div></div>';
+    h+='<div class="kr">'+kpi("NV facturado (prémio)",fmt(tF.nv),(tF.orc?pc(tF.nv,tF.orc)+"% do orç. "+fmt(tF.orc):""),GRN,GRN)+kpi("Licenc. facturados",fmt(tF.lic),"conta × 1",BLU,BLU)+kpi("Subscrições facturadas ×2",fmt(tF.sub*2),"col. SUB conta × 2",BLU,BLU)+kpi("NV adjudicado (prémio)",fmt(tA.nv),(tA.orc?pc(tA.nv,tA.orc)+"% do orçamento":""),GD,GD)+'</div>';
+    h+='<div class="ins" style="margin-bottom:14px;border-left:3px solid '+BLU+'"><div style="font-size:12.5px;color:#4a453d;line-height:1.7"><b>Regra do prémio (DashVendas):</b> novas vendas (col. F termina em <b>V</b>). <b>Licenciamentos</b> (col. E vazia) contam ×1; <b>Subscrições</b> (col. E = SUB) contam <b>×2</b>. Comercial pela coluna P. <b>Facturadas</b> = data de fatura (col. I) no ano — é esta a base das comissões; <b>Adjudicadas</b> = data de adjudicação (col. G) no ano.</div></div>';
     function tbl(res,titulo,badge){
-      var h2='<div class="cd"><div class="ct2" style="margin-bottom:4px">'+titulo+' <span style="font-size:10px;color:#A6AEB6">'+badge+'</span></div><div style="overflow-x:auto"><table><tr><th>Comercial</th><th style="text-align:right">Orçam.</th><th style="text-align:right">Licenc.</th><th style="text-align:right;color:'+BLU+'">Subs ×2</th><th style="text-align:right">Total NV</th><th style="text-align:right">% orç.</th><th style="text-align:right">Facturado</th><th style="text-align:right">% fat.</th></tr>';
+      var h2='<div class="cd"><div class="ct2" style="margin-bottom:4px">'+titulo+' <span style="font-size:10px;color:#A6AEB6">'+badge+'</span></div><div style="overflow-x:auto"><table><tr><th>Comercial</th><th style="text-align:right">Orçam.</th><th style="text-align:right">Licenc.</th><th style="text-align:right;color:'+BLU+'">Subs ×2</th><th style="text-align:right">Total NV</th><th style="text-align:right">% orç.</th><th style="text-align:right">Valor real (s/ ×2)</th></tr>';
       var T={lic:0,sub2:0,nv:0,orc:0,fat:0};
-      COMS.forEach(function(c){var e=res[c]||{lic:0,sub:0,fat:0};var s2=e.sub*2;var nv=e.lic+s2;var orc=PO[c]||0;T.lic+=e.lic;T.sub2+=s2;T.nv+=nv;T.orc+=orc;T.fat+=e.fat;var po=orc?Math.round(nv/orc*100):0;var pf=orc?Math.round(e.fat/orc*100):0;
-        h2+='<tr><td style="font-weight:600">'+c+'</td><td style="text-align:right">'+fmt(orc)+'</td><td style="text-align:right">'+fmt(e.lic)+'</td><td style="text-align:right;color:'+BLU+'">'+fmt(s2)+'</td><td style="text-align:right;font-weight:700">'+fmt(nv)+'</td><td style="text-align:right">'+bdg(po+"%",po>=100?GRN:(po>=60?GD:DNG))+'</td><td style="text-align:right">'+fmt(e.fat)+'</td><td style="text-align:right">'+bdg(pf+"%",pf>=75?GRN:(pf>=40?GD:DNG))+'</td></tr>';});
-      var pot=T.orc?Math.round(T.nv/T.orc*100):0,pft=T.orc?Math.round(T.fat/T.orc*100):0;
-      h2+='<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>TOTAL</td><td style="text-align:right">'+fmt(T.orc)+'</td><td style="text-align:right">'+fmt(T.lic)+'</td><td style="text-align:right;color:'+BLU+'">'+fmt(T.sub2)+'</td><td style="text-align:right">'+fmt(T.nv)+'</td><td style="text-align:right">'+bdg(pot+"%",pot>=100?GRN:(pot>=60?GD:DNG))+'</td><td style="text-align:right">'+fmt(T.fat)+'</td><td style="text-align:right">'+bdg(pft+"%",pft>=75?GRN:(pft>=40?GD:DNG))+'</td></tr>';
+      COMS.forEach(function(c){var e=res[c]||{lic:0,sub:0,fat:0};var s2=e.sub*2;var nv=e.lic+s2;var orc=PO[c]||0;T.lic+=e.lic;T.sub2+=s2;T.nv+=nv;T.orc+=orc;T.fat+=e.fat;var po=orc?Math.round(nv/orc*100):0;
+        h2+='<tr><td style="font-weight:600">'+CNM[c]+'</td><td style="text-align:right">'+fmt(orc)+'</td><td style="text-align:right">'+fmt(e.lic)+'</td><td style="text-align:right;color:'+BLU+'">'+fmt(s2)+'</td><td style="text-align:right;font-weight:700">'+fmt(nv)+'</td><td style="text-align:right">'+bdg(po+"%",po>=100?GRN:(po>=60?GD:DNG))+'</td><td style="text-align:right;color:#7E8892">'+fmt(e.fat)+'</td></tr>';});
+      var pot=T.orc?Math.round(T.nv/T.orc*100):0;
+      h2+='<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>TOTAL</td><td style="text-align:right">'+fmt(T.orc)+'</td><td style="text-align:right">'+fmt(T.lic)+'</td><td style="text-align:right;color:'+BLU+'">'+fmt(T.sub2)+'</td><td style="text-align:right">'+fmt(T.nv)+'</td><td style="text-align:right">'+bdg(pot+"%",pot>=100?GRN:(pot>=60?GD:DNG))+'</td><td style="text-align:right;color:#7E8892">'+fmt(T.fat)+'</td></tr>';
       return h2+'</table></div></div>';
     }
-    // progress bars (adjudicadas)
-    h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">ATINGIMENTO POR COMERCIAL (adjudicadas '+_y+')</div>';
-    COMS.forEach(function(c){var e=adj[c]||{lic:0,sub:0,fat:0};var nv=e.lic+e.sub*2;var orc=PO[c]||0;var p=orc?Math.round(nv/orc*100):0;var col=p>=100?GRN:(p>=50?GD:DNG);
-      h+='<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><b>'+c+'</b><span style="color:#7E8892">'+fmt(nv)+' / '+fmt(orc)+'</span></div><div style="background:#EDF0F2;border-radius:5px;height:12px;overflow:hidden"><div style="height:12px;border-radius:5px;background:'+col+';width:'+Math.min(100,Math.max(0,p))+'%"></div></div><div style="font-size:11px;color:#A6AEB6;margin-top:3px">'+p+'% · lic. '+fmt(e.lic)+' + subs×2 '+fmt(e.sub*2)+' | fact. '+fmt(e.fat)+'</div></div>';});
+    // 1) NV FACTURADAS (primeiro) · 2) atingimento · 3) NV ADJUDICADAS
+    h+=tbl(fat,"NV FACTURADAS "+_y,"por data de fatura (col. I) — DashVendas O/P/Q");
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">ATINGIMENTO POR COMERCIAL (NV facturado '+_y+')</div>';
+    COMS.forEach(function(c){var e=fat[c]||{lic:0,sub:0,fat:0};var nv=e.lic+e.sub*2;var orc=PO[c]||0;var p=orc?Math.round(nv/orc*100):0;var col=p>=100?GRN:(p>=50?GD:DNG);
+      h+='<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><b>'+CNM[c]+'</b><span style="color:#7E8892">'+fmt(nv)+' / '+fmt(orc)+'</span></div><div style="background:#EDF0F2;border-radius:5px;height:12px;overflow:hidden"><div style="height:12px;border-radius:5px;background:'+col+';width:'+Math.min(100,Math.max(0,p))+'%"></div></div><div style="font-size:11px;color:#A6AEB6;margin-top:3px">'+p+'% · lic. '+fmt(e.lic)+' + subs×2 '+fmt(e.sub*2)+'</div></div>';});
     h+='</div>';
-    h+=tbl(adj,"NV ADJUDICADAS "+_y,"por data de adjudicação");
-    h+=tbl(fat,"NV FACTURADAS "+_y,"por data de fatura");
+    h+=tbl(adj,"NV ADJUDICADAS "+_y,"por data de adjudicação (col. G) — DashVendas K/L/M");
     // ===== AT (manutenções) por comercial — réplica DashVendas cols T/U =====
     var atR={};COMS.forEach(function(c){atR[c]={orc:0,fat:0};});
-    D.deals.forEach(function(dl){
-      if(dl.src!=="pipe"||dl.type!=="AT")return;var c=comOf(dl);if(!atR[c])atR[c]={orc:0,fat:0};
-      var v=Number(dl.value)||0,aj=String(dl.adj||dl.date||"").slice(0,10),fd=String(dl.factDate||"").slice(0,10);
-      if(aj>=_y+"-01-01"&&aj<(+_y+1)+"-01-01")atR[c].orc+=v;else if(dl.stFat==="Pendente"&&aj<_y+"-01-01")atR[c].orc+=v;
-      if(fd>=_y+"-01-01")atR[c].fat+=v;
-    });
+    var _atTot=_sum(function(dl){var g=_padj(dl);return dl.nat==="AT"&&((g>=_a1&&g<_a2)||(dl.stFat==="Pendente"&&g&&g<_a1));});
+    var _atOth=0;
+    COMS.forEach(function(c){var mU=_pm(PAT.atU[c]);atR[c].fat=_sum(function(dl){return dl.nat==="AT"&&mU(dl.vendedor)&&String(dl.factDate||"")>=_a1;});
+      if(PAT.atT[c]){var mT=_pm(PAT.atT[c]);atR[c].orc=_sum(function(dl){var g=_padj(dl);return dl.nat==="AT"&&mT(dl.vendedor)&&((g>=_a1&&g<_a2)||(dl.stFat==="Pendente"&&g&&g<_a1));});_atOth+=atR[c].orc;}});
+    atR.Outros.orc=_atTot-_atOth; // T17 = total − restantes
     var atT={orc:0,fat:0};COMS.forEach(function(c){atT.orc+=atR[c].orc;atT.fat+=atR[c].fat;});
-    h+='<div class="cd"><div class="ct2" style="margin-bottom:4px">AT — MANUTENÇÕES '+_y+' <span style="font-size:10px;color:#A6AEB6">facturação recorrente</span></div><div style="overflow-x:auto"><table><tr><th>Comercial</th><th style="text-align:right">Orçamento</th><th style="text-align:right">Facturado</th><th style="text-align:right">%</th></tr>';
-    COMS.forEach(function(c){var e=atR[c];var p=e.orc?Math.round(e.fat/e.orc*100):0;h+='<tr><td style="font-weight:600">'+c+'</td><td style="text-align:right">'+fmt(e.orc)+'</td><td style="text-align:right">'+fmt(e.fat)+'</td><td style="text-align:right">'+bdg(p+"%",p>=75?GRN:(p>=40?GD:DNG))+'</td></tr>';});
+    h+='<div class="cd"><div class="ct2" style="margin-bottom:4px">AT — MANUTENÇÕES '+_y+' <span style="font-size:10px;color:#A6AEB6">DashVendas T/U · orçamento = M adjudicado no ano + M pendente de anos anteriores</span></div><div style="overflow-x:auto"><table><tr><th>Comercial</th><th style="text-align:right">Orçamento</th><th style="text-align:right">Facturado</th><th style="text-align:right">%</th></tr>';
+    COMS.forEach(function(c){var e=atR[c];var p=e.orc?Math.round(e.fat/e.orc*100):0;h+='<tr><td style="font-weight:600">'+CNM[c]+'</td><td style="text-align:right">'+fmt(e.orc)+'</td><td style="text-align:right">'+fmt(e.fat)+'</td><td style="text-align:right">'+bdg(p+"%",p>=75?GRN:(p>=40?GD:DNG))+'</td></tr>';});
     var atp=atT.orc?Math.round(atT.fat/atT.orc*100):0;
     h+='<tr style="font-weight:700;border-top:2px solid #E4E8EB"><td>TOTAL</td><td style="text-align:right">'+fmt(atT.orc)+'</td><td style="text-align:right">'+fmt(atT.fat)+'</td><td style="text-align:right">'+bdg(atp+"%",atp>=75?GRN:(atp>=40?GD:DNG))+'</td></tr></table></div></div>';
-    // ===== TOTAL NV+AT =====
-    var totNVfat=0;COMS.forEach(function(c){totNVfat+=fat[c].lic+fat[c].sub*2;});
-    var totFat=totNVfat+atT.fat;var objNVAT=(tA.orc||0)+atT.orc;
-    h+='<div class="cd" style="border-left:3px solid '+PUR+'"><div class="ct2" style="margin-bottom:8px">TOTAL NV + AT '+_y+'</div><div class="kr" style="margin:0">'+kpi("Objetivo NV+AT",fmt(objNVAT),"NV "+fmt(tA.orc)+" + AT "+fmt(atT.orc),PUR,PUR)+kpi("Facturado NV+AT",fmt(totFat),(objNVAT?pc(totFat,objNVAT)+"% do objetivo":""),GD,GD)+'</div></div>';
-    // ===== REGRAS DE GRATIFICAÇÕES E COMISSÕES (do teu ficheiro) + elegibilidade =====
-    var objFatEmp=(D.orcamento&&D.orcamento[_y]&&Number(D.orcamento[_y].totalProv))||1700000;
-    var fatEmp=0;D.invoices.forEach(function(i){if(i.preERP||i.notInv)return;if(String(i.date||"").slice(0,4)===_y)fatEmp+=Number(i.amount)||0;});
+    // ===== TOTAL NV+AT — réplica X7/Y7: X = orçamento NV (J) + orçamento AT (T); Y = licenciamentos facturados (O) + AT facturado (U) =====
+    var objNVAT=(tF.orc||0)+atT.orc;var totFat=tF.lic+atT.fat;
+    var fReal=nvFatAno(_y)+atFatAno(_y);
+    h+='<div class="cd" style="border-left:3px solid '+PUR+'"><div class="ct2" style="margin-bottom:8px">TOTAL NV + AT '+_y+'</div><div class="kr" style="margin:0">'+kpi("Orçamento NV+AT",fmt(objNVAT),"NV "+fmt(tF.orc)+" + AT "+fmt(atT.orc),PUR,PUR)+kpi("Facturado NV+AT (DashVendas)",fmt(totFat),(objNVAT?pc(totFat,objNVAT)+"% · licenc. "+fmt(tF.lic)+" + AT "+fmt(atT.fat):""),GD,GD)+kpi("Facturado real (H8+I8)",fmt(fReal),"NV "+fmt(nvFatAno(_y))+" + AT "+fmt(atFatAno(_y))+" s/ ×2",SL,SL)+'</div>';
+    // nota sobre a regra corrigida (Angola) e o Y7 do ficheiro
+    var _arDup=_sum(function(dl){var v=String(dl.vendedor||"").toUpperCase();return dl.nat==="NV"&&v.indexOf("A")>=0&&v.trim()!=="A"&&v.indexOf("AR")>=0&&String(dl.factDate||"")>=_a1;});var _arDupSub=_sum(function(dl){var v=String(dl.vendedor||"").toUpperCase();return dl.nat==="NV"&&dl.sub&&v.trim()!=="A"&&v.indexOf("AR")>=0&&String(dl.factDate||"")>=_a1;});
+    h+='<div style="font-size:11.5px;color:#8a6d1a;background:'+rgba(GD,.08)+';border:1px solid '+rgba(GD,.3)+';border-radius:8px;padding:9px 11px;margin-top:10px;line-height:1.6">ℹ️ <b>Diferenças face à DashVendas:</b> (1) <b>Angola facturado</b> usa a regra corrigida — só a coluna P = "A" (o ficheiro, em O16/P16, usa "*A*" e soma também as linhas CP-AR/RE-AR'+(_arDup?': '+fmt(_arDup)+' de valor real, '+fmt(_arDup+_arDupSub)+' a ×2, que no ficheiro aparecem em duplicado':'')+'). Por isso o NV facturado total da app fica abaixo do Q7 do ficheiro nesse valor. Para o Excel ficar igual, muda "*A*" para "A" em O16 e P16. (2) CP-NOR/RE-NOR contam para o PN. (3) O total facturado NV+AT segue o Y7 do ficheiro (licenciamentos + AT, sem as subscrições).</div></div>';
+    // ===== GRATIFICAÇÕES E COMISSÕES — por data de faturação (NV facturado) =====
+    var objFatEmp=objYear(+_y)||1700000;
+    var fatEmp=fReal;
     var empPct=objFatEmp?Math.round(fatEmp/objFatEmp*100):0;var empOk=fatEmp>=objFatEmp;
-    var mesH1=new Date().getMonth()>=6;var h1Ok=(fatEmp/objFatEmp)>=0.40;
-    h+='<div class="cd" style="border-left:3px solid '+(empOk?GRN:GD)+'"><div class="ct2" style="margin-bottom:8px">GRATIFICAÇÕES &amp; COMISSÕES — REGRAS E ELEGIBILIDADE</div>';
-    h+='<div style="background:'+rgba(empOk?GRN:GD,.08)+';border:1px solid '+rgba(empOk?GRN:GD,.3)+';border-radius:9px;padding:10px 12px;margin-bottom:12px;font-size:12.5px"><b>Porta da empresa:</b> comissões só são devidas a partir de <b>100% do objetivo de facturação</b> ('+fmt(objFatEmp)+'). Atual: <b style="color:'+(empOk?GRN:GD)+'">'+fmt(fatEmp)+' ('+empPct+'%)</b> — '+(empOk?'✅ porta aberta.':'⚠️ ainda fechada; faltam '+fmt(objFatEmp-fatEmp)+'.')+' <span style="color:#7E8892">Antecipação de 50% no fim do 1.º semestre se ≥40% em 30 Jun ('+(h1Ok?'≥40% atingido':'<40%')+').</span></div>';
-    h+='<div style="overflow-x:auto"><table><tr><th>Comercial</th><th style="text-align:right">Objetivo (NV)</th><th style="text-align:right">NV realizado</th><th style="text-align:right">% pessoal</th><th style="text-align:center">≥50%?</th><th style="text-align:center">Direito a comissão</th></tr>';
-    COMS.forEach(function(c){var nv=adj[c].lic+adj[c].sub*2;var orc=PO[c]||0;var pp=orc?Math.round(nv/orc*100):0;var p50=nv>=orc*0.5;var direito=empOk&&p50;h+='<tr><td style="font-weight:600">'+c+'</td><td style="text-align:right">'+fmt(orc)+'</td><td style="text-align:right">'+fmt(nv)+'</td><td style="text-align:right">'+pp+'%</td><td style="text-align:center">'+(p50?'<span style="color:'+GRN+'">Sim</span>':'<span style="color:'+DNG+'">Não</span>')+'</td><td style="text-align:center">'+(direito?'<span style="color:'+GRN+';font-weight:700">Sim</span>':'<span style="color:'+SL+'">Não</span>')+'</td></tr>';});
+    var h1Ok=(fatEmp/objFatEmp)>=0.40;
+    h+='<div class="cd" style="border-left:3px solid '+(empOk?GRN:GD)+'"><div class="ct2" style="margin-bottom:8px">GRATIFICAÇÕES &amp; COMISSÕES — REGRAS E ELEGIBILIDADE <span style="font-size:10px;color:#A6AEB6">por data de faturação</span></div>';
+    h+='<div style="background:'+rgba(empOk?GRN:GD,.08)+';border:1px solid '+rgba(empOk?GRN:GD,.3)+';border-radius:9px;padding:10px 12px;margin-bottom:12px;font-size:12.5px"><b>Porta da empresa:</b> comissões só são devidas a partir de <b>100% do objetivo de facturação</b> ('+fmt(objFatEmp)+'). Facturado '+_y+' (H8+I8): <b style="color:'+(empOk?GRN:GD)+'">'+fmt(fatEmp)+' ('+empPct+'%)</b> — '+(empOk?'✅ porta aberta.':'⚠️ ainda fechada; faltam '+fmt(objFatEmp-fatEmp)+'.')+' <span style="color:#7E8892">Antecipação de 50% no fim do 1.º semestre se ≥40% em 30 Jun ('+(h1Ok?'≥40% atingido':'<40%')+').</span></div>';
+    h+='<div style="overflow-x:auto"><table><tr><th>Comercial</th><th style="text-align:right">Objetivo (NV)</th><th style="text-align:right">NV facturado (×2 SUB)</th><th style="text-align:right">% pessoal</th><th style="text-align:center">≥50%?</th><th style="text-align:center">Direito a comissão</th></tr>';
+    COMS.forEach(function(c){var nv=fat[c].lic+fat[c].sub*2;var orc=PO[c]||0;var pp=orc?Math.round(nv/orc*100):0;var p50=nv>=orc*0.5;var direito=empOk&&p50;h+='<tr><td style="font-weight:600">'+CNM[c]+'</td><td style="text-align:right">'+fmt(orc)+'</td><td style="text-align:right">'+fmt(nv)+'</td><td style="text-align:right">'+pp+'%</td><td style="text-align:center">'+(p50?'<span style="color:'+GRN+'">Sim</span>':'<span style="color:'+DNG+'">Não</span>')+'</td><td style="text-align:center">'+(direito?'<span style="color:'+GRN+';font-weight:700">Sim</span>':'<span style="color:'+SL+'">Não</span>')+'</td></tr>';});
     h+='</table></div>';
     h+='<div style="font-size:11.5px;color:#7E8892;line-height:1.7;margin-top:10px"><b>Regras (do teu ficheiro):</b> Comerciais recebem % da facturação das vendas de que são responsáveis. Comissões apenas a partir de 100% do objetivo de facturação <b>da empresa</b>. Enquanto o comercial não atingir <b>50% do seu objetivo anual</b>, não tem direito a comissões. Se ultrapassar o objetivo pessoal e a empresa cumprir 100%, tem direito a comissão completa sobre a facturação pessoal atingida. <b>Subscrições valem o dobro</b> do valor real (objetivos da empresa e dos comerciais). Gratificações revistas caso a caso nas avaliações anuais.</div></div>';
     app.innerHTML=h;
@@ -9583,7 +9732,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     }catch(e){}
   };
   window.fixHourDecimals=function(){try{var reNode=/\d\.\d{3,}\s*h/;["app","mArea"].forEach(function(rid){var root=document.getElementById(rid);if(!root)return;var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null,false),n,list=[];while(n=w.nextNode()){if(reNode.test(n.nodeValue))list.push(n);}list.forEach(function(t){t.nodeValue=t.nodeValue.replace(/(\d+(?:\.\d+)?)\s*h\b/g,function(m,num){var v=parseFloat(num);return isFinite(v)?((Math.round(v*100)/100)+"h"):m;});});});}catch(e){}};
-  if(typeof rPnl==="function"){var _rpn=rPnl;rPnl=function(){var _x;try{_x=_rpn.apply(this,arguments);}catch(e){}try{fixHourDecimals();}catch(e){}try{paintNegatives();}catch(e){}return _x;};}
+  if(typeof rPnl==="function"){var _rpn=rPnl;rPnl=function(){var _x;try{_x=_rpn.apply(this,arguments);}catch(e){try{console.error("rPnl:",e&&e.stack||e);}catch(_){}}try{fixHourDecimals();}catch(e){}try{paintNegatives();}catch(e){}return _x;};}
   if(typeof rTabs==="function")try{rTabs();}catch(e){}
 
   // ===================== ANEXOS NO SUPABASE STORAGE =====================
@@ -9669,13 +9818,11 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
   // ===================== ACESSO POR DEPARTAMENTO (Fase 1) =====================
   var DEPT_GROUPS=[
     {group:"Direção",i:"🧭",dept:"direcao",items:[
-      {id:"dashboard",l:"Visão geral"},{id:"estrategia",l:"Análise & insights"},{id:"roicomercial",l:"Retorno comercial"},{id:"mapahoras",l:"Mapa de horas"},{id:"objetivos",l:"Objetivos & Execução"},{id:"projprox",l:"Projeção próximo ano"},{id:"gratificacoes",l:"Gratificações"}]},
+      {id:"dashboard",l:"Visão geral"},{id:"estrategia",l:"Análise & insights"},{id:"roicomercial",l:"Retorno comercial"},{id:"mapahoras",l:"Mapa de horas"},{id:"objetivos",l:"Objetivos & Execução"},{id:"projprox",l:"Projeção próximo ano"},{id:"orc2027",l:"Orçamento próximo ano"},{id:"arr",l:"ARR"},{id:"gratificacoes",l:"Gratificações"}]},
     {group:"Financeiro",i:"💶",dept:"financeiro",items:[
       {id:"pl",l:"P&L"},{id:"caractfat",l:"Caracterização"},{id:"financeiro",sub:"orcamento",l:"Orçamento"},{id:"rentabcli",l:"Rentabilidade"},{id:"tesouraria",l:"Tesouraria"},{id:"historico",l:"Histórico"}]},
     {group:"Faturação & Cobranças",i:"🧾",dept:"financeiro",items:[
       {id:"financeiro",sub:"faturas",l:"Faturas / Movimentos"},{id:"faturacao",l:"Faturação legal"},{id:"financeiro",sub:"cobrancas",l:"Cobranças pendentes"},{id:"dunning",l:"Cobrança de vencidos"},{id:"financeiro",sub:"despesas",l:"Despesas"}]},
-    {group:"Orçamento & ARR",i:"🎯",dept:"orcamento",items:[
-      {id:"orc2027",l:"Orçamento próximo ano"},{id:"arr",l:"ARR"}]},
     {group:"Comercial",i:"🏥",dept:"comercial",items:[
       {id:"pipeline",l:"Pipeline"},{id:"followup",l:"Follow-up"},{id:"reunioes",l:"Visitas & Reuniões"},{id:"subscricoes",l:"Subscrições/AT"},{id:"propostas",l:"Propostas"},{id:"forecast",l:"Forecast"},{id:"clientes",l:"Vendas"},{id:"vendasPais",l:"Por país"},{id:"vendasVend",l:"Por vendedor"},{id:"objcom",l:"Objetivos comerciais"},{id:"roicomercial",l:"Retorno comercial"},{id:"perdidas",l:"Perdidas"}]},
     {group:"Clientes",i:"🏢",dept:"clientesg",always:true,items:[
