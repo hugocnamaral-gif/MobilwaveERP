@@ -144,9 +144,7 @@ tr:hover td{background:#EFF1F4}
 
 <script>
 var R="#2E8C93",G="#C98F34",GD="#C98F34",GRN="#3E9E7A",BLU="#4E86B0",PUR="#37506A",SL="#7E8892",TEAL="#2E8C93",DNG="#C0564A";
-var STAGES=["lead","proposta","ganho","projeto","concluido"];
-var SL2={lead:"Lead",proposta:"Proposta",projeto:"Projeto",ganho:"Ganho",concluido:"Concluído",perdido:"Perdido"};
-var SC={lead:R,proposta:G,projeto:PUR,ganho:GRN,concluido:"#2E8C93",perdido:"#7E8892"};
+var STAGES=["lead","validar","proposta","ganho","projeto","concluido"]; var SL2={lead:"Oportunidade identificada",validar:"Por validar",proposta:"Proposta submetida",projeto:"Em projeto",ganho:"Adjudicado e sem NE",concluido:"Concluído",perdido:"Perdido",exec:"Em projeto"}; var SC={lead:R,validar:BLU,proposta:G,projeto:PUR,ganho:GRN,concluido:"#2E8C93",perdido:"#7E8892",exec:PUR};
 var SPECS=["Gastro","Pneumo","ORL","Cardio","Uro","Ginecologia","Dermatologia","Oftalmologia","Neurologia","Anatomia Patológica","Imagem","Filestream","Integração"];
 var REGS=["Andaluzia","Aragão","Astúrias","Baleares","Canárias","Cantábria","Castela-Mancha","Castela e Leão","Catalunha","Ceuta","Estremadura","Galiza","La Rioja","Madrid","Melilla","Múrcia","Navarra","País Basco","Valencia","Andorra"];
 var MO=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -212,7 +210,9 @@ function dealById(id){return _idxDeals()[id];}
 function clientById(id){return _idxClients()[id];}
 function _idxClear(){window.__pfy=null;window.__idxD=null;window.__idxC=null;window.__idxIvD=null;window.__yid=null;window.__ay=null;}
 function cn(id){var c=_idxClients()[id];return c?c.name:"—"}
-function isWon(d){return !d.fromProj&&(d.stage==="ganho"||d.stage==="projeto"||d.stage==="concluido")}
+function isWon(d){return !d.fromProj&&d.src!=="crm"&&(d.stage==="ganho"||d.stage==="projeto"||d.stage==="concluido")}
+function isCrmDeal(d){return !!d&&(d.src==="crm"||(!d.src&&!d.imported&&!d.fromProj));}
+function dealTitle(d){return d.clientId?cn(d.clientId):(d.crmConta||d.crmContacto||"—");}
 function isSubDeal(d){return !!(d&&(d.type==="AT"||d.type==="SUB"))}
 try{window.isSubDeal=isSubDeal;}catch(e){}
 function isClosed(d){return d.fromProj||d.stage==="ganho"||d.stage==="projeto"||d.stage==="concluido"||d.stage==="perdido"}
@@ -1121,8 +1121,8 @@ if(cTab==="dashboard"){
   h+='<select onchange="setPipeF(\'spec\',this.value)" style="padding:6px 10px;border:1px solid #E4E8EB;border-radius:8px;font-size:12px"><option value="">Todas as especialidades</option>'+_specs.map(function(s){return _topt(s,_pf.spec)}).join("")+'</select>';
   h+='<input value="'+esc(_pf.q||"")+'" oninput="setPipeF(\'q\',this.value)" placeholder="Procurar cliente/produto..." style="padding:6px 10px;border:1px solid #E4E8EB;border-radius:8px;font-size:12px;flex:1;min-width:150px">';
   if(_pf.type||_pf.spec||_pf.q)h+='<button onclick="setPipeF(\'clear\')" style="background:#EFF1F4;color:#7E8892;border:none;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer">✕ Limpar</button>';
-  h+='</div><div class="kan">';
-  var _pfMatch=function(d){
+  h+='</div><div style="font-size:11.5px;color:#A6AEB6;margin:-4px 0 10px">Etapas do CRM (Odoo). Mostra as oportunidades do CRM e os deals criados na app; as linhas do Facturação continuam em Financeiro. Data = entrada na etapa atual.</div><div class="kan" style="grid-template-columns:repeat(6,minmax(170px,1fr));overflow-x:auto">';
+  var _pfMatch=function(d){if(!isCrmDeal(d))return false;
     if(_pf.type&&(d.type||"").trim()!==_pf.type)return false;
     if(_pf.spec&&(d.specialty||"").trim()!==_pf.spec)return false;
     if(_pf.q){var q=_pf.q.toLowerCase();var hay=(cn(d.clientId)+" "+(d.product||"")).toLowerCase();if(hay.indexOf(q)<0)return false}
@@ -1133,7 +1133,7 @@ if(cTab==="dashboard"){
     h+='<div ondragover="mwDragOver(event)" ondragleave="mwDragLeave(event)" ondrop="mwDrop(event,\'pipeline\',\''+sg+'\')"><div style="text-align:center;margin-bottom:4px">'+bdg(SL2[sg],SC[sg])+'</div><div style="text-align:center;font-size:10px;color:#A6AEB6;margin-bottom:10px">'+colDeals.length+' · '+fmt(colTotal)+'</div>';
     if(colDeals.length===0){h+='<div style="text-align:center;padding:24px 10px;color:#C6CDD4;font-size:11px;border:1.5px dashed #E4E8EB;border-radius:10px">Sem oportunidades</div>'}
     colDeals.forEach(function(dl){
-      h+='<div class="dc" draggable="true" ondragstart="mwDragStart(event,\'pipeline\',\''+dl.id+'\')" ondragend="mwDragEnd(event)" style="border-left:3px solid '+SC[sg]+';cursor:grab"><div style="font-size:12px;font-weight:600;margin-bottom:2px">'+cn(dl.clientId)+'</div><div style="font-size:11px;color:#7E8892;margin-bottom:6px">'+dl.product+'</div><div style="margin-bottom:6px">'+bdg(dl.specialty,BLU)+'</div>';
+      h+='<div class="dc" draggable="true" ondragstart="mwDragStart(event,\'pipeline\',\''+dl.id+'\')" ondragend="mwDragEnd(event)" style="border-left:3px solid '+SC[sg]+';cursor:grab"><div style="font-size:12px;font-weight:600;margin-bottom:2px">'+esc(dealTitle(dl))+'</div>'+(dl.vendedor?'<div style="font-size:10px;color:#A6AEB6;margin-bottom:2px">'+esc(dl.vendedor)+'</div>':'')+'<div style="font-size:11px;color:#7E8892;margin-bottom:6px">'+dl.product+'</div><div style="margin-bottom:6px">'+bdg(dl.specialty,BLU)+'</div>';
       if(dl.value>0)h+='<div style="font-size:14px;font-weight:700;color:'+SC[sg]+';margin-bottom:6px">'+fmt(dl.value)+(dl.arr>0?'<span style="font-size:10px;color:#7E8892"> ARR '+fmt(dl.arr)+'</span>':'')+'</div>';
       if(dl.nextAction||dl.nextDate){var ov=isOverdue(dl);h+='<div onclick="quickNext(\''+dl.id+'\')" title="Editar próxima acção" style="cursor:pointer;font-size:10px;padding:4px 7px;border-radius:6px;margin-bottom:6px;background:'+(ov?"#F7E6E3":"#EFF1F4")+';color:'+(ov?R:"#7E8892")+'">'+(ov?"⚠ ":"→ ")+(dl.nextAction||"follow-up")+(dl.nextDate?' <b>'+fmtD(dl.nextDate)+'</b>'+(ov?" ("+daysLate(dl)+"d)":""):"")+'</div>'}
       else if(dl.stage!=="ganho"&&dl.stage!=="perdido"){h+='<div onclick="quickNext(\''+dl.id+'\')" title="Definir próxima acção" style="cursor:pointer;font-size:10px;padding:4px 7px;border-radius:6px;margin-bottom:6px;background:#EEF0F2;color:#b8ae9e;border:1px dashed #E4E8EB">+ próxima acção</div>'}
@@ -1184,7 +1184,7 @@ if(cTab==="dashboard"){
   var _pp3=projProxAno();NY=_pp3.NY;var arrBase=_pp3.total;
   var openD3=D.deals.filter(function(d){return d.src!=="pipe"&&!isClosed(d)&&inYear(d.date)});
   var arrPipe3=openD3.reduce(function(a,d){return a+(d.arr||0)},0);
-  var WT3={projeto:0.75,proposta:0.4,lead:0.1};
+  var WT3={projeto:0.75,proposta:0.4,validar:0.2,lead:0.1};
   var arrExp=openD3.reduce(function(a,d){return a+(d.arr||0)*(WT3[d.stage]||0.1)},0);
   var oneOff26=D.deals.filter(function(d){return isWon(d)&&inYear(d.date)}).reduce(function(a,d){return a+d.value},0);
   var carry=(arrBase+arrExp)*(B.renew/100);
@@ -1589,7 +1589,7 @@ if(cTab==="dashboard"){
   openDeals.slice(0,4).forEach(function(d){
     h+='<div class="ins o"><div style="font-weight:600;margin-bottom:4px">🎯 '+cn(d.clientId)+' — '+fmt(d.value)+(d.arr>0?' <span style="font-size:11px;color:#7E8892">(ARR '+fmt(d.arr)+')</span>':'')+'</div><div style="font-size:13px;color:#7E8892">'+d.product+' · '+bdg(SL2[d.stage],SC[d.stage])+'</div></div>'});
 
-  var stalled=D.deals.filter(function(d){return(d.stage==="lead"||d.stage==="proposta")&&d.date<=(activeYear()+"-05-01")&&inYear(d.date)});
+  var stalled=D.deals.filter(function(d){return(d.stage==="lead"||d.stage==="validar"||d.stage==="proposta")&&d.date<=(activeYear()+"-05-01")&&inYear(d.date)});
   if(stalled.length){h+='<div class="ins w" style="margin-top:4px"><div style="font-weight:600;margin-bottom:4px">⏳ Leads/propostas paradas há mais tempo</div><div style="font-size:13px;color:#7E8892;line-height:1.6">'+stalled.map(function(d){return cn(d.clientId)+" ("+bdg(SL2[d.stage],SC[d.stage])+", desde "+fmtD(d.date)+")"}).join(" · ")+'</div></div>'}
 
   // (Candidatos a upsell removido a pedido da Direção)
@@ -1614,7 +1614,7 @@ if(cTab==="dashboard"){
 document.getElementById("app").innerHTML=h}
 
 function setPipeF(k,v){if(!window.__pipeF)window.__pipeF={type:"",spec:"",q:""};if(k==="clear"){window.__pipeF={type:"",spec:"",q:""}}else{window.__pipeF[k]=v}rPnl();}
-function mvDl(id,sg){D.deals.forEach(function(d){if(d.id===id)d.stage=sg});var dl=D.deals.find(function(d){return d.id===id});if(dl)logAct(sg==="ganho"?"Adjudicação":"Pipeline",cn(dl.clientId)+" movido para "+SL2[sg]+(dl.value>0?" — "+fmt(dl.value):""));if(sg==="ganho"&&dl&&dl.value>0&&!D.invoices.find(function(i){return i.dealId===id})){D.invoices.push({id:uid(),dealId:id,amount:dl.value,date:new Date().toISOString().slice(0,10),collected:false,collDate:""});logAct("Factura","Factura criada automaticamente — "+cn(dl.clientId)+" "+fmt(dl.value))}save();ren()}
+function mvDl(id,sg){D.deals.forEach(function(d){if(d.id===id)d.stage=sg});var dl=D.deals.find(function(d){return d.id===id});if(dl)logAct(sg==="ganho"?"Adjudicação":"Pipeline",cn(dl.clientId)+" movido para "+SL2[sg]+(dl.value>0?" — "+fmt(dl.value):""));if(sg==="ganho"&&dl&&dl.src!=="crm"&&dl.value>0&&!D.invoices.find(function(i){return i.dealId===id})){D.invoices.push({id:uid(),dealId:id,amount:dl.value,date:new Date().toISOString().slice(0,10),collected:false,collDate:""});logAct("Factura","Factura criada automaticamente — "+cn(dl.clientId)+" "+fmt(dl.value))}save();ren()}
 function tgCl(id){D.invoices.forEach(function(i){if(i.id===id){i.collected=!i.collected;i.collDate=i.collected?new Date().toISOString().slice(0,10):"";var d=dealById(i.dealId);logAct("Cobrança",(i.collected?"Recebido: ":"Revertido para pendente: ")+(d?cn(d.clientId):"—")+" — "+fmt(i.amount))}});save();ren()}
 function quickNext(id){var dl=D.deals.find(function(x){return x.id===id});if(!dl)return;
   document.getElementById("mArea").innerHTML=mWrap("Próxima acção — "+cn(dl.clientId),
@@ -2113,10 +2113,10 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
 <script>
 (function(){
   if(typeof NAV==="undefined"||typeof rPnl!=="function"){return;}
-  var OPEN=["lead","proposta"];
+  var OPEN=["lead","validar","proposta"];
   var FUP_STATUS=["Por contactar","A aguardar cliente","Proposta em revisão","Reunião marcada","Em negociação","A adjudicar","Risco / sem resposta"];
   var PROB_STATUS={"A adjudicar":0.85,"Em negociação":0.60,"Reunião marcada":0.45,"Proposta em revisão":0.35,"A aguardar cliente":0.30,"Por contactar":0.20,"Risco / sem resposta":0.10};
-  var STAGE_PROB={lead:0.10,proposta:0.40,projeto:0.75};
+  var STAGE_PROB={lead:0.10,validar:0.20,proposta:0.40,projeto:0.75};
   var AGE=45;
   var ui={sort:"days",stalled:false,leads:false,search:"",page:0,mSearch:""};
 
@@ -2124,7 +2124,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   function daysOf(dt){if(!dt)return null;return Math.max(0,Math.floor((new Date(dTodayStr())-new Date(dt))/86400000));}
   function pill(txt,c){return '<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;background:'+rgba(c,.13)+';color:'+c+'">'+txt+'</span>';}
   function agePill(d){if(d==null)return pill("—",SL);var c=d>=90?R:(d>=AGE?GD:GRN);return pill(d+" d",c);}
-  function openDeals(){return D.deals.filter(function(d){return OPEN.indexOf(d.stage)>=0;}).map(function(d){var c=clientById(d.clientId)||{};return {d:d,cli:cn(d.clientId),region:c.region||"",channel:c.channel||"",days:daysOf(d.date)};});}
+  function openDeals(){return D.deals.filter(function(d){return OPEN.indexOf(d.stage)>=0;}).map(function(d){var c=clientById(d.clientId)||{};return {d:d,cli:dealTitle(d),region:c.region||"",channel:c.channel||"",days:daysOf(d.date)};});}
 
   function computeList(all){
     var l=all.slice();
@@ -3305,7 +3305,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   function projRec(dealId){
     if(!Array.isArray(D.projectos))D.projectos=[];
     var r=D.projectos.filter(function(p){return p.dealId===dealId;})[0];
-    if(!r){var dl=(D.deals||[]).filter(function(d){return d.id===dealId;})[0]||{};var isInt=/integ|HIS|EMR|PACS|Diraya/i.test(dl.product||"");r={id:uid(),dealId:dealId,tipo:isInt?"integracao":"implementacao",status:"a_iniciar",note:"",createdAt:todayISO()};if(!(typeof dealLinkedTo==="function"&&dealLinkedTo(dealId)))D.projectos.push(r);}
+    if(!r){var dl=(D.deals||[]).filter(function(d){return d.id===dealId;})[0]||{};var isInt=/integ|HIS|EMR|PACS|Diraya/i.test(dl.product||"");r={id:uid(),dealId:dealId,tipo:isInt?"integracao":"implementacao",status:"a_iniciar",note:"",createdAt:todayISO()};if(dl.src!=="crm"&&!(typeof dealLinkedTo==="function"&&dealLinkedTo(dealId)))D.projectos.push(r);}
     return ensureProj(r);
   }
   function projName(r,d){return (r&&r.nome)||(d&&d.product)||"Projeto";}
@@ -3416,12 +3416,87 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   function entTipoLbl(v){var m=ENT_TIPO.filter(function(x){return x[0]===v;})[0];return m?m[1]:v;}
   function entEstLbl(v){var m=ENT_EST.filter(function(x){return x[0]===v;})[0];return m?m[1]:v;}
 
-  window.projSearchDom=function(q){q=(q||"").toLowerCase();var tb=document.getElementById("projTbody");if(!tb)return;var rows=tb.querySelectorAll(".projrow");for(var i=0;i<rows.length;i++){rows[i].style.display=(!q||rows[i].textContent.toLowerCase().indexOf(q)>=0)?"":"none";}};
+  window.projSearchDom=function(q){q=(q||"").toLowerCase();var gb=document.getElementById("pgtBox");if(gb){var gr=gb.querySelectorAll(".pgtrow");for(var k=0;k<gr.length;k++){gr[k].style.display=(!q||(gr[k].textContent+" "+(gr[k].getAttribute("title")||"")).toLowerCase().indexOf(q)>=0)?"flex":"none";}}var tb=document.getElementById("projTbody");if(!tb)return;var rows=tb.querySelectorAll(".projrow");for(var i=0;i<rows.length;i++){rows[i].style.display=(!q||rows[i].textContent.toLowerCase().indexOf(q)>=0)?"":"none";}};
+  // ===================== CRONOGRAMA DO PORTFÓLIO (dinâmico, no módulo Projetos) =====================
+  // Usa os projetos do filtro atual (estado/ano/pesquisa) e é recalculado sempre que os dados mudam.
+  function projPortGantt(list){
+    var st=window.__pgt||(window.__pgt={ord:"tarefas",n:"40",win:"24",open:true,internos:false});
+    var today=todayISO();
+    var rows=[];
+    list.forEach(function(d){
+      var r=projRec(d.id);if(!r)return;
+      if(!st.internos&&r.interno)return;
+      var tk=(r.tarefas||[]).filter(function(t){return !t.cancelada;});
+      var s=r.inicio||"",e=r.fimPrev||"";
+      tk.forEach(function(t){var a=t.inicioReal||t.dataInicio,b=t.fimReal||t.dataFim;if(a&&(!s||a<s))s=a;if(b&&(!e||b>e))e=b;});
+      if(!s&&!e)return;if(!s)s=e;if(!e)e=s;
+      var done=tk.filter(function(t){return t.estado==="feita";}).length;
+      var pct=tk.length?done/tk.length:(projProgress(r)/100);
+      var nome=projName(r,d);var cli=d.clientId?cn(d.clientId):"";
+      var late=d.stage==="projeto"&&e<today;
+      rows.push({d:d,r:r,s:s,e:e,n:tk.length,done:done,pct:pct,nome:nome,cli:cli,late:late,est:(r.datasEstimadas||tk.some(function(t){return t.datasEstimadas;}))});
+    });
+    var total=rows.length;
+    if(st.ord==="tarefas")rows.sort(function(a,b){return (b.n-a.n)||a.s.localeCompare(b.s);});
+    else if(st.ord==="fim")rows.sort(function(a,b){return a.e.localeCompare(b.e);});
+    else rows.sort(function(a,b){return a.s.localeCompare(b.s);});
+    if(st.n!=="todos")rows=rows.slice(0,Number(st.n));
+    if(st.ord==="tarefas")rows.sort(function(a,b){return a.s.localeCompare(b.s);});
+    var selS='border:1px solid #E4E8EB;border-radius:8px;padding:5px 9px;font-size:12px;font-family:inherit;background:#fff;outline:none';
+    function opt(v,l,cur){return '<option value="'+v+'"'+(cur===v?" selected":"")+'>'+l+'</option>';}
+    var h='<div class="cd"><div class="ch" style="flex-wrap:wrap;gap:8px"><div class="ct2" style="cursor:pointer" onclick="pgtSet(\'open\','+(!st.open)+')">'+(st.open?"▾":"▸")+' Cronograma do portfólio ('+rows.length+(rows.length<total?' de '+total:'')+')</div>';
+    if(st.open){
+      h+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
+        +'<select style="'+selS+'" onchange="pgtSet(\'ord\',this.value)">'+opt("tarefas","Com mais tarefas",st.ord)+opt("inicio","Por início",st.ord)+opt("fim","Por fim previsto",st.ord)+'</select>'
+        +'<select style="'+selS+'" onchange="pgtSet(\'n\',this.value)">'+opt("20","20 projetos",st.n)+opt("40","40 projetos",st.n)+opt("80","80 projetos",st.n)+opt("todos","Todos",st.n)+'</select>'
+        +'<select style="'+selS+'" onchange="pgtSet(\'win\',this.value)">'+opt("12","Janela 12 meses",st.win)+opt("24","Janela 24 meses",st.win)+opt("tudo","Todo o período",st.win)+'</select>'
+        +'<label style="font-size:12px;color:#7E8892;display:flex;align-items:center;gap:4px"><input type="checkbox"'+(st.internos?" checked":"")+' onchange="pgtSet(\'internos\',this.checked)"> internos</label></div>';
+    }
+    h+='</div>';
+    if(!st.open){return h+'</div>';}
+    if(!rows.length){return h+'<div style="font-size:12.5px;color:#A6AEB6">Sem projetos com datas para este filtro.</div></div>';}
+    // janela temporal
+    var minS=rows.reduce(function(a,x){return x.s<a?x.s:a;},rows[0].s),maxE=rows.reduce(function(a,x){return x.e>a?x.e:a;},rows[0].e);
+    if(maxE<today)maxE=today;
+    var t0,t1;
+    if(st.win==="tudo"){t0=minS;t1=maxE;}
+    else{var m=Number(st.win)*30.4;t0=addDays(today,-Math.round(m*0.75));t1=addDays(today,Math.round(m*0.25));var tMax=addDays(today,Math.round(m*0.5));if(maxE>t1)t1=(maxE<tMax?maxE:tMax);if(minS>t0)t0=minS;}
+    var span=Math.max(1,(new Date(t1)-new Date(t0))/86400000);var pad=Math.round(span*0.02)+2;
+    t0=addDays(t0,-pad);t1=addDays(t1,pad);var tot=Math.max(1,(new Date(t1)-new Date(t0))/86400000);
+    function pos(iso){return Math.max(0,Math.min(100,((new Date(iso)-new Date(t0))/86400000)/tot*100));}
+    var mstep=tot>900?6:(tot>400?3:1);
+    var LW=230;
+    h+='<div id="pgtBox" style="overflow-x:auto"><div style="min-width:760px;position:relative">';
+    h+='<div style="position:relative;height:18px;margin-left:'+LW+'px;border-bottom:1px solid #E4E8EB;margin-bottom:4px">';
+    var cur=new Date(t0.slice(0,7)+"-01");var g=0;var end1=new Date(t1);
+    while(cur<=end1&&g<200){g++;var mi=cur.toISOString().slice(0,10);if(mi>=t0&&(cur.getMonth()%mstep===0)){var l=pos(mi);h+='<div style="position:absolute;left:'+l+'%;top:0;font-size:10px;color:#A6AEB6;white-space:nowrap">'+String(cur.getMonth()+1).padStart(2,"0")+"/"+String(cur.getFullYear()).slice(2)+'</div><div style="position:absolute;left:'+l+'%;top:16px;height:'+(rows.length*22+8)+'px;width:1px;background:#EFF1F4"></div>';}cur.setMonth(cur.getMonth()+1);}
+    h+='</div>';
+    var tp=pos(today);
+    h+='<div style="position:absolute;left:'+LW+'px;right:0;top:16px;height:'+(rows.length*22+10)+'px;pointer-events:none;z-index:2"><div style="position:absolute;left:'+tp+'%;top:0;bottom:0;border-left:2px dashed '+DNG+';opacity:.55"></div><div style="position:absolute;left:'+tp+'%;bottom:-14px;margin-left:4px;font-size:10px;font-weight:700;color:'+DNG+'">hoje</div></div>';
+    rows.forEach(function(x){
+      var cut0=x.s<t0,cut1=x.e>t1;
+      var a=pos(x.s),b=pos(x.e);var w=Math.max(0.6,b-a);
+      var base=x.d.stage==="concluido"?GRN:(x.late?DNG:BLU);
+      var tip=(x.cli?x.cli+" — ":"")+x.nome+"\n"+fmtD(x.s)+" → "+fmtD(x.e)+"\nTarefas: "+x.done+"/"+x.n+" feitas ("+Math.round(x.pct*100)+"%)"+(x.r.gestor?"\nGestor: "+x.r.gestor:"")+(x.late?"\n⚠ fim previsto ultrapassado":"")+(x.est?"\n(datas estimadas)":"");
+      h+='<div class="pgtrow" onclick="openProj(\''+x.d.id+'\')" title="'+esc(tip)+'" style="display:flex;align-items:center;height:22px;cursor:pointer" onmouseover="this.style.background=\'#F6F8F9\'" onmouseout="this.style.background=\'\'">';
+      h+='<div style="width:'+LW+'px;flex:0 0 '+LW+'px;padding-right:10px;font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#2B3540">'+esc(x.nome)+(x.cli?' <span style="font-weight:400;color:#A6AEB6">· '+esc(x.cli)+'</span>':'')+'</div>';
+      h+='<div style="flex:1;position:relative;height:100%">';
+      h+='<div style="position:absolute;left:'+a+'%;width:'+w+'%;top:5px;height:12px;border-radius:'+(cut0?0:4)+'px '+(cut1?0:4)+'px '+(cut1?0:4)+'px '+(cut0?0:4)+'px;background:'+rgba(base,.22)+';border:1px solid '+rgba(base,.45)+';overflow:hidden"><div style="height:100%;width:'+Math.round(x.pct*100)+'%;background:'+(x.d.stage==="concluido"?GRN:"#3E9E7A")+'"></div></div>';
+      if(cut0)h+='<div style="position:absolute;left:0;top:3px;font-size:10px;color:#A6AEB6">‹</div>';
+      h+='</div></div>';
+    });
+    h+='</div></div>';
+    h+='<div style="font-size:11px;color:#A6AEB6;margin-top:16px;display:flex;gap:14px;flex-wrap:wrap"><span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#3E9E7A;vertical-align:-1px"></i> tarefas feitas (proporção)</span><span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+rgba(BLU,.3)+';vertical-align:-1px"></i> em curso</span><span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+rgba(DNG,.3)+';vertical-align:-1px"></i> fim previsto ultrapassado</span><span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+rgba(GRN,.3)+';vertical-align:-1px"></i> concluído</span><span>linha tracejada = hoje · clica num projeto para abrir · segue os filtros de estado, ano e pesquisa do portfólio</span></div>';
+    h+='</div>';
+    return h;
+  }
+  window.pgtSet=function(k,v){var st=window.__pgt||(window.__pgt={ord:"tarefas",n:"40",win:"24",open:true,internos:false});st[k]=v;renderProjetos();};
+
   function renderProjetos(){
     if(projView){var dl=(D.deals||[]).filter(function(d){return d.id===projView;})[0];if(dl)return renderProjWorkspace(projView);projView=null;}
     var app=document.getElementById("app");if(!app)return;
     var canEdit=!isReadOnlyNow();
-    var allProj=(D.deals||[]).filter(function(d){return (d.stage==="projeto"||d.stage==="concluido"||(D.projectos||[]).some(function(p){return p.dealId===d.id;}))&&!dealLinkedTo(d.id)&&!(typeof isSubDeal==="function"&&isSubDeal(d));});
+    var allProj=(D.deals||[]).filter(function(d){var _hp=(D.projectos||[]).some(function(p){return p.dealId===d.id;});if(d.src==="crm"&&!_hp)return false;return (d.stage==="projeto"||d.stage==="concluido"||_hp)&&!dealLinkedTo(d.id)&&!(typeof isSubDeal==="function"&&isSubDeal(d));});
     allProj.forEach(function(d){projRec(d.id);});
     var PSTLBL={projeto:"Em curso",concluido:"Concluído",ganho:"Ganho",proposta:"Proposta",lead:"Lead",perdido:"Perdido"};
     var PSTCOL={projeto:BLU,concluido:GRN,ganho:GD,proposta:PUR,lead:SL,perdido:R};
@@ -3437,6 +3512,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     var val=allProj.reduce(function(a,d){return a+(d.value||0);},0);
     var h=pgHead("🛠️","Projetos",canEdit?'<button class="btn bs" style="background:'+TEAL+'" onclick="openMergeProjPicker()">⤵ Unir projetos</button> <button class="btn" style="background:'+R+'" onclick="openProjM()">+ Novo projeto</button>':'');
     h+='<div class="kr">'+kpi("Total projetos",""+allProj.length,"todas as fases",PUR,PUR)+kpi("Em curso",""+emCurso,"em implementação/integração",BLU,BLU)+kpi("Concluídos",""+concl,"entregues",GRN,GRN)+kpi("Em risco",""+risco,"marco ou prazo em atraso",risco?DNG:GRN,risco?DNG:GRN)+'</div>';
+    try{h+=projPortGantt(projs.slice());}catch(e){console.warn("cronograma portfólio",e);}
     h+='<div class="cd"><div class="ch" style="flex-wrap:wrap;gap:8px"><div class="ct2">Portfólio de projetos ('+projs.length+')</div>';
     h+='<select onchange="window.__projFilter=this.value;rPnl()" style="border:1px solid #E4E8EB;border-radius:8px;padding:6px 10px;font-size:12.5px;font-family:inherit;background:#fff;outline:none"><option value="todos"'+(pf==="todos"?" selected":"")+'>Todos os estados ('+allProj.length+')</option>'+stagesPresent.map(function(s){var n=allProj.filter(function(d){return d.stage===s;}).length;return '<option value="'+s+'"'+(pf===s?" selected":"")+'>'+(PSTLBL[s]||s)+' ('+n+')</option>';}).join("")+'</select> <select onchange="window.__projYear=this.value;rPnl()" style="border:1px solid #E4E8EB;border-radius:8px;padding:6px 10px;font-size:12.5px;font-family:inherit;background:#fff;outline:none"><option value="">Todos os anos</option>'+_pys.map(function(y){return '<option value="'+y+'"'+(py===y?" selected":"")+'>'+y+'</option>';}).join("")+'</select> <input type="search" value="'+esc(window.__projQ||"")+'" oninput="window.__projQ=this.value;projSearchDom(this.value)" placeholder="Pesquisar cliente ou projeto…" style="border:1px solid #E4E8EB;border-radius:8px;padding:6px 10px;font-size:12.5px;font-family:inherit;min-width:200px"></div>';
     h+='<div style="font-size:12px;color:#A6AEB6;margin-bottom:10px">Todos os projetos, com o seu estado. Filtra por estado no menu acima. Clica numa linha para abrir o projeto (fases, tarefas, horas, gestor e prazos).</div>';
@@ -4729,7 +4805,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   }
   // ---- Cenários de orçamento (pessimista / base / otimista) ----
   // Cenários para o próximo ano: base = projeção do Facturação (col. T, S=100%/105%, sem duplicados); pipeline = oportunidades CRM abertas; objetivo = orçamento do ano (ou ano corrente)
-  function scenData(){var pp=projProxAno();var arrBase=pp.total;var pipeOpen=(D.deals||[]).filter(function(d){return d.src!=="pipe"&&(d.stage==="lead"||d.stage==="proposta"||d.stage==="projeto");}).reduce(function(a,d){return a+(Number(d.value)||0);},0);var oN=orcAno(pp.NY),oC=orcAno(pp.NY-1);var obj=oN.total||oC.total||Number(D.budget)||0;return {arrBase:arrBase,pipeOpen:pipeOpen,obj:obj,NY:pp.NY,objLbl:oN.total?("orçamento "+pp.NY):("orçamento "+(pp.NY-1)+" (ainda sem orçamento "+pp.NY+")")};}
+  function scenData(){var pp=projProxAno();var arrBase=pp.total;var pipeOpen=(D.deals||[]).filter(function(d){return d.src!=="pipe"&&(d.stage==="lead"||d.stage==="validar"||d.stage==="proposta"||d.stage==="projeto");}).reduce(function(a,d){return a+(Number(d.value)||0);},0);var oN=orcAno(pp.NY),oC=orcAno(pp.NY-1);var obj=oN.total||oC.total||Number(D.budget)||0;return {arrBase:arrBase,pipeOpen:pipeOpen,obj:obj,NY:pp.NY,objLbl:oN.total?("orçamento "+pp.NY):("orçamento "+(pp.NY-1)+" (ainda sem orçamento "+pp.NY+")")};}
   function scenCfg(){if(!D.budgetScen)D.budgetScen={renov:{p:90,b:100,o:100},conv:{p:15,b:30,o:50},newBiz:{p:0,b:10000,o:25000}};return D.budgetScen;}
   function scenCalc(k){var d=scenData(),c=scenCfg();var arrR=d.arrBase*((c.renov[k]||0)/100),pipeC=d.pipeOpen*((c.conv[k]||0)/100),nb=Number(c.newBiz[k])||0;return {arrR:arrR,pipeC:pipeC,nb:nb,total:arrR+pipeC+nb};}
   function injectScenariosCard(){
@@ -5903,7 +5979,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   function renderVendasProj(){
     var app=document.getElementById("app");if(!app)return;
     var canEdit=(currentRole==="admin"||canSeeTab("projetos"))&&!isReadOnlyNow();
-    var anchors=(D.deals||[]).filter(function(d){return (d.stage==="projeto"||d.stage==="concluido"||projRecIfExists(d.id))&&!dealLinkedTo(d.id);});
+    var anchors=(D.deals||[]).filter(function(d){if(d.src==="crm"&&!projRecIfExists(d.id))return false;return (d.stage==="projeto"||d.stage==="concluido"||projRecIfExists(d.id))&&!dealLinkedTo(d.id);});
     anchors.forEach(function(d){projRec(d.id);});
     var PSTLBL={projeto:"Em curso",concluido:"Concluído",ganho:"Ganho",proposta:"Proposta",lead:"Lead",perdido:"Perdido"};
     var PSTCOL={projeto:BLU,concluido:GRN,ganho:GD,proposta:PUR,lead:SL,perdido:R};
@@ -6509,7 +6585,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
 
   
   // ===================== CRONOGRAMA (Gantt de projetos) =====================
-  function gttProjs(){return (D.deals||[]).filter(function(d){return d.stage==="projeto";});}
+  function gttProjs(){var _hp={};(D.projectos||[]).forEach(function(p){_hp[p.dealId]=1;});var _int={};(D.projectos||[]).forEach(function(p){if(p.interno)_int[p.dealId]=1;});return (D.deals||[]).filter(function(d){return d.stage==="projeto"&&(d.src!=="crm"||_hp[d.id])&&!_int[d.id];});}
   function gttRange(r){
     var start=r.inicio||r.createdAt||todayISO();
     var end=r.fimPrev||"";
@@ -6543,11 +6619,11 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     months.forEach(function(m){var l=pos(m.iso);h+='<div style="position:absolute;left:'+l+'%;top:0;font-size:10px;color:#A6AEB6;transform:translateX(-2px)">'+esc(m.label)+'</div><div style="position:absolute;left:'+l+'%;top:16px;bottom:-2000px;width:1px;background:#EFF1F4"></div>';});
     h+='</div>';
     // linha de hoje
-    h+='<div style="position:absolute;left:calc(200px + '+todayPos+'% * (100% - 200px)/100);top:20px;bottom:0;width:2px;background:'+R+';opacity:.5;z-index:2" title="hoje"></div>';
+    h+='<div style="position:absolute;left:200px;right:0;top:20px;bottom:0;pointer-events:none;z-index:2"><div style="position:absolute;left:'+todayPos+'%;top:0;bottom:0;width:2px;background:'+R+';opacity:.5" title="hoje"></div></div>';
     // linhas de projeto
     rows.forEach(function(x){
       var left=pos(x.start),right=pos(x.end);var w=Math.max(1.5,right-left);
-      h+='<div style="display:flex;align-items:center;height:34px;margin-bottom:4px"><div style="width:200px;flex:0 0 200px;padding-right:10px;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(cn(x.d.clientId)+" — "+(x.d.product||""))+'">'+esc(cn(x.d.clientId))+'</div>';
+      h+='<div style="display:flex;align-items:center;height:34px;margin-bottom:4px"><div style="width:200px;flex:0 0 200px;padding-right:10px;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc((x.d.clientId?cn(x.d.clientId)+" — ":"")+(x.r.nome||x.d.product||""))+'">'+esc(x.d.clientId?cn(x.d.clientId):(x.r.nome||x.d.product||"—"))+'</div>';
       h+='<div style="flex:1;position:relative;height:100%">';
       h+='<div style="position:absolute;left:'+left+'%;width:'+w+'%;top:9px;height:16px;background:'+x.hl.c+';opacity:.85;border-radius:5px" title="'+esc((x.d.product||"")+" · "+fmtD(x.start)+" → "+fmtD(x.end))+'"></div>';
       // marcos
@@ -7288,7 +7364,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   };
 
   // ===================== COMERCIAL · FORECAST (Passo 1) =====================
-  var FC_PROB={lead:0.20,proposta:0.50,ganho:0.90,projeto:0.95};
+  var FC_PROB={lead:0.20,validar:0.30,proposta:0.50,ganho:0.90,projeto:0.95};
   var MESES_F=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
   function fcProb(d){var p=FC_PROB[d.stage];return p==null?0.3:p;}
   function fcCloseISO(d){return d.closeDate||d.nextDate||d.date||todayISO();}
@@ -7335,7 +7411,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     var winRate=(ganhosAno.length+perdidosAno.length)?Math.round(ganhosAno.length/(ganhosAno.length+perdidosAno.length)*100):0;
     var valGanho=ganhosAno.reduce(function(a,d){return a+(d.value||0);},0);var valPerd=perdidosAno.reduce(function(a,d){return a+(d.value||0);},0);
     // funil por estágio (todos os deals do ano, abertos+fechados)
-    var STAGES_F=[["lead","Lead"],["proposta","Proposta"],["ganho","Ganho"],["projeto","Projeto"],["concluido","Concluído"],["perdido","Perdido"]];
+    var STAGES_F=[["lead",SL2.lead],["validar",SL2.validar],["proposta",SL2.proposta],["ganho",SL2.ganho],["projeto",SL2.projeto],["concluido",SL2.concluido],["perdido","Perdido"]];
     var funil={};STAGES_F.forEach(function(s){funil[s[0]]=0;});(D.deals||[]).forEach(function(d){if((d.date||"").slice(0,4)==String(y)&&funil[d.stage]!=null)funil[d.stage]++;});
     h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">Análise '+y+' — conversão</div>';
     h+='<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:12px">'+
