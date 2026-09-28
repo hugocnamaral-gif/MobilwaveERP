@@ -1116,7 +1116,7 @@ if(cTab==="dashboard"){
   var _specs=[];D.deals.forEach(function(d){var s=(d.specialty||"").trim();if(s&&_specs.indexOf(s)<0)_specs.push(s)});_specs.sort();
   var _topt=function(v,cur){return '<option value="'+esc(v)+'"'+(cur===v?" selected":"")+'>'+esc(v||"—")+'</option>'};
   h+='<div class="cd" style="padding:10px 12px;margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
-  h+='<span style="font-size:11px;color:#7E8892;font-weight:600">Filtrar:</span>';
+  h+='<span style="font-size:11px;color:#7E8892;font-weight:600">Filtrar:</span>';h+='<select onchange="window.__pipeAll=(this.value===\'all\');rPnl()" style="padding:6px 10px;border:1px solid #E4E8EB;border-radius:8px;font-size:12px"><option value="all"'+(window.__pipeAll!==false?' selected':'')+'>Todos os anos (como no Odoo)</option><option value="year"'+(window.__pipeAll===false?' selected':'')+'>Só o ano selecionado ('+yearLabel()+')</option></select>';
   h+='<select onchange="setPipeF(\'type\',this.value)" style="padding:6px 10px;border:1px solid #E4E8EB;border-radius:8px;font-size:12px"><option value="">Todos os tipos</option>'+_tipos.map(function(t){return _topt(t,_pf.type)}).join("")+'</select>';
   h+='<select onchange="setPipeF(\'spec\',this.value)" style="padding:6px 10px;border:1px solid #E4E8EB;border-radius:8px;font-size:12px"><option value="">Todas as especialidades</option>'+_specs.map(function(s){return _topt(s,_pf.spec)}).join("")+'</select>';
   h+='<input value="'+esc(_pf.q||"")+'" oninput="setPipeF(\'q\',this.value)" placeholder="Procurar cliente/produto..." style="padding:6px 10px;border:1px solid #E4E8EB;border-radius:8px;font-size:12px;flex:1;min-width:150px">';
@@ -1128,7 +1128,7 @@ if(cTab==="dashboard"){
     if(_pf.q){var q=_pf.q.toLowerCase();var hay=(cn(d.clientId)+" "+(d.product||"")).toLowerCase();if(hay.indexOf(q)<0)return false}
     return true};
   STAGES.forEach(function(sg){
-    var colDeals=D.deals.filter(function(d){return d.stage===sg&&inYear(d.date)&&_pfMatch(d)}).sort(function(a,b){return b.value-a.value});
+    var colDeals=D.deals.filter(function(d){return d.stage===sg&&(window.__pipeAll!==false||inYear(d.date))&&_pfMatch(d)}).sort(function(a,b){return b.value-a.value});
     var colTotal=colDeals.reduce(function(a,d){return a+d.value},0);
     h+='<div ondragover="mwDragOver(event)" ondragleave="mwDragLeave(event)" ondrop="mwDrop(event,\'pipeline\',\''+sg+'\')"><div style="text-align:center;margin-bottom:4px">'+bdg(SL2[sg],SC[sg])+'</div><div style="text-align:center;font-size:10px;color:#A6AEB6;margin-bottom:10px">'+colDeals.length+' · '+fmt(colTotal)+'</div>';
     if(colDeals.length===0){h+='<div style="text-align:center;padding:24px 10px;color:#C6CDD4;font-size:11px;border:1.5px dashed #E4E8EB;border-radius:10px">Sem oportunidades</div>'}
