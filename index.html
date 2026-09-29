@@ -2730,16 +2730,33 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   function modalOpen(){var m=document.getElementById("mArea");return !!(m&&m.innerHTML.trim());}
   function editingInline(){var a=document.activeElement;return a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);}
   var __lastData=null;var __lastRev=null;var __revChecks=0;
+  // ---- estado das gravações: fila única, sem gravações em paralelo, nova tentativa automática ----
+  var __pushing=false,__pushAgain=false,__saveSeq=0,__savedSeq=0,__pushFails=0,__retryT=null,__conflicts=0;
+  function mwDirty(){return __saveSeq!==__savedSeq||__pushing||!!saveTimer;}
+  window.mwDirty=mwDirty;
+  function mwSaveStatus(){
+    try{
+      var el=document.getElementById("mwSaveSt");
+      if(!el){var right=document.querySelector(".hdr-in > div:last-child");if(!right)return;el=document.createElement("span");el.id="mwSaveSt";el.setAttribute("role","status");el.style.cssText="font-size:12px;font-weight:600;border-radius:20px;padding:4px 11px;white-space:nowrap;align-self:center;transition:background .2s";right.insertBefore(el,right.firstChild);}
+      var st=(__pushFails>0&&__saveSeq!==__savedSeq)?"err":(mwDirty()?"busy":"ok");
+      if(el.getAttribute("data-st")===st)return;el.setAttribute("data-st",st);
+      if(st==="ok"){el.textContent="✓ Gravado";el.style.background="#E3F1EA";el.style.color="#2F8566";el.title="Todas as alterações estão gravadas no servidor";}
+      else if(st==="busy"){el.textContent="A gravar…";el.style.background="#EFF1F4";el.style.color="#5F6B75";el.title="A enviar as alterações para o servidor. Não feches a janela.";}
+      else{el.textContent="Por gravar · a tentar de novo";el.style.background="#F7E3E0";el.style.color="#B94A3E";el.title="Sem ligação ao servidor. As alterações estão neste dispositivo e a app volta a tentar sozinha. Não feches a janela.";}
+    }catch(e){}
+  }
+  window.mwSaveStatus=mwSaveStatus;
   async function mwRemoteRev(){try{var c=await sb.from("app_state").select("rev:data->>_rev").eq("id",stateId()).single();if(c&&!c.error&&c.data)return c.data.rev||null;}catch(e){}return null;}
   async function reloadState(force){
     if(!sb||!ready)return;
-    if(saveTimer)return;                        // tenho uma gravação minha pendente — não sobreponho
+    if(saveTimer||__pushing||__pushAgain||__saveSeq!==__savedSeq)return; // há alterações minhas por gravar — não sobreponho
     if(!force&&(modalOpen()||editingInline()))return; // não interrompo edição a decorrer
     try{
       __revChecks++;
       if(!force&&__lastRev&&__revChecks%5!==0){var _rr=await mwRemoteRev();if(_rr&&_rr===__lastRev)return;}
       var r=await sb.from("app_state").select("data").eq("id",stateId()).single();
       if(r.error||!r.data)return;
+      if(saveTimer||__pushing||__saveSeq!==__savedSeq)return;   // gravei entretanto: não substituo
       var d=r.data.data;if(!d||!Object.keys(d).length)return;
       var js=JSON.stringify(d);
       __lastRev=d._rev||__lastRev;
@@ -2759,11 +2776,17 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     // 1) ao voltar ao separador
     try{document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible")reloadState(false);});}catch(e){}
     try{window.addEventListener("focus",function(){reloadState(false);});}catch(e){}
-    // 2) sondagem periódica (30s) enquanto o separador está visível
-    try{setInterval(function(){if(document.visibilityState==="visible")reloadState(false);},30000);}catch(e){}
+    // 2) sondagem periódica (30s) enquanto o separador está visível; se ficou algo por gravar, tenta de novo
+    try{setInterval(function(){if(__saveSeq!==__savedSeq&&!__pushing&&!saveTimer){pushToSB();return;}if(document.visibilityState==="visible")reloadState(false);},30000);}catch(e){}
     // 3) tempo-real (se estiver ativado no Supabase para a tabela app_state)
     try{sb.channel("app_state_rt").on("postgres_changes",{event:"UPDATE",schema:"public",table:"app_state",filter:"id=eq."+stateId()},function(){reloadState(false);}).subscribe();}catch(e){}
+    // 4) a ligação voltou: grava já o que ficou pendente
+    try{window.addEventListener("online",function(){if(__saveSeq!==__savedSeq&&!__pushing)pushToSB();});}catch(e){}
+    // 5) aviso ao fechar a janela com alterações por gravar
+    try{window.addEventListener("beforeunload",function(ev){if(mwDirty()){ev.preventDefault();ev.returnValue="Há alterações ainda por gravar.";return ev.returnValue;}});}catch(e){}
+    mwSaveStatus();
   }
+
   // ---------- fusão segura de estado (evita o "último a gravar ganha") ----------
   function mwIsIdArray(a){return Array.isArray(a)&&a.length>0&&a.every(function(x){return x&&typeof x==="object"&&!Array.isArray(x)&&("id" in x);});}
   function mwMergeById(base,theirs,ours){
@@ -2803,7 +2826,10 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   }
   async function pushToSB(_retry){
     saveTimer=null;
-    if(currentRole==="viewer")return;
+    if(currentRole==="viewer"){__savedSeq=__saveSeq;mwSaveStatus();return;}
+    if(__pushing){__pushAgain=true;return;}       // já há um envio a decorrer: repete no fim, nunca em paralelo
+    __pushing=true;clearTimeout(__retryT);mwSaveStatus();
+    var seq=__saveSeq;
     try{
       // ler o estado atual do servidor e, se mudou desde a última sincronização, fundir por registo
       try{
@@ -2815,20 +2841,48 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
           if(remoteJs!==__lastData){
             var base=null;try{base=JSON.parse(__lastData);}catch(e){}
             var _mll=D._log,_mlr=D._redo;D=mwMergeStates(base,remote,D);if(!Array.isArray(D._log))D._log=_mll||[];if(!Array.isArray(D._redo))D._redo=_mlr||[];
+            __lastData=remoteJs;__lastRev=remote._rev||null;   // a versão do servidor passa a ser a base da próxima gravação
             try{if(typeof migrate==="function")migrate();}catch(e){}
             try{if(typeof ren==="function"&&!(typeof editingInline==="function"&&editingInline()))ren();}catch(e){}
             try{prevSnap=snapClone();}catch(e){}
-            if(mwMergeStates._lastMerged>0){try{if(typeof toast==="function")toast("Outra pessoa também gravou entretanto — as alterações foram combinadas, nada se perdeu.",{type:"ok"});}catch(e){}}
+            if(mwMergeStates._lastMerged>0){try{if(typeof window.mwSnack==="function")window.mwSnack("Outra pessoa também gravou entretanto. As alterações foram combinadas, nada se perdeu.");}catch(e){}}
           }
         }
       }catch(e){}
       D._rev=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-      var r=await sb.from("app_state").upsert({id:stateId(),data:syncPayload()}).select("id");if(r&&r.error)throw r.error;
-      if(!r||!r.data||!r.data.length){window.__saveBlocked=true;try{showSaveBlocked();}catch(_e){}return;}
+      var payload=syncPayload();var payloadJs=JSON.stringify(payload);   // fotografia exata do que vai para o servidor
+      var r;
+      // só grava se o servidor ainda estiver na versão que conheço (evita que um envio lento apague a gravação de um colega)
+      var _q=sb.from("app_state").update({data:payload}).eq("id",stateId());
+      _q=__lastRev?_q.eq("data->>_rev",__lastRev):_q.is("data->>_rev",null);
+      r=await _q.select("id");
+      if(r&&r.error)throw r.error;
+      var _upd=!!(r&&r.data&&r.data.length);
+      if(!_upd){
+        var _now=await mwRemoteRev();
+        if((_now||null)!==(__lastRev||null)&&__conflicts<8){__conflicts++;__pushAgain=true;return;}   // alguém gravou entretanto: junto e volto a gravar
+      }
+      if(!_upd){
+        r=await sb.from("app_state").upsert({id:stateId(),data:payload}).select("id");if(r&&r.error)throw r.error;
+        if(!r||!r.data||!r.data.length){window.__saveBlocked=true;try{showSaveBlocked();}catch(_e){}return;}
+      }
+      __conflicts=0;
       if(window.__saveBlocked){window.__saveBlocked=false;var _sb=document.getElementById("saveBlockedBar");if(_sb)_sb.remove();}
-      try{__lastData=JSON.stringify(syncPayload());__lastRev=D._rev;}catch(e){}
+      __lastData=payloadJs;__lastRev=payload._rev;
+      __savedSeq=seq;__pushFails=0;
     }
-    catch(e){if(!_retry){setTimeout(function(){pushToSB(1);},2500);try{toastSafe("Ligação lenta — a tentar gravar de novo…");}catch(_){}}else{try{toastSafe("Sem ligação ao servidor. As alterações estão guardadas neste dispositivo e serão gravadas quando houver ligação.","error");}catch(_){}} }
+    catch(e){
+      __pushFails++;
+      try{console.warn("[Gravação] falhou ("+__pushFails+"):",e&&e.message||e);}catch(_){}
+      if(__pushFails===2){try{if(typeof window.mwSnack==="function")window.mwSnack("Sem ligação ao servidor. As alterações ficam neste dispositivo e a app volta a tentar sozinha.");}catch(_){}}
+      var wait=Math.min(60000,2500*Math.pow(2,Math.min(5,__pushFails-1)));
+      __retryT=setTimeout(function(){if(!saveTimer)pushToSB();},wait);
+    }
+    finally{
+      __pushing=false;
+      if(__pushAgain){__pushAgain=false;setTimeout(function(){pushToSB();},0);}
+      mwSaveStatus();
+    }
   }
 
   // O editor só pode editar dentro da área Comercial
@@ -2877,7 +2931,9 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
       return false;
     }
     window.__selfSave=false;
+    __saveSeq++;
     clearTimeout(saveTimer);saveTimer=setTimeout(pushToSB,450);
+    mwSaveStatus();
     try{prevSnap=snapClone();}catch(e){}
     return true;
   };
