@@ -1875,15 +1875,24 @@ function syncFacturacaoWB(wb,fname){
     for(var i=0;i<lst.length;i++){if(!used[lst[i].id]&&lst[i].pRow===o.pRow){pick=lst[i];break;}}
     if(!pick)for(var j=0;j<lst.length;j++){if(!used[lst[j].id]){pick=lst[j];break;}}
     if(!pick){var _pt=o.product.replace(/\s+/g," ").trim();for(var q2=0;q2<old.length;q2++){var od=old[q2];if(!used[od.id]&&od.pRow===o.pRow&&String(od.product||"").replace(/\s+/g," ").trim()===_pt&&Math.abs((Number(od.value)||0)-o.value)<0.05){pick=od;break;}}}
+    if(!pick){var _pt2=o.product.replace(/\s+/g," ").trim().toLowerCase();var _best=null,_bs=-1;for(var q3=0;q3<old.length;q3++){var od3=old[q3];if(used[od3.id])continue;var _sc=-1;
+      var _same=String(od3.product||"").replace(/\s+/g," ").trim().toLowerCase()===_pt2,_dv=Math.abs((Number(od3.value)||0)-o.value),_vd=String(od3.vendedor||"").trim()===o.vendedor;
+      if(o.fatNum&&od3.fatNum===o.fatNum&&(_same||_dv<1))_sc=3+(_same?1:0)+(_dv<1?1:0);
+      else if(!o.fatNum&&!od3.fatNum&&_same&&_vd&&_dv<1&&_padj(od3)===o.adj)_sc=2;
+      if(_sc>_bs){_bs=_sc;_best=od3;}}
+      if(_best&&_bs>=2)pick=_best;}
     var cid=null;if(pick){used[pick.id]=1;o.id=pick.id;cid=pick.clientId;kept++;}else{o.id="pl_f"+fy+"_"+o.pRow+"_"+Math.random().toString(36).slice(2,6);added++;}
     if(!cid){var n=normName(o.cliRaw);var c=cliByNorm[n]||matchClient(o.cliRaw);if(!c){c={id:"cl_"+Math.random().toString(36).slice(2,9),name:o.cliRaw,channel:"Directo",region:"Portugal",pais:"Portugal",lat:39,lng:-8};D.clients.push(c);cliByNorm[n]=c;newCli++;}cid=c.id;}
     o.clientId=cid;delete o.cliRaw;return o;});
   var removed=old.filter(function(d){return !used[d.id];}).length;
   var oldIds={};old.forEach(function(d){oldIds[d.id]=1;});
   D.deals=(D.deals||[]).filter(function(d){return !oldIds[d.id];}).concat(out);
+  var _gone={};old.forEach(function(d){if(!used[d.id])_gone[d.id]=1;});var _relig=0;
+  (D.invoices||[]).forEach(function(iv){if(!iv||!_gone[iv.dealId])return;var n=_fnorm(iv.num);var c=out.filter(function(x){return x.fatNum&&x.fatNum===n;});
+    if(!c.length)return;c.sort(function(a,b){return Math.abs(a.value-(Number(iv.amount)||0))-Math.abs(b.value-(Number(iv.amount)||0));});iv.dealId=c[0].id;_relig++;});
   D.facturacaoSync=D.facturacaoSync||{};D.facturacaoSync[fy]={em:new Date().toISOString(),ficheiro:String(fname||""),linhas:out.length};
   _idxClear();
-  return {fy:fy,linhas:out.length,mantidas:kept,novas:added,removidas:removed,novosClientes:newCli};
+  return {fy:fy,linhas:out.length,mantidas:kept,novas:added,removidas:removed,novosClientes:newCli,faturasReligadas:_relig};
 }
 window.syncFacturacao=function(){if(typeof isReadOnlyNow==="function"&&isReadOnlyNow()){alert("Sem permissão.");return;}
   var inp=document.createElement("input");inp.type="file";inp.accept=".xlsx,.xlsm,.xls";
@@ -10417,9 +10426,9 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
   /* ---------- Importar & dados: ações que saíram do cabeçalho ---------- */
   function dataCard(){var app=$("#app");if(!app||typeof cTab==="undefined"||cTab!=="importar"||$("#mwDataCard",app))return;
     var c=document.createElement("div");c.className="cd";c.id="mwDataCard";c.style.borderLeft="3px solid #2E8C93";
-    c.innerHTML='<div class="ct2" style="margin-bottom:6px">Dados da app</div><div style="font-size:12.5px;color:#5F6B75;margin-bottom:12px">As ações sobre o conjunto dos dados passaram do cabeçalho para aqui. As que substituem ou apagam dados pedem confirmação escrita.</div>'+
+    c.innerHTML='<div class="ct2" style="margin-bottom:6px">Dados da app</div><div style="font-size:12.5px;color:#5F6B75;margin-bottom:12px">Os três primeiros botões atualizam a app com os Excel mais recentes (CRM do Odoo, Faturação, Orçamento) sem mexer no resto dos dados. As ações que substituem ou apagam dados pedem confirmação escrita.</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-      '<button class="btn bs" style="background:#2E8C93" onclick="openUpdM()">Atualizar dados (Excel)</button>'+
+      '<button class="btn bs" style="background:#2E8C93" onclick="syncCrmOdoo()">📥 CRM do Odoo (.xlsx)</button>'+'<button class="btn bs" style="background:#2E8C93" onclick="syncFacturacao()">📥 Faturação (.xlsx)</button>'+'<button class="btn bs" style="background:#2E8C93" onclick="syncOrcamento()">📥 Orçamento (.xlsx)</button>'+'<button class="btn bs" style="background:#5F6B75" onclick="openUpdM()">Despesas e Pipe Line antigos (Excel)</button>'+
       '<button class="btn bs" style="background:#4E86B0" onclick="openVerifyM()">Verificar (sem importar)</button>'+
       '<button class="btn bs" style="background:#5F6B75" onclick="expData()">Exportar cópia (JSON)</button>'+
       '<button class="btn bs" style="background:#5F6B75" onclick="expCSV()">CSV para contabilidade</button>'+
@@ -10427,6 +10436,146 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
       '<button class="btn bs" style="background:#fff;color:#B94A3E;border:1px solid #E7C1BC" onclick="rstData()">Repor dados de fábrica…</button></div>';
     var head=app.firstElementChild;app.insertBefore(c,head?head.nextSibling:app.firstChild);}
   var _post=post;post=function(){_post();try{dataCard();}catch(e){}};window.mwPost=post;
+})();
+
+</script>
+<script>
+/* ===== Atualizações a partir dos Excel (CRM do Odoo, Orçamento) — sem substituir o resto dos dados =====
+   CRM: junta pelo par oportunidade + contacto + email (e vendedor), atualiza etapa/valor/datas, acrescenta as novas.
+        As que não vêm no ficheiro ficam como estão, exceto se o utilizador disser que o ficheiro é a lista completa
+        (nesse caso passam para D.crmArquivo, nunca são apagadas).
+   Orçamento: folha "Orçamento" — balanço (R orçamento, S previsão, T faturado), custos (K orçamento, F previsão). */
+(function(){
+  var STG={"oportunidade identificada":"lead","por validar":"validar","proposta submetida":"proposta","adjudicado e sem ne":"ganho","em projeto":"projeto","concluido":"concluido"};
+  var SPEC=[["gastro","Gastro"],["pneumo","Pneumo"],["neumo","Pneumo"],["orl","ORL"],["cardio","Cardio"],["uro","Uro"],["gine","Ginecologia"],["dermato","Dermatologia"],["oftal","Oftalmologia"],["neuro","Neurologia"],["anatomia","Anatomia Patológica"],[" ap ","Anatomia Patológica"],["filestream","Filestream"],["integra","Integração"],["imagem","Imagem"]];
+  function fold(s){return String(s==null?"":s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ").trim();}
+  function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+  function dur(s){s=String(s||"");var d=s.match(/(\d+)\s*dia/),h=s.match(/(\d+)\s*h/),m=s.match(/(\d+)\s*min/);return ((d?+d[1]:0)*1440+(h?+h[1]:0)*60+(m?+m[1]:0))*60000;}
+  function specOf(t){t=" "+fold(t)+" ";for(var i=0;i<SPEC.length;i++)if(t.indexOf(SPEC[i][0])>=0)return SPEC[i][1];return "";}
+  function mwp(t){t=String(t||"");var m=t.match(/MWP\s*-?\s*(\d{2})\s*\/\s*0*(\d+)/);if(m)return m[1]+"/"+(+m[2]);m=t.match(/MWP\s*-?\s*0*(\d{1,4})\s*\/\s*(?:20)?(\d{2})/);return m?m[2]+"/"+(+m[1]):null;}
+  function emailDom(e){var m=String(e||"").match(/@([\w.-]+)/);if(!m)return "";var p=m[1].toLowerCase();return p.indexOf("mobilwave")>=0?"":p.split(".")[0];}
+  function hash(s){var h1=0x811c9dc5,h2=5381;for(var i=0;i<s.length;i++){var c=s.charCodeAt(i);h1=Math.imul(h1^c,16777619)>>>0;h2=((h2*33)^c)>>>0;}return (h1.toString(16)+h2.toString(16)).slice(0,10);}
+  // nome de vendedor igual ao da equipa (RH), por tokens: "Ana Rodrigues" -> "Ana Rita Rodrigues"
+  function canonVend(n){if(!n)return "";var team=[];var hp=D.hrPeople||{};(Array.isArray(hp)?hp:Object.keys(hp).map(function(k){return hp[k];})).forEach(function(p){var x=p&&(p.nome||p.name);if(x)team.push(String(x));});
+    var k=fold(n);for(var i=0;i<team.length;i++)if(fold(team[i])===k)return team[i];
+    var tk=k.split(" ");var c=team.filter(function(t){var tt=fold(t).split(" ");return tk.every(function(x){return tt.indexOf(x)>=0;});});return c.length===1?c[0]:String(n).trim();}
+  function col(hdr,names){for(var i=0;i<hdr.length;i++){var h=fold(hdr[i]);for(var j=0;j<names.length;j++)if(h.indexOf(names[j])===0)return i;}return -1;}
+
+  window.mwCrmParse=function(wb,ref){
+    var ws=wb.Sheets[wb.SheetNames[0]];var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+    if(!rows.length)throw new Error("Ficheiro vazio.");
+    var hdr=rows[0];var I={op:col(hdr,["oportunidade"]),ct:col(hdr,["nome do contacto","contacto"]),em:col(hdr,["email"]),vd:col(hdr,["vendedor"]),
+      val:col(hdr,["retorno esperado","receita esperada"]),mrr:col(hdr,["mrr"]),et:col(hdr,["etapa"]),tp:col(hdr,["ha quanto tempo"]),ua:col(hdr,["ultima atividade"])};
+    if(I.op<0||I.et<0)throw new Error('Não parece um export do CRM do Odoo (faltam as colunas "Oportunidade" e "Etapa").');
+    var R=ref?new Date(ref):new Date();var out=[];
+    for(var r=1;r<rows.length;r++){var w=rows[r]||[];var op=w[I.op];if(op==null||!String(op).trim())continue;op=String(op).trim();
+      var et=I.et>=0?String(w[I.et]||"").trim():"";var st=STG[fold(et)]||"lead";
+      var val=Number(w[I.val])||0,mrr=I.mrr>=0?(Number(w[I.mrr])||0):0;
+      var ent=I.tp>=0&&w[I.tp]?new Date(R.getTime()-dur(w[I.tp])):R;var ua=I.ua>=0&&w[I.ua]?new Date(R.getTime()-dur(w[I.ua])):null;
+      out.push({op:op,ct:I.ct>=0?String(w[I.ct]||"").trim():"",em:I.em>=0?String(w[I.em]||"").trim():"",vdRaw:I.vd>=0?String(w[I.vd]||"").trim():"",
+        val:Math.round(val*100)/100,mrr:Math.round(mrr*100)/100,et:et,st:st,ent:iso(ent),ua:ua?iso(ua):""});}
+    if(!out.length)throw new Error("Sem oportunidades no ficheiro.");
+    return out;};
+
+  // compara com o que existe; não altera nada
+  window.mwCrmPlan=function(recs){
+    var old=(D.deals||[]).filter(function(d){return d&&d.src==="crm";});
+    var by={};old.forEach(function(d){var k=fold(d.product)+"|"+fold(d.crmContacto)+"|"+fold(d.crmEmail);(by[k]=by[k]||[]).push(d);});
+    var used={},plan=[];
+    recs.forEach(function(o){var vd=canonVend(o.vdRaw);o.vd=vd;var k=fold(o.op)+"|"+fold(o.ct)+"|"+fold(o.em);var c=(by[k]||[]).filter(function(d){return !used[d.id];});
+      var pick=null,best=-1;c.forEach(function(d){var s=0;if(fold(d.vendedor)===fold(vd))s+=4;if(Math.abs((Number(d.value)||0)-o.val)<0.01)s+=2;if(d.crmEtapa===o.et)s+=1;if(s>best){best=s;pick=d;}});
+      if(pick)used[pick.id]=1;
+      var ch=[];if(pick){if(pick.crmEtapa!==o.et)ch.push("etapa");if(Math.abs((Number(pick.value)||0)-o.val)>=0.01)ch.push("valor");if(fold(pick.vendedor)!==fold(vd))ch.push("vendedor");if(Math.abs((Number(pick.mrr)||0)-o.mrr)>=0.01)ch.push("MRR");}
+      plan.push({o:o,d:pick,ch:ch});});
+    var missing=old.filter(function(d){return !used[d.id];});
+    return {plan:plan,missing:missing,
+      novas:plan.filter(function(p){return !p.d;}).length,
+      alteradas:plan.filter(function(p){return p.d&&p.ch.length;}).length,
+      iguais:plan.filter(function(p){return p.d&&!p.ch.length;}).length};};
+
+  window.mwCrmApply=function(P,opts){opts=opts||{};var n={novas:0,alteradas:0,arquivadas:0};
+    var byMwp={};(D.deals||[]).forEach(function(d){if(d&&d.src==="crm"&&d.clientId){var dm=emailDom(d.crmEmail);if(dm)byMwp["@"+dm]=byMwp["@"+dm]||d.clientId;}});
+    P.plan.forEach(function(p){var o=p.o,d=p.d;
+      if(d){if(!p.ch.length&&d.crmEntradaEtapa===o.ent)return;
+        d.product=o.op;d.value=o.val;d.mrr=o.mrr;d.arr=Math.round(o.mrr*12*100)/100;d.stage=o.st;d.crmEtapa=o.et;d.vendedor=o.vd;
+        if(p.ch.indexOf("etapa")>=0||!d.crmEntradaEtapa){d.date=o.ent;d.crmEntradaEtapa=o.ent;}
+        if(o.ua)d.crmUltAtividade=o.ua;d.crmSync=_hojeLocal();if(p.ch.length)n.alteradas++;return;}
+      var typ=/\bAT\s*20\d\d|\bAT\b/.test(o.op)?"AT":(/\bBH\b|bolsa|banco de horas|horas/i.test(o.op)?"SV":"NV");
+      var id="crm_"+hash(fold(o.op)+"|"+fold(o.ct)+"|"+fold(o.em)+"|"+fold(o.vd)+"|"+(D.deals||[]).length);
+      var cl=null,how="";try{cl=matchClient(o.op)||(o.ct?matchClient(o.ct):null);}catch(e){}
+      if(cl)how="nome";else{var dm=emailDom(o.em);if(dm&&byMwp["@"+dm]){cl={id:byMwp["@"+dm]};how="email";}}
+      var nd={id:id,clientId:cl?cl.id:"",product:o.op,value:o.val,arr:Math.round(o.mrr*12*100)/100,mrr:o.mrr,type:typ,stage:o.st,date:o.ent,
+        specialty:specOf(o.op),vendedor:o.vd,src:"crm",crmEtapa:o.et,crmContacto:o.ct,crmEmail:o.em,crmEntradaEtapa:o.ent,crmUltAtividade:o.ua,crmMatch:how,imported:true,crmSync:_hojeLocal()};
+      if(!cl){var seg=o.op.split("|").map(function(x){return x.trim();}).filter(Boolean);var conta=seg.length>1?seg[seg.length-1].replace(/'s opportunity/,"").trim():"";
+        if(!conta)conta=o.ct;var dm2=emailDom(o.em);if(!conta&&dm2&&["gmail","hotmail","sapo","outlook","yahoo","live","icloud","mail"].indexOf(dm2)<0)conta=dm2;nd.crmConta=conta||"Sem conta associada";}
+      var code=mwp(o.op);if(code)nd.mwp=code;
+      D.deals.push(nd);n.novas++;});
+    if(opts.arquivar&&P.missing.length){var ids={};P.missing.forEach(function(d){ids[d.id]=1;d.crmArquivadoEm=_hojeLocal();});
+      D.crmArquivo=(D.crmArquivo||[]).concat(P.missing);D.deals=D.deals.filter(function(d){return !ids[d.id];});n.arquivadas=P.missing.length;}
+    D.crmSync={em:new Date().toISOString(),ficheiro:opts.ficheiro||"",linhas:P.plan.length,novas:n.novas,alteradas:n.alteradas,arquivadas:n.arquivadas,foraDoFicheiro:opts.arquivar?0:P.missing.length};
+    try{_idxClear();}catch(e){}
+    return n;};
+
+  function money(v){try{return fmt(v);}catch(e){return Math.round(v)+" €";}}
+  function escH(s){try{return esc(s);}catch(e){return String(s);}}
+  function ro(){return typeof isReadOnlyNow==="function"&&isReadOnlyNow();}
+  function pick(accept,cb){var inp=document.createElement("input");inp.type="file";inp.accept=accept;inp.onchange=function(){var f=inp.files&&inp.files[0];if(f)cb(f);};inp.click();}
+
+  window.syncCrmOdoo=function(){if(ro()){alert("Sem permissão.");return;}
+    pick(".xlsx,.xls",function(f){readFileWB(f).then(function(wb){var recs,P;try{recs=mwCrmParse(wb);P=mwCrmPlan(recs);}catch(e){alert("Não foi possível ler o CRM: "+e.message);return;}
+      window.__crmP=P;window.__crmF=f.name;
+      var tot=recs.reduce(function(a,o){return a+o.val;},0);
+      var mv=P.missing.filter(function(d){return d.stage!=="concluido";}).length;
+      var lst=P.plan.filter(function(p){return !p.d||p.ch.length;}).slice(0,60).map(function(p){var o=p.o;
+        return '<div style="font-size:12px;padding:4px 0;border-top:1px solid #EFF1F4"><b>'+(p.d?"Alterada":"Nova")+'</b> · '+escH(o.op.slice(0,70))+' · '+money(o.val)+' · '+escH(o.et)+(p.d?' <span style="color:#6B7680">('+p.ch.join(", ")+(p.ch.indexOf("etapa")>=0?": era "+escH(p.d.crmEtapa):"")+')</span>':'')+'</div>';}).join("");
+      var body='<div style="font-size:13px;line-height:1.8">Ficheiro <b>'+escH(f.name)+'</b>: <b>'+recs.length+'</b> oportunidades · '+money(tot)+'<br>'+
+        'Novas: <b>'+P.novas+'</b> · com alterações: <b>'+P.alteradas+'</b> · iguais: '+P.iguais+'</div>'+
+        (P.missing.length?'<div class="ins" style="margin:10px 0;font-size:12.5px">Há <b>'+P.missing.length+'</b> oportunidades na app que não vêm neste ficheiro ('+mv+' ainda abertas). Por defeito ficam como estão. Se o ficheiro é a <b>lista completa</b> do Odoo (sem filtros), marca a opção para as tirar do pipeline. Ficam guardadas no arquivo e nada é apagado.'+
+          '<label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:600"><input type="checkbox" id="crmArq"> O ficheiro é a lista completa: arquivar as '+P.missing.length+' que não vêm nele</label></div>':'')+
+        (lst?'<div style="max-height:260px;overflow:auto;margin-top:8px">'+lst+'</div>':'')+
+        '<button class="btn" style="background:#2E8C93;width:100%;margin-top:12px" onclick="mwCrmConfirm()">Aplicar ao pipeline</button>';
+      document.getElementById("mArea").innerHTML=mWrap("Atualizar CRM do Odoo",body);}).catch(function(e){alert("Erro a ler o ficheiro: "+(e&&e.message||e));});});};
+  window.mwCrmConfirm=function(){var P=window.__crmP;if(!P)return;var cb=document.getElementById("crmArq");
+    var n=mwCrmApply(P,{arquivar:!!(cb&&cb.checked),ficheiro:window.__crmF});window.__crmP=null;
+    try{logAct("Pipeline","CRM do Odoo atualizado: "+n.novas+" novas, "+n.alteradas+" alteradas"+(n.arquivadas?", "+n.arquivadas+" arquivadas":""));}catch(e){}
+    save();try{clM();}catch(e){}ren();
+    try{if(typeof window.mwSnack==="function")window.mwSnack("CRM atualizado: "+n.novas+" novas, "+n.alteradas+" alteradas"+(n.arquivadas?", "+n.arquivadas+" arquivadas":"")+".");}catch(e){}};
+
+  /* ---------- Orçamento ---------- */
+  window.mwOrcWB=function(wb,fname){var ws=wb.Sheets["Orçamento"]||wb.Sheets["Orcamento"];if(!ws)throw new Error('Folha "Orçamento" não encontrada.');
+    function v(a){var c=ws[a];if(!c)return null;var x=c.v;if(typeof x==="number")return x;var n=parseFloat(String(x).replace(/\s/g,"").replace(",","."));return isNaN(n)?null:n;}
+    function t(a){var c=ws[a];return c?fold(c.v):"";}
+    var yr=v("E3")||v("K5");var mY=String(fname||"").match(/20\d\d/);if(!yr&&mY)yr=+mY[0];if(!yr)throw new Error("Ano não encontrado (célula E3).");yr=String(Math.round(yr));
+    // balanço P6:T13 — procurar as linhas pelo rótulo na coluna P
+    var row={};for(var r=5;r<=20;r++){var k=t("P"+r);if(k)row[k]=r;}
+    function L(lbl){for(var k in row)if(k.indexOf(lbl)===0)return row[k];return 0;}
+    var rV=L("vendas"),rA=L("at"),rO=L("outro"),rT=L("total"),rCv=L("custos venc"),rCf=L("custos func");
+    if(!rV||!rA||!rCv||!rCf)throw new Error("Balanço não encontrado (colunas P a T).");
+    var o={vendas:v("R"+rV)||0,at:v("R"+rA)||0,totalProv:v("R"+rT)||0,venc:v("R"+rCv)||0,func:v("R"+rCf)||0};o.totalCusto=o.venc+o.func;
+    var bal={proveitos:{vendas:{orc:o.vendas,prev:v("S"+rV)||0,fact:v("T"+rV)||0},at:{orc:o.at,prev:v("S"+rA)||0,fact:v("T"+rA)||0},outros:{orc:rO?(v("R"+rO)||0):0,prev:rO?(v("S"+rO)||0):0,fact:rO?(v("T"+rO)||0):0}},
+      custos:{venc:{orc:o.venc,prev:v("S"+rCv)||0,real:v("T"+rCv)||0},func:{orc:o.func,prev:v("S"+rCf)||0,real:v("T"+rCf)||0}},
+      mesesMedia:v("F5")||0,fonte:String(fname||"Orçamento")+" — S previsão, T faturado/realizado, R orçamento",em:_hojeLocal()};
+    ["vendas","at","outros"].forEach(function(k){bal.proveitos[k].prev=Math.round(bal.proveitos[k].prev*100)/100;bal.proveitos[k].fact=Math.round(bal.proveitos[k].fact*100)/100;});
+    ["venc","func"].forEach(function(k){bal.custos[k].prev=Math.round(bal.custos[k].prev*100)/100;bal.custos[k].real=Math.round(bal.custos[k].real*100)/100;});
+    // rubricas de custos: orçamento (K) e previsão (F) por linha
+    var rub=[];for(var r2=12;r2<=80;r2++){var nm=(ws["D"+r2]||ws["C"+r2]||ws["B"+r2]||{}).v;if(!nm)continue;var lvl=ws["B"+r2]?1:(ws["C"+r2]?2:3);
+      var K=v("K"+r2),F=v("F"+r2),E=v("E"+r2);if(K==null&&F==null&&E==null)continue;rub.push({nome:String(nm).trim(),nivel:lvl,orc:K||0,prev:Math.round((F||0)*100)/100,real:Math.round((E||0)*100)/100});}
+    var prevO=(D.orcamento&&D.orcamento[yr])?JSON.parse(JSON.stringify(D.orcamento[yr])):null;
+    D.orcamento=D.orcamento||{};D.orcamento[yr]=Object.assign({},D.orcamento[yr]||{},o);
+    D.balanco=D.balanco||{};D.balanco[yr]=bal;
+    D.orcRubricas=D.orcRubricas||{};D.orcRubricas[yr]=rub;
+    D.orcamentoSync=D.orcamentoSync||{};D.orcamentoSync[yr]={em:new Date().toISOString(),ficheiro:String(fname||"")};
+    try{_idxClear();}catch(e){}
+    return {ano:yr,orc:o,antes:prevO,bal:bal,rubricas:rub.length};};
+  window.syncOrcamento=function(){if(ro()){alert("Sem permissão.");return;}
+    pick(".xlsx,.xlsm,.xls",function(f){readFileWB(f).then(function(wb){var r;try{r=mwOrcWB(wb,f.name);}catch(e){alert("Não foi possível ler o Orçamento: "+e.message);return;}
+      try{logAct("Financeiro","Orçamento "+r.ano+" atualizado");}catch(e){}save();ren();var b=r.bal;
+      function ln(l,a,p,x){return '<tr><td>'+l+'</td><td style="text-align:right">'+money(a)+'</td><td style="text-align:right">'+money(p)+'</td><td style="text-align:right">'+money(x)+'</td></tr>';}
+      var body='<div style="font-size:13px;margin-bottom:8px">Ficheiro <b>'+escH(f.name)+'</b> (ano '+r.ano+'). O realizado dos custos continua a vir das despesas (P&amp;L, com as regras de IVA).</div>'+
+        '<table style="width:100%;font-size:12.5px"><tr><th style="text-align:left">Rubrica</th><th style="text-align:right">Orçamento</th><th style="text-align:right">Previsão</th><th style="text-align:right">Faturado/Real</th></tr>'+
+        ln("Vendas",b.proveitos.vendas.orc,b.proveitos.vendas.prev,b.proveitos.vendas.fact)+ln("AT",b.proveitos.at.orc,b.proveitos.at.prev,b.proveitos.at.fact)+
+        ln("Custos vencimentos",b.custos.venc.orc,b.custos.venc.prev,b.custos.venc.real)+ln("Custos funcionamento",b.custos.func.orc,b.custos.func.prev,b.custos.func.real)+'</table>';
+      document.getElementById("mArea").innerHTML=mWrap("Orçamento atualizado",body);}).catch(function(e){alert("Erro a ler o ficheiro: "+(e&&e.message||e));});});};
 })();
 
 </script>
