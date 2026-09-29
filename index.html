@@ -1863,7 +1863,7 @@ function syncFacturacaoWB(wb,fname){
       stage:"ganho",date:adj||fd,specialty:pl.indexOf("gastro")>=0?"Gastro":pl.indexOf("pneumo")>=0?"Pneumo":pl.indexOf("orl")>=0?"ORL":pl.indexOf("gineco")>=0?"Gineco":"",
       vendedor:String(w[15]||"").trim(),src:"pipe",factDate:fd,payDate:pd,paid:String(w[10]||"").trim().toLowerCase()==="pago",stFat:st,fatNum:_fnorm(w[7]),adj:adj,
       sMult:_xlNum(w[18])||0,tProx:_xlNum(w[19])||0,pRow:r+1,cloud:!!(dcl&&dcl>0),fy:fy};
-    o.com=_comOf(o.vendedor);if(String(w[4]||"").toLowerCase().indexOf("sub")>=0)o.sub=true;if(t==="AT"){o.arr=val;o.renewDate=adj||fd;}
+    o.com=_comOf(o.vendedor);if(/^\s*n\s*\.?\s*c/i.test(String(w[7]||"")))o.fatNC=true;if(String(w[4]||"").toLowerCase().indexOf("sub")>=0)o.sub=true;if(t==="AT"){o.arr=val;o.renewDate=adj||fd;}
     recs.push(o);}
   if(!recs.length)throw new Error("Sem linhas no Pipe Line.");
   // emparelhar com as linhas existentes deste ficheiro (preserva id e cliente)
@@ -1890,16 +1890,23 @@ function syncFacturacaoWB(wb,fname){
   var _gone={};old.forEach(function(d){if(!used[d.id])_gone[d.id]=1;});var _relig=0;
   (D.invoices||[]).forEach(function(iv){if(!iv||!_gone[iv.dealId])return;var n=_fnorm(iv.num);var c=out.filter(function(x){return x.fatNum&&x.fatNum===n;});
     if(!c.length)return;c.sort(function(a,b){return Math.abs(a.value-(Number(iv.amount)||0))-Math.abs(b.value-(Number(iv.amount)||0));});iv.dealId=c[0].id;_relig++;});
+  var _have={};(D.invoices||[]).forEach(function(iv){if(iv&&iv.num!=null)_have[_fnorm(iv.num)]=1;});var _grp={},_ord=[];
+  out.forEach(function(x){if(!x.fatNum||x.fatNC||!x.factDate||_have[x.fatNum])return;if(!_grp[x.fatNum]){_grp[x.fatNum]=[];_ord.push(x.fatNum);}_grp[x.fatNum].push(x);});
+  var _newInv=0,_newInvVal=0;D.invoices=D.invoices||[];
+  _ord.forEach(function(n){var g=_grp[n];var amt=0,civa=0,pd="",allPaid=true;g.forEach(function(x){amt+=Number(x.value)||0;civa+=Number(x.civa)||0;if(!x.paid)allPaid=false;if(x.payDate&&x.payDate>pd)pd=x.payDate;});
+    amt=Math.round(amt*100)/100;civa=Math.round(civa*100)/100;
+    D.invoices.push({id:"iv_pl"+String(n).replace(/\W/g,"")+"_"+Math.random().toString(36).slice(2,6),num:n,date:g[0].factDate,amount:amt,amountCiva:civa,dealId:g[0].id,clientId:g[0].clientId,
+      collected:allPaid,collDate:allPaid?(pd||""):"",imported:true,fromPipe:true,_pipeLinked:true});_newInv++;_newInvVal+=amt;});
   D.facturacaoSync=D.facturacaoSync||{};D.facturacaoSync[fy]={em:new Date().toISOString(),ficheiro:String(fname||""),linhas:out.length};
   _idxClear();
-  return {fy:fy,linhas:out.length,mantidas:kept,novas:added,removidas:removed,novosClientes:newCli,faturasReligadas:_relig};
+  return {fy:fy,linhas:out.length,mantidas:kept,novas:added,removidas:removed,novosClientes:newCli,faturasReligadas:_relig,faturasNovas:_newInv,faturasNovasValor:Math.round(_newInvVal*100)/100};
 }
 window.syncFacturacao=function(){if(typeof isReadOnlyNow==="function"&&isReadOnlyNow()){alert("Sem permissão.");return;}
   var inp=document.createElement("input");inp.type="file";inp.accept=".xlsx,.xlsm,.xls";
   inp.onchange=function(){var f=inp.files&&inp.files[0];if(!f)return;readFileWB(f).then(function(wb){var r;try{r=syncFacturacaoWB(wb,f.name);}catch(e){alert("Não foi possível ler o Faturação: "+e.message);return;}
     var y=r.fy;var pf=porFacturarAno(y),pc=porCobrarRows();var pcT=pc.reduce(function(a,x){return a+x.civa;},0);
     if(typeof logAct==="function")logAct("Financeiro","Facturação "+y+" atualizado ("+r.linhas+" linhas)");save();ren();
-    var body='<div style="font-size:13px;line-height:1.8">Ficheiro <b>'+esc(f.name)+'</b> (ano '+y+')<br>Linhas: <b>'+r.linhas+'</b> · mantidas '+r.mantidas+' · novas '+r.novas+' · removidas '+r.removidas+(r.novosClientes?' · novos clientes '+r.novosClientes:'')+'<br>NV faturado (H8): <b>'+fmt(nvFatAno(y))+'</b> · AT faturado (I8): <b>'+fmt(atFatAno(y))+'</b><br>Por faturar (F8+G8): <b>'+fmt(pf.total)+'</b> · Por cobrar (E8): <b>'+fmt(pcT)+'</b> · Cobrado '+y+': <b>'+fmt(cobradoAno(y))+'</b></div><div style="font-size:11.5px;color:#6B7680;margin-top:8px">Todas as vistas (Direção, Financeiro, Comercial, Objetivos) passam a usar estes valores.</div><button class="btn" style="background:'+R+';width:100%;margin-top:10px" onclick="clM()">OK</button>';
+    var body='<div style="font-size:13px;line-height:1.8">Ficheiro <b>'+esc(f.name)+'</b> (ano '+y+')<br>Linhas: <b>'+r.linhas+'</b> · mantidas '+r.mantidas+' · novas '+r.novas+' · removidas '+r.removidas+(r.novosClientes?' · novos clientes '+r.novosClientes:'')+(r.faturasNovas?'<br>Faturas novas: <b>'+r.faturasNovas+'</b> ('+fmt(r.faturasNovasValor)+' s/IVA)':'')+'<br>NV faturado (H8): <b>'+fmt(nvFatAno(y))+'</b> · AT faturado (I8): <b>'+fmt(atFatAno(y))+'</b><br>Por faturar (F8+G8): <b>'+fmt(pf.total)+'</b> · Por cobrar (E8): <b>'+fmt(pcT)+'</b> · Cobrado '+y+': <b>'+fmt(cobradoAno(y))+'</b></div><div style="font-size:11.5px;color:#6B7680;margin-top:8px">Todas as vistas (Direção, Financeiro, Comercial, Objetivos) passam a usar estes valores.</div><button class="btn" style="background:'+R+';width:100%;margin-top:10px" onclick="clM()">OK</button>';
     document.getElementById("mArea").innerHTML=mWrap("Faturação atualizado",body);}).catch(function(e){alert("Erro a ler o ficheiro: "+(e&&e.message||e));});};
   inp.click();};
 function parsePipeLine(wb){var ws=wb.Sheets["Pipe Line"];if(!ws)return{items:[],excluded:0};var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false});var h=findHdrRow(rows,["cliente"]);if(h<0)return{items:[],excluded:0};var hdr=rows[h];var iCli=colIdx(hdr,"cliente"),iProd=colIdx(hdr,"produto"),iVal=colIdx(hdr,"s/"),iDate=colIdx(hdr,"adjud"),iFact=colIdx(hdr,"fact."),iPag=colIdx(hdr,"pagam");var out=[],excluded=0;
@@ -9496,7 +9503,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     var anos=Object.keys(O).sort();
     if(!anos.length){app.innerHTML=pgHead("🎯","Objetivos & Execução")+'<div class="cd">Sem orçamentos carregados.</div>';return;}
     // realizado por ano
-    function provReal(y){if(DR[y]&&DR[y].vendas)return DR[y].vendas;var s=0;(D.invoices||[]).forEach(function(i){if(i.fromSAFT&&String(i.date||"").slice(0,4)===y)s+=Number(i.amount)||0;});return s;}
+    function provReal(y){if(DR[y]&&DR[y].vendas)return DR[y].vendas;var s=0;(D.invoices||[]).forEach(function(i){if((i.fromSAFT||i.fromPipe)&&!i.preERP&&String(i.date||"").slice(0,4)===y)s+=Number(i.amount)||0;});return s;}
     function custoReal(y){if(DR[y])return Math.abs(DR[y].fse)+Math.abs(DR[y].pessoal)+Math.abs(DR[y].cmvmc)+Math.abs(DR[y].outros);return null;}
     var _sel=window.__objAno||"todos";
     var h=pgHead("🎯","Objetivos & Execução");
@@ -9522,7 +9529,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     // tabela custos + margem
     h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">CUSTOS & MARGEM — OBJETIVO vs REALIZADO</div><div style="overflow-x:auto"><table><tr><th>Ano</th><th'+RA+'>Custos (obj)</th><th'+RA+'>Custos (real)</th><th'+RA+'>Margem obj.</th><th'+RA+'>Margem real</th></tr>';
     show.forEach(function(y){var o=O[y]||{};var cr2=custoReal(y);var pv=provReal(y);var mo=(o.totalProv||0)-(o.totalCusto||0);var mr=(cr2!=null)?(pv-cr2):null;h+='<tr><td style="font-weight:600">'+y+'</td><td'+RA+'>'+fmt(o.totalCusto||0)+'</td><td'+RA+'>'+(cr2!=null?fmt(cr2):'<span style="color:#6B7680">em curso</span>')+'</td><td'+RA+'>'+fmt(mo)+'</td><td'+RA+' style="font-weight:700;color:'+(mr!=null&&mr<0?DNG:GRN)+'">'+(mr!=null?fmt(mr):'—')+'</td></tr>';});
-    h+='</table></div><div style="font-size:12px;color:#6B7680;margin-top:8px">Objetivos dos ficheiros Orçamento de cada ano. Realizado dos proveitos = SAF-T; realizado dos custos = DR oficial (anos fechados). Custos na visão de gestão via P&L.</div></div>';
+    h+='</table></div><div style="font-size:12px;color:#6B7680;margin-top:8px">Objetivos dos ficheiros Orçamento de cada ano. Realizado dos proveitos = SAF-T mais as faturas do Faturação ainda sem SAF-T; realizado dos custos = DR oficial (anos fechados). Custos na visão de gestão via P&L.</div></div>';
     // barras objetivo vs realizado (todos os anos)
     if(_sel==="todos"){var mx=Math.max.apply(null,anos.map(function(y){return Math.max(O[y].totalProv||0,provReal(y));}).concat([1]));
       h+='<div class="cd"><div class="ct2" style="margin-bottom:12px">PROVEITOS: OBJETIVO vs REALIZADO POR ANO</div>';
