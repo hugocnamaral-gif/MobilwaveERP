@@ -681,7 +681,7 @@ function genReport(optYr,optMo){
   var w=window.open("","_blank");w.document.write(H);w.document.close();
 }
 
-function expData(){var b=new Blob([JSON.stringify(D,null,2)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="mobilwave_backup_"+_hojeLocal()+".json";a.click();D.lastBackup=_hojeLocal();save();ren()}
+function expData(){var b=new Blob([JSON.stringify(D,function(k,v){return (k==="_log"||k==="_redo")?undefined:v;})],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="mobilwave_backup_"+_hojeLocal()+".json";a.click();D.lastBackup=_hojeLocal();save();ren()}
 function impData(ev){var f=ev.target.files[0];if(!f)return;var r=new FileReader();
   r.onload=function(e){try{var o=JSON.parse(e.target.result);
     if(!o||!Array.isArray(o.clients)||!Array.isArray(o.deals)){toast("Ficheiro inválido — não parece um backup desta app.",{type:"error"});return}
