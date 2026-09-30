@@ -447,8 +447,6 @@ function migrate(){var changed=false;
     if(_mc>0)changed=true;
   }catch(e){}
   if((D.dataVersion||1)<INIT.dataVersion){D.dataVersion=INIT.dataVersion;changed=true}
-  try{if(mwUnifEspanha())changed=true;}catch(e){console.warn("Uniformização Espanha",e);}
-  try{if(mwUnifEspanhaV2())changed=true;}catch(e){console.warn("Clientes novos de Espanha",e);}
   try{window.__migrateChanged=changed;}catch(e){}
   if(changed)save();
 }
@@ -1410,7 +1408,7 @@ if(cTab==="dashboard"){
     h+='</div>';
   } else if(finSub==="despesas"){
   h+='<div class="ins"><div style="font-size:12.5px;color:#5F6B75;line-height:1.7"><b>Como se ligam os custos de '+yearLabel()+':</b> pagamentos totais (banco, c/IVA) <b>'+fmt(S.exp)+'</b> = pagamentos operacionais <b>'+fmt(S.expOp)+'</b> + IVA/IRC entregues ao Estado <b>'+fmt(S.impostos)+'</b>. O <b>custo do P&L</b> é <b>'+fmt(S.expPL)+'</b>: os pagamentos operacionais sem o IVA dedutível e com as reclassificações contabilísticas (é o mesmo número do P&L e do KPI Custos).</div></div>';
-  h+='<div class="cd"><div class="ch"><div class="ct2">Despesas</div><div style="display:flex;gap:6px;align-items:center"><label class="btn bs" style="background:'+SL+';cursor:pointer;margin:0">📄 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="impDespesasXlsx(this)"></label><button class="btn bs" style="background:'+R+'" onclick="openEM(\'\')">+ Despesa</button></div></div><div style="font-size:12px;color:#6B7680;margin-bottom:8px">Clica numa despesa para editar, atribuir a projeto/cliente ou eliminar. Importar Excel: colunas <b>data</b>, <b>a que se refere</b>, <b>valor</b>, <b>tipo</b>.</div>'+'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"><select onchange="window.__expAloc=this.value;rPnl()" style="border:1px solid #E4E8EB;border-radius:8px;padding:6px 9px;font-size:12px"><option value="">Alocação: todas</option><option value="sim"'+(window.__expAloc==="sim"?" selected":"")+'>Alocadas a projeto</option><option value="nao"'+(window.__expAloc==="nao"?" selected":"")+'>Não alocadas a projeto</option></select></div>'+'<div style="max-height:560px;overflow:auto">';
+  h+='<div class="cd"><div class="ch"><div class="ct2">Despesas</div><div style="display:flex;gap:6px;align-items:center"><button class="btn bs" style="background:#2E8C93" onclick="syncExtrato()">📥 Extrato bancário</button><label class="btn bs" style="background:'+SL+';cursor:pointer;margin:0">📄 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="impDespesasXlsx(this)"></label><button class="btn bs" style="background:'+R+'" onclick="openEM(\'\')">+ Despesa</button></div></div><div style="font-size:12px;color:#6B7680;margin-bottom:8px">Clica numa despesa para editar, atribuir a projeto/cliente ou eliminar. Importar Excel: colunas <b>data</b>, <b>a que se refere</b>, <b>valor</b>, <b>tipo</b>.</div>'+'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"><select onchange="window.__expAloc=this.value;rPnl()" style="border:1px solid #E4E8EB;border-radius:8px;padding:6px 9px;font-size:12px"><option value="">Alocação: todas</option><option value="sim"'+(window.__expAloc==="sim"?" selected":"")+'>Alocadas a projeto</option><option value="nao"'+(window.__expAloc==="nao"?" selected":"")+'>Não alocadas a projeto</option></select></div>'+'<div style="max-height:560px;overflow:auto">';
   D.expenses.filter(function(e){var al=!!e.projetoId;if(window.__expAloc==="sim"&&!al)return false;if(window.__expAloc==="nao"&&al)return false;return true;}).slice().sort(function(a,b){return b.date.localeCompare(a.date)}).forEach(function(e){var _pj=e.projetoId?(dealById(e.projetoId)||null):null;var _tag=[e.type,(_pj?cn(_pj.clientId):""),e.client].filter(Boolean).join(" · ");h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f8f7f5;cursor:pointer" onclick="openEM(\''+e.id+'\')"><div><div style="font-size:12px;font-weight:500">'+esc(e.desc||"—")+'</div><div style="font-size:11px;color:#5F6B75">'+fmtD(e.date)+(e.bank?" · "+esc(e.bank):"")+(_tag?" · "+esc(_tag):"")+'</div></div><div style="display:flex;align-items:center;gap:6px">'+(e.reembolsoId?'<span style="font-size:11px;font-weight:600;color:'+BLU+';border:1px solid '+rgba(BLU,.4)+';border-radius:6px;padding:1px 6px;white-space:nowrap">reembolso</span>':'')+(e.projetoId?'<span style="font-size:11px;font-weight:600;color:'+GRN+';border:1px solid '+rgba(GRN,.4)+';border-radius:6px;padding:1px 6px;white-space:nowrap">alocado</span>':'')+'<span style="font-weight:600;color:'+R+';font-size:12px;white-space:nowrap">-'+fmt(e.amount)+'</span><button class="btn bs" style="background:'+SL+'" onclick="event.stopPropagation();openEM(\''+e.id+'\')">Editar</button><button style="background:none;border:none;font-size:12px;cursor:pointer;color:#ccc" onclick="event.stopPropagation();delEx(\''+e.id+'\')">✕</button></div></div>'});
   h+='</div></div>';
   } else {
@@ -1796,56 +1794,7 @@ function initMap(){var el=document.getElementById("leaflet-map");if(!el)return;
 function findHdrRow(rows,kws){for(var i=0;i<rows.length;i++){var t=(rows[i]||[]).map(function(c){return String(c||"").toLowerCase()}).join("|");if(kws.every(function(k){return t.indexOf(k)>=0}))return i}return -1}
 function colIdx(hdr,kw){for(var i=0;i<hdr.length;i++){if(String(hdr[i]||"").toLowerCase().indexOf(kw)>=0)return i}return -1}
 function normName(s){return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\bsta\b/g,"santa").replace(/stendoscopia|servei andorr[a-z]*|almeria|medical7|\(.*?\)/g,"").replace(/\b(hospital|hosp|h|clinica|centro medico|policlinica|siglo xxi|s\.l\.|grand canaria|las palmas|de|da|do|del)\b/g,"").replace(/[.,\-\/]/g," ").replace(/\s+/g," ").trim()}
-
-/* ===== Clientes de Espanha: nomes do MW Espanha e junção de duplicados (migração única, set/2026) =====
-   [idEspanha, nome, região, canal, país, [clientes do ERP — o 1.º fica, os outros juntam-se a ele]]
-   Os nomes antigos ficam em "aliases" para as importações (Odoo, Pipe Line) continuarem a reconhecer o cliente. */
-var MW_UNIF_ES=[["c1", "H.NS Meritxell", "Andorra", "Directo", "Andorra", ["cl0518"]], ["c2", "C.D. Singilis", "Andaluzia", "STEndoscopia", "Espanha", ["cl0541", "cl0760"]], ["c3", "H. La Paloma", "Canárias", "STEndoscopia", "Espanha", ["cl0538", "cl0756", "cl0765"]], ["c4", "Sta Catalina", "Canárias", "STEndoscopia", "Espanha", ["cl0551", "cl0771"]], ["c5", "Salud Valles", "Catalunha", "STEndoscopia", "Espanha", ["cl0540", "cl0758"]], ["c6", "IMED Valencia", "Valencia", "STEndoscopia", "Espanha", ["cl0909"]], ["c7", "H. Rambla Nova", "Catalunha", "STEndoscopia", "Espanha", ["cl0908"]], ["c9", "Almeria - Torrecárdenas", "Andaluzia", "STEndoscopia", "Espanha", ["cl0543", "cl0762", "cl0954"]], ["c10", "Almeria - Inmaculada", "Andaluzia", "STEndoscopia", "Espanha", ["cl0953"]], ["c28", "Almeria - El Toyo", "Andaluzia", "STEndoscopia", "Espanha", ["cl0955"]], ["c13", "H.U. Arnau Vilanova", "Catalunha", "STEndoscopia", "Espanha", ["mun8wqf9r4bh"]], ["c15", "Hospitales Pascual", "Andaluzia", "STEndoscopia", "Espanha", ["mun90bcju240"]], ["c17", "H. Orosa (Lanzarote)", "Canárias", "STEndoscopia", "Espanha", ["cl0544", "cl0004", "cl1005"]], ["c18", "Centro Médico Tinabana", "Canárias", "STEndoscopia", "Espanha", ["cl0536", "cl0754"]], ["c19", "Clínica CLINSA - Hospital Universitario Vithas Madrid Arturo Soria", "Madrid", "STEndoscopia", "Espanha", ["cl0537", "cl0755"]], ["c20", "Clínica Los Belgas", "Madrid", "STEndoscopia", "Espanha", ["cl0539", "cl0757"]], ["c21", "Hosp. VOT Madrid", "Madrid", "STEndoscopia", "Espanha", ["cl0542", "cl0761"]], ["c22", "H. São José (Las Palmas)", "Canárias", "STEndoscopia", "Espanha", ["cl0546", "cl0763", "cl0545"]], ["c23", "Hospitais Perpetuo Socorro", "Canárias", "STEndoscopia", "Espanha", ["cl0547", "cl0764"]], ["c24", "H. Viamed Sancti Petri -Cadiz", "Andaluzia", "STEndoscopia", "Espanha", ["cl0548", "cl0766", "cl1006"]], ["c25", "Mapfre Salud24 (Coruña)", "Galiza", "STEndoscopia", "Espanha", ["cl0549", "cl0767"]], ["c26", "Policlínica Salud 24", "Madrid", "STEndoscopia", "Espanha", ["cl0768"]], ["c27", "Policlínicas Ibéricas XXI - Centro Medico Reston", "Madrid", "STEndoscopia", "Espanha", ["cl0550", "cl0769", "cl0770"]], ["mrnck0ceytpb", "Hospital Virgem do Rocio", "Andaluzia", "STEndoscopia", "Espanha", ["mun8tcgsu46p"]], ["msrcpwx60hrp", "QuironSalud Madrid", "Madrid", "STEndoscopia", "Espanha", ["mun940k5qbj4"]], ["msyrnqth9o71", "HLA - ViistaHermosa", "Valencia", "STEndoscopia", "Espanha", ["cl0759"]], ["mt8pgb5w7mqv", "Hospital Morales Meseguer - Murcia", "Múrcia", "STEndoscopia", "Espanha", ["cl1004"]], ["erp_cl0535", "Centro de Especialidades Sanitarias de Alta Resolución", "", "STEndoscopia", "Espanha", ["cl0535", "cl0753"]]];
-function mwUnifEspanha(){
-  if(D._esUnifV1)return false;
-  var byId={};(D.clients||[]).forEach(function(c){byId[c.id]=c;});
-  var remap={},n=0;
-  MW_UNIF_ES.forEach(function(g){
-    var ex=g[5].filter(function(id){return byId[id];});if(!ex.length)return;
-    var s=byId[ex[0]];var al=Array.isArray(s.aliases)?s.aliases.slice():[];
-    ex.forEach(function(id){var c=byId[id];if(c.name&&c.name!==g[1]&&al.indexOf(c.name)<0)al.push(c.name);
-      if(id!==s.id){if(!s.nif&&c.nif)s.nif=c.nif;["saas","cloud","install","holding"].forEach(function(k){if(s[k]==null&&c[k]!=null)s[k]=c[k];});remap[id]=s.id;}});
-    s.name=g[1];if(g[2])s.region=g[2];if(g[3])s.channel=g[3];s.pais=g[4];s.esId=g[0];if(al.length)s.aliases=al;n++;
-  });
-  var ids=Object.keys(remap);
-  if(ids.length){
-    // todas as referências a clientes passam para o cliente que fica
-    Object.keys(D).forEach(function(k){var arr=D[k];if(!Array.isArray(arr)||k==="clients")return;
-      arr.forEach(function(x){if(!x||typeof x!=="object")return;["clientId","cliId","clienteId"].forEach(function(f){if(x[f]&&remap[x[f]])x[f]=remap[x[f]];});});});
-    // especialidades repetidas depois da junção
-    var seen={};D.clientSpecs=(D.clientSpecs||[]).filter(function(s){var k=s.clientId+"|"+s.specialty;if(seen[k]){seen[k].at=seen[k].at||s.at;return false;}seen[k]=s;return true;});
-    D.clients=(D.clients||[]).filter(function(c){return !remap[c.id];});
-    ids.forEach(function(id){try{tombDel("cli",id);}catch(e){}});
-  }
-  D._esUnifV1={em:new Date().toISOString(),clientes:n,juntados:ids.length};
-  try{if(typeof logAct==="function")logAct("Clientes","Clientes de Espanha uniformizados com o MW Espanha: "+n+" clientes, "+ids.length+" duplicados juntados");}catch(e){}
-  try{if(typeof _idxClear==="function")_idxClear();}catch(e){}
-  return true;
-}
-
-/* ===== Clientes que só existiam no MW Espanha passam a existir no ERP (migração única, 30/09/2026) ===== */
-var MW_ES_NOVOS=[["c8", "Grupo Sanitas", "Madrid", "STEndoscopia", ""], ["c14", "Hospital Alcorcón", "Madrid", "STEndoscopia", "C/ Budapest, 1, 28922 Alcorcón, Madrid"], ["mt7lc9i7d0gr", "Hospital de Getafe", "Madrid", "STEndoscopia", ""], ["mt8qkb7cd8bn", "Clinica Sermeva de La Palma", "Canárias", "STEndoscopia", ""], ["mt8r33wvxltj", "Clinica San Roque Canarias", "Canárias", "STEndoscopia", ""], ["mt8t1z0b35n5", "Centro Medico Fuerteventura", "Canárias", "STEndoscopia", ""], ["c11", "Clínica San José", "Canárias", "STEndoscopia", ""], ["msd03ixpinn2", "ST Endoscopia", "Madrid", "STEndoscopia", "C/ José Isbert 20, 28223, Pozuelo de Alarcón"]];
-function mwUnifEspanhaV2(){
-  if(D._esUnifV2)return false;
-  var n=0;var nn=function(x){return String(x||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();};
-  MW_ES_NOVOS.forEach(function(g){
-    var ex=(D.clients||[]).filter(function(c){return c.esId===g[0]||nn(c.name)===nn(g[1])||(Array.isArray(c.aliases)&&c.aliases.some(function(a){return nn(a)===nn(g[1]);}));})[0];
-    if(ex){if(!ex.esId){ex.esId=g[0];ex.pais="Espanha";if(g[2])ex.region=g[2];if(g[3])ex.channel=g[3];if(g[4]&&!ex.address)ex.address=g[4];n++;}return;} // já existia com outro país: passa a ser de Espanha
-    var c={id:"es_"+g[0],name:g[1],pais:"Espanha",region:g[2]||"",channel:g[3]||"",esId:g[0],saas:false,cloud:false};if(g[4])c.address=g[4];
-    D.clients.push(c);n++;
-  });
-  D._esUnifV2={em:new Date().toISOString(),criados:n};
-  try{if(n&&typeof logAct==="function")logAct("Clientes","Criados no ERP "+n+" clientes que só existiam no MW Espanha");}catch(e){}
-  try{if(typeof _idxClear==="function")_idxClear();}catch(e){}
-  return true;
-}
 function matchClient(name){var n=normName(name);if(!n)return null;var best=null;
-  D.clients.forEach(function(c){if(best||!Array.isArray(c.aliases))return;if(c.aliases.some(function(x){return normName(x)===n;}))best=c;});if(best)return best;
   D.clients.forEach(function(c){var cn2=normName(c.name);if(cn2.length>2&&(n.indexOf(cn2)>=0||cn2.indexOf(n)>=0)){if(!best)best=c}});
   if(best)return best;
   var toks=n.split(" ");
@@ -1949,7 +1898,7 @@ function syncFacturacaoWB(wb,fname){
   // emparelhar com as linhas existentes deste ficheiro (preserva id e cliente)
   var old=(D.deals||[]).filter(function(d){return _isPipeRow(d)&&(d.fy||2026)===fy;});
   var byKey={};old.forEach(function(d){var k=[String(d.product||"").trim(),Number(d.value).toFixed(2),_padj(d),String(d.vendedor||"").trim()].join("|");(byKey[k]=byKey[k]||[]).push(d);});
-  var cliByNorm={};(D.clients||[]).forEach(function(c){var n=normName(c.name);if(n&&!cliByNorm[n])cliByNorm[n]=c;(c.aliases||[]).forEach(function(x){var m=normName(x);if(m&&!cliByNorm[m])cliByNorm[m]=c;});});
+  var cliByNorm={};(D.clients||[]).forEach(function(c){var n=normName(c.name);if(n&&!cliByNorm[n])cliByNorm[n]=c;});
   var kept=0,added=0,newCli=0;var used={};
   var out=recs.map(function(o){var k=[o.product.trim(),o.value.toFixed(2),o.adj,o.vendedor].join("|");var lst=byKey[k]||[];var pick=null;
     for(var i=0;i<lst.length;i++){if(!used[lst[i].id]&&lst[i].pRow===o.pRow){pick=lst[i];break;}}
@@ -2705,7 +2654,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
       var r=await sb.from("app_state").select("data").eq("id",stateId()).maybeSingle();
       if(r.error)throw r.error;
       var d=r.data&&r.data.data;
-      if(d&&Object.keys(d).length){D=d;try{__lastData=JSON.stringify(d);__lastRev=d._rev||null;}catch(e){}}   // base = o que está no servidor (antes das correções automáticas)
+      if(d&&Object.keys(d).length){D=d;}
       else if(currentRole!=="viewer"){await sb.from("app_state").upsert({id:stateId(),data:syncPayload()});} // semeia 1ª vez (linha da organização)
     }catch(e){toastSafe("Erro a carregar dados: "+(e.message||e));}
     try{if(typeof migrate==="function")migrate();}catch(e){}
@@ -2868,7 +2817,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   var __syncSetup=false;
   function setupSync(){
     if(__syncSetup)return;__syncSetup=true;
-    try{if(__lastData==null){__lastData=JSON.stringify(syncPayload());__lastRev=D._rev||null;}}catch(e){}
+    try{__lastData=JSON.stringify(syncPayload());__lastRev=D._rev||null;}catch(e){}
     // 1) ao voltar ao separador
     try{document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible")reloadState(false);});}catch(e){}
     try{window.addEventListener("focus",function(){reloadState(false);});}catch(e){}
@@ -10420,7 +10369,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     if(!adm)rows=rows.filter(function(){return true;});
     rows.sort(function(a,b){return a.d.localeCompare(b.d);});
     return sec("Aprovações",rows.length,adm?["Férias & ausências","mwGo('ferias')"]:null,rows.length?rows.slice(0,8).map(function(r){return r.h;}).join("")+(rows.length>8?'<div class="mw-empty">+ '+(rows.length-8)+' pendentes</div>':''):'<div class="mw-empty">Nada à espera de aprovação.</div>');}
-  function homeFollow(){var today=iso();var open=(D.deals||[]).filter(function(d){return (typeof isCrmDeal==="function"?isCrmDeal(d):d.src==="crm")&&(d.stage==="lead"||d.stage==="validar"||d.stage==="proposta");});
+  function homeFollow(){var today=iso();var open=(D.deals||[]).filter(function(d){return d.src==="crm"&&(d.stage==="lead"||d.stage==="validar"||d.stage==="proposta");});
     var mineL=open.filter(function(d){return mine(d.vendedor);});var useMine=window.__mwHome.fu==="meus"&&mineL.length>0;var L=useMine?mineL:open;
     L=L.map(function(d){var over=d.nextDate&&d.nextDate<today;var days=Math.floor((new Date(today)-new Date(d.date||today))/86400000);return {d:d,over:over,days:days,score:(over?1e6:0)+(d.nextDate===today?5e5:0)+days*10+Math.min(9,(d.value||0)/10000)};}).sort(function(a,b){return b.score-a.score;});
     var body=L.slice(0,8).map(function(o){var d=o.d;var who=(d.clientId&&typeof cn==="function")?cn(d.clientId):(d.crmConta||"—");var st=(typeof SL2!=="undefined"&&SL2[d.stage])||d.stage;
@@ -10513,9 +10462,9 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
   /* ---------- Importar & dados: ações que saíram do cabeçalho ---------- */
   function dataCard(){var app=$("#app");if(!app||typeof cTab==="undefined"||cTab!=="importar"||$("#mwDataCard",app))return;
     var c=document.createElement("div");c.className="cd";c.id="mwDataCard";c.style.borderLeft="3px solid #2E8C93";
-    c.innerHTML='<div class="ct2" style="margin-bottom:6px">Dados da app</div><div style="font-size:12.5px;color:#5F6B75;margin-bottom:12px">Os três primeiros botões atualizam a app com os Excel mais recentes (CRM do Odoo, Faturação, Orçamento) sem mexer no resto dos dados. As ações que substituem ou apagam dados pedem confirmação escrita.</div>'+
+    c.innerHTML='<div class="ct2" style="margin-bottom:6px">Dados da app</div><div style="font-size:12.5px;color:#5F6B75;margin-bottom:12px">Os botões 📥 atualizam a app com os Excel mais recentes (CRM do Odoo, Faturação, Orçamento e extrato bancário) sem mexer no resto dos dados. As ações que substituem ou apagam dados pedem confirmação escrita.</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-      '<button class="btn bs" style="background:#2E8C93" onclick="syncCrmOdoo()">📥 CRM do Odoo (.xlsx)</button>'+'<button class="btn bs" style="background:#2E8C93" onclick="syncFacturacao()">📥 Faturação (.xlsx)</button>'+'<button class="btn bs" style="background:#2E8C93" onclick="syncOrcamento()">📥 Orçamento (.xlsx)</button>'+'<button class="btn bs" style="background:#5F6B75" onclick="openUpdM()">Despesas e Pipe Line antigos (Excel)</button>'+
+      '<button class="btn bs" style="background:#2E8C93" onclick="syncCrmOdoo()">📥 CRM do Odoo (.xlsx)</button>'+'<button class="btn bs" style="background:#2E8C93" onclick="syncFacturacao()">📥 Faturação (.xlsx)</button>'+'<button class="btn bs" style="background:#2E8C93" onclick="syncOrcamento()">📥 Orçamento (.xlsx)</button>'+'<button class="btn bs" style="background:#2E8C93" onclick="syncExtrato()">📥 Extrato bancário (.xlsx)</button>'+'<button class="btn bs" style="background:#5F6B75" onclick="openUpdM()">Despesas e Pipe Line antigos (Excel)</button>'+
       '<button class="btn bs" style="background:#4E86B0" onclick="openVerifyM()">Verificar (sem importar)</button>'+
       '<button class="btn bs" style="background:#5F6B75" onclick="expData()">Exportar cópia (JSON)</button>'+
       '<button class="btn bs" style="background:#5F6B75" onclick="expCSV()">CSV para contabilidade</button>'+
@@ -10662,7 +10611,65 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
         '<table style="width:100%;font-size:12.5px"><tr><th style="text-align:left">Rubrica</th><th style="text-align:right">Orçamento</th><th style="text-align:right">Previsão</th><th style="text-align:right">Faturado/Real</th></tr>'+
         ln("Vendas",b.proveitos.vendas.orc,b.proveitos.vendas.prev,b.proveitos.vendas.fact)+ln("AT",b.proveitos.at.orc,b.proveitos.at.prev,b.proveitos.at.fact)+
         ln("Custos vencimentos",b.custos.venc.orc,b.custos.venc.prev,b.custos.venc.real)+ln("Custos funcionamento",b.custos.func.orc,b.custos.func.prev,b.custos.func.real)+'</table>';
-      document.getElementById("mArea").innerHTML=mWrap("Orçamento atualizado",body);}).catch(function(e){alert("Erro a ler o ficheiro: "+(e&&e.message||e));});});};
+      var _ext="";try{if(wb.SheetNames.some(function(n){return /^extrato/i.test(n);})){var P=mwExtratoParse(wb);window.__extP=P;_ext='<div style="border-top:1px solid #E4E8EB;margin-top:14px;padding-top:12px"><div style="font-weight:700;font-size:13px;margin-bottom:4px">Extrato bancário (folha extratos)</div>'+mwExtratoResumo(P)+(P.novas.length?'<button class="btn" style="background:#2E8C93;width:100%;margin-top:12px" onclick="mwExtratoConfirm()">Adicionar '+P.novas.length+' despesas do extrato</button>':'<div style="font-size:12.5px;color:#5F6B75;margin-top:6px">As despesas já estão todas na app.</div>')+'</div>';}}catch(e){_ext='<div class="ins" style="margin-top:10px">Extrato: '+escH(e.message)+'</div>';}
+      document.getElementById("mArea").innerHTML=mWrap("Orçamento atualizado",body+_ext);}).catch(function(e){alert("Erro a ler o ficheiro: "+(e&&e.message||e));});});};
+})();
+
+/* ===== Extrato bancário (folha "extratos" do ficheiro Orçamento, ou um Excel com as mesmas colunas) =====
+   Entram só as saídas (valores negativos). Ficam de fora: recebimentos de clientes, movimentos internos,
+   aplicações, juros, suprimentos e estornos/reembolsos (valores positivos). Não duplica: compara data + valor + banco. */
+(function(){
+  var MAP={"vencimentos":"Vencimentos","grat-coverflex":"Gratificações Outras","gratificações outras":"Gratificações Outras","gratificacoes outras":"Gratificações Outras","coverflex":"Gratificações Outras",
+    "santander":"Comissões Banco","cgd":"Comissões Banco","artelecom":"Artelecom","stocks+sms":"Stock","stock":"Stock","sms":"SMS",
+    "escritorio (levantamento+despesas)":"Escritório","escritório":"Escritório","escritorio":"Escritório","despesas representação":"Despesas Outras","despesas representacao":"Despesas Outras",
+    "viagens representação":"Viagens","viagens representacao":"Viagens","viagens":"Viagens","envio de encomendas":"CTT e Estafetas","actividades (kickoff+festas)":"Despesas Outras","atividades (kickoff+festas)":"Despesas Outras",
+    "sifide":"SIFIDE","rendas":"Renda","renda":"Renda","juridico":"Jurídico","jurídico":"Jurídico","toc":"TOC","sgq":"Qualidade e Segurança","qualidade":"Qualidade e Segurança",
+    "hardware":"Hardware","software":"Software","edp":"EDP","meo":"MEO","marketing":"Marketing","estado":"Estado","gestão":"Estado","gestao":"Estado","multas":"Despesas Outras",
+    "outros seguros":"Outros Seguros","seguro trabalho":"Seguro Trabalho","seguro saúde":"Seguro Saúde","seguro saude":"Seguro Saúde","carros rendas":"Carros Rendas","carros consumos":"Carros Consumos",
+    "vv":"VV","uber":"Uber","combustivel":"Gasóleo","combustível":"Gasóleo","gasóleo":"Gasóleo","irc":"IRC","iva":"IVA","fornecedores":"Fornecedores","despesas comerciais":"Despesas Comerciais"};
+  var SKIP={"clientes":1,"movimento interno":1,"cgd aplicacao":1,"cgd aplicação":1,"juros":1,"juros poupança":1,"juros poupanca":1,"suprimentos":1,"devolucao de credito estado":1};
+  function k(s){return String(s==null?"":s).trim().toLowerCase().replace(/\s+/g," ");}
+  function money(v){try{return fmt(v);}catch(e){return Math.round(v)+" €";}}
+  function escH(s){try{return esc(s);}catch(e){return String(s);}}
+  function bankOf(b){var x=k(b);if(x.indexOf("cgd")>=0||x.indexOf("caixa")>=0)return "CGD";if(x.indexOf("santander")>=0)return "Santander";return String(b||"").trim();}
+  function expKey(date,amt,bank){return String(date).slice(0,10)+"|"+(Math.round(Math.abs(Number(amt)||0)*100)/100).toFixed(2)+"|"+k(bankOf(bank));}
+
+  window.mwExtratoParse=function(wb){
+    var name=null;wb.SheetNames.forEach(function(n){if(!name&&k(n).indexOf("extrato")===0)name=n;});if(!name)name=wb.SheetNames[0];
+    var rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null});
+    var h=-1,I={};for(var r=0;r<Math.min(rows.length,30);r++){var w=rows[r]||[];var hs=w.map(k);var iDesc=hs.findIndex(function(x){return x.indexOf("descri")===0;});var iMov=hs.findIndex(function(x){return x.indexOf("movimento")===0||x==="valor";});
+      if(iDesc>=0&&iMov>=0){h=r;I.desc=iDesc;I.mov=iMov;I.date=hs.indexOf("data");I.bank=hs.findIndex(function(x){return x.indexOf("banco")===0;});I.cls=hs.findIndex(function(x){return x.indexOf("classif")===0||x==="categoria"||x==="tipo";});break;}}
+    if(h<0||I.date<0)throw new Error('Não encontrei as colunas do extrato (Data, Descrição, Movimentos, Banco, Classif.).');
+    var out={novas:[],jaExistem:0,ignoradas:{},entradas:0,entradasVal:0,semClass:[],naoMapeadas:{},ultimaData:"",folha:name};
+    var have={};(D.expenses||[]).forEach(function(e){var kk=expKey(e.date,e.amount,e.bank);have[kk]=(have[kk]||0)+1;});
+    for(var i=h+1;i<rows.length;i++){var w=rows[i]||[];var v=Number(w[I.mov]);if(w[I.mov]==null||w[I.mov]===""||isNaN(v)||!w[I.desc])continue;
+      var dt=_xlDate(w[I.date]);if(!dt)continue;if(dt>out.ultimaData)out.ultimaData=dt;
+      var cls=I.cls>=0?String(w[I.cls]||"").trim():"";var ck=k(cls);var bank=bankOf(I.bank>=0?w[I.bank]:"");
+      if(SKIP[ck]){out.ignoradas[cls||"—"]=(out.ignoradas[cls||"—"]||0)+1;continue;}
+      if(v>0){out.entradas++;out.entradasVal+=v;continue;}
+      var amt=Math.round(-v*100)/100;var kk=expKey(dt,amt,bank);if(have[kk]){have[kk]--;out.jaExistem++;continue;}
+      var type=MAP[ck];if(!type){type=ck?"Não Identificadas":"Não Identificadas";out.naoMapeadas[cls||"(sem classificação)"]=(out.naoMapeadas[cls||"(sem classificação)"]||0)+1;}
+      out.novas.push({date:dt,amount:amt,type:type,bank:bank,desc:String(w[I.desc]).replace(/\s+/g," ").trim()+(type==="Não Identificadas"&&cls?" ["+cls+"]":""),src:"banco"});}
+    out.novas.sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});
+    return out;};
+  window.mwExtratoApply=function(P){var n=0,tot=0;D.expenses=D.expenses||[];P.novas.forEach(function(x){var e=Object.assign({id:uid()},x);D.expenses.push(e);n++;tot+=x.amount;});
+    D.extratoSync={em:new Date().toISOString(),linhas:n,valor:Math.round(tot*100)/100,ate:P.ultimaData};try{_idxClear();}catch(e){}return {n:n,valor:Math.round(tot*100)/100};};
+  window.mwExtratoResumo=function(P){var byT={};P.novas.forEach(function(x){byT[x.type]=(byT[x.type]||0)+x.amount;});
+    var tot=P.novas.reduce(function(a,x){return a+x.amount;},0);
+    var h='<div style="font-size:13px;line-height:1.8">Movimentos até <b>'+(P.ultimaData?P.ultimaData.split("-").reverse().join("/"):"—")+'</b>. Novas despesas: <b>'+P.novas.length+'</b> · '+money(tot)+' · já estavam na app: '+P.jaExistem+'</div>';
+    h+='<div style="font-size:12px;color:#6B7680;margin-bottom:8px">Fora das despesas: '+Object.keys(P.ignoradas).map(function(c){return escH(c)+" ("+P.ignoradas[c]+")";}).join(", ")+(P.entradas?'; entradas/estornos '+P.entradas+' ('+money(P.entradasVal)+')':'')+'.</div>';
+    var nm=Object.keys(P.naoMapeadas);if(nm.length)h+='<div class="ins" style="margin-bottom:8px;font-size:12.5px">Classificações que a app não conhece, ficam como <b>Não Identificadas</b> (podes mudar depois em Financeiro › Despesas): '+nm.map(function(c){return escH(c)+" ("+P.naoMapeadas[c]+")";}).join(", ")+'</div>';
+    if(P.novas.length){h+='<table style="width:100%;font-size:12.5px"><tr><th style="text-align:left">Categoria</th><th style="text-align:right">Valor</th></tr>'+Object.keys(byT).sort(function(a,b){return byT[b]-byT[a];}).map(function(t){return '<tr><td>'+escH(t)+'</td><td style="text-align:right">'+money(byT[t])+'</td></tr>';}).join("")+'</table>';
+      h+='<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12.5px;color:#2E8C93">Ver os '+P.novas.length+' movimentos</summary><div style="max-height:240px;overflow:auto">'+P.novas.map(function(x){return '<div style="font-size:12px;padding:3px 0;border-top:1px solid #EFF1F4">'+x.date.split("-").reverse().join("/")+' · '+escH(x.bank)+' · '+escH(x.type)+' · <b>'+money(x.amount)+'</b> · <span style="color:#6B7680">'+escH(x.desc.slice(0,60))+'</span></div>';}).join("")+'</div></details>';}
+    return h;};
+  window.syncExtrato=function(){if(typeof isReadOnlyNow==="function"&&isReadOnlyNow()){alert("Sem permissão.");return;}
+    var inp=document.createElement("input");inp.type="file";inp.accept=".xlsx,.xlsm,.xls";inp.onchange=function(){var f=inp.files&&inp.files[0];if(!f)return;
+      readFileWB(f).then(function(wb){var P;try{P=mwExtratoParse(wb);}catch(e){alert("Não foi possível ler o extrato: "+e.message);return;}window.__extP=P;
+        var body=mwExtratoResumo(P)+(P.novas.length?'<button class="btn" style="background:#2E8C93;width:100%;margin-top:12px" onclick="mwExtratoConfirm()">Adicionar '+P.novas.length+' despesas</button>':'<div style="font-size:12.5px;color:#5F6B75;margin-top:8px">Nada de novo para adicionar.</div>');
+        document.getElementById("mArea").innerHTML=mWrap("Extrato bancário — "+esc(f.name),body);}).catch(function(e){alert("Erro a ler o ficheiro: "+(e&&e.message||e));});};inp.click();};
+  window.mwExtratoConfirm=function(){var P=window.__extP;if(!P)return;var r=mwExtratoApply(P);window.__extP=null;
+    try{logAct("Despesa",r.n+" despesa(s) do extrato bancário ("+money(r.valor)+")");}catch(e){}save();try{clM();}catch(e){}ren();
+    try{if(typeof window.mwSnack==="function")window.mwSnack(r.n+" despesas adicionadas do extrato.");}catch(e){}};
 })();
 
 </script>
