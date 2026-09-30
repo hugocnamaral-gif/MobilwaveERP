@@ -447,6 +447,8 @@ function migrate(){var changed=false;
     if(_mc>0)changed=true;
   }catch(e){}
   if((D.dataVersion||1)<INIT.dataVersion){D.dataVersion=INIT.dataVersion;changed=true}
+  try{if(mwUnifEspanha())changed=true;}catch(e){console.warn("Uniformização Espanha",e);}
+  try{if(mwUnifEspanhaV2())changed=true;}catch(e){console.warn("Clientes novos de Espanha",e);}
   try{window.__migrateChanged=changed;}catch(e){}
   if(changed)save();
 }
@@ -1794,7 +1796,56 @@ function initMap(){var el=document.getElementById("leaflet-map");if(!el)return;
 function findHdrRow(rows,kws){for(var i=0;i<rows.length;i++){var t=(rows[i]||[]).map(function(c){return String(c||"").toLowerCase()}).join("|");if(kws.every(function(k){return t.indexOf(k)>=0}))return i}return -1}
 function colIdx(hdr,kw){for(var i=0;i<hdr.length;i++){if(String(hdr[i]||"").toLowerCase().indexOf(kw)>=0)return i}return -1}
 function normName(s){return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\bsta\b/g,"santa").replace(/stendoscopia|servei andorr[a-z]*|almeria|medical7|\(.*?\)/g,"").replace(/\b(hospital|hosp|h|clinica|centro medico|policlinica|siglo xxi|s\.l\.|grand canaria|las palmas|de|da|do|del)\b/g,"").replace(/[.,\-\/]/g," ").replace(/\s+/g," ").trim()}
+
+/* ===== Clientes de Espanha: nomes do MW Espanha e junção de duplicados (migração única, set/2026) =====
+   [idEspanha, nome, região, canal, país, [clientes do ERP — o 1.º fica, os outros juntam-se a ele]]
+   Os nomes antigos ficam em "aliases" para as importações (Odoo, Pipe Line) continuarem a reconhecer o cliente. */
+var MW_UNIF_ES=[["c1", "H.NS Meritxell", "Andorra", "Directo", "Andorra", ["cl0518"]], ["c2", "C.D. Singilis", "Andaluzia", "STEndoscopia", "Espanha", ["cl0541", "cl0760"]], ["c3", "H. La Paloma", "Canárias", "STEndoscopia", "Espanha", ["cl0538", "cl0756", "cl0765"]], ["c4", "Sta Catalina", "Canárias", "STEndoscopia", "Espanha", ["cl0551", "cl0771"]], ["c5", "Salud Valles", "Catalunha", "STEndoscopia", "Espanha", ["cl0540", "cl0758"]], ["c6", "IMED Valencia", "Valencia", "STEndoscopia", "Espanha", ["cl0909"]], ["c7", "H. Rambla Nova", "Catalunha", "STEndoscopia", "Espanha", ["cl0908"]], ["c9", "Almeria - Torrecárdenas", "Andaluzia", "STEndoscopia", "Espanha", ["cl0543", "cl0762", "cl0954"]], ["c10", "Almeria - Inmaculada", "Andaluzia", "STEndoscopia", "Espanha", ["cl0953"]], ["c28", "Almeria - El Toyo", "Andaluzia", "STEndoscopia", "Espanha", ["cl0955"]], ["c13", "H.U. Arnau Vilanova", "Catalunha", "STEndoscopia", "Espanha", ["mun8wqf9r4bh"]], ["c15", "Hospitales Pascual", "Andaluzia", "STEndoscopia", "Espanha", ["mun90bcju240"]], ["c17", "H. Orosa (Lanzarote)", "Canárias", "STEndoscopia", "Espanha", ["cl0544", "cl0004", "cl1005"]], ["c18", "Centro Médico Tinabana", "Canárias", "STEndoscopia", "Espanha", ["cl0536", "cl0754"]], ["c19", "Clínica CLINSA - Hospital Universitario Vithas Madrid Arturo Soria", "Madrid", "STEndoscopia", "Espanha", ["cl0537", "cl0755"]], ["c20", "Clínica Los Belgas", "Madrid", "STEndoscopia", "Espanha", ["cl0539", "cl0757"]], ["c21", "Hosp. VOT Madrid", "Madrid", "STEndoscopia", "Espanha", ["cl0542", "cl0761"]], ["c22", "H. São José (Las Palmas)", "Canárias", "STEndoscopia", "Espanha", ["cl0546", "cl0763", "cl0545"]], ["c23", "Hospitais Perpetuo Socorro", "Canárias", "STEndoscopia", "Espanha", ["cl0547", "cl0764"]], ["c24", "H. Viamed Sancti Petri -Cadiz", "Andaluzia", "STEndoscopia", "Espanha", ["cl0548", "cl0766", "cl1006"]], ["c25", "Mapfre Salud24 (Coruña)", "Galiza", "STEndoscopia", "Espanha", ["cl0549", "cl0767"]], ["c26", "Policlínica Salud 24", "Madrid", "STEndoscopia", "Espanha", ["cl0768"]], ["c27", "Policlínicas Ibéricas XXI - Centro Medico Reston", "Madrid", "STEndoscopia", "Espanha", ["cl0550", "cl0769", "cl0770"]], ["mrnck0ceytpb", "Hospital Virgem do Rocio", "Andaluzia", "STEndoscopia", "Espanha", ["mun8tcgsu46p"]], ["msrcpwx60hrp", "QuironSalud Madrid", "Madrid", "STEndoscopia", "Espanha", ["mun940k5qbj4"]], ["msyrnqth9o71", "HLA - ViistaHermosa", "Valencia", "STEndoscopia", "Espanha", ["cl0759"]], ["mt8pgb5w7mqv", "Hospital Morales Meseguer - Murcia", "Múrcia", "STEndoscopia", "Espanha", ["cl1004"]], ["erp_cl0535", "Centro de Especialidades Sanitarias de Alta Resolución", "", "STEndoscopia", "Espanha", ["cl0535", "cl0753"]]];
+function mwUnifEspanha(){
+  if(D._esUnifV1)return false;
+  var byId={};(D.clients||[]).forEach(function(c){byId[c.id]=c;});
+  var remap={},n=0;
+  MW_UNIF_ES.forEach(function(g){
+    var ex=g[5].filter(function(id){return byId[id];});if(!ex.length)return;
+    var s=byId[ex[0]];var al=Array.isArray(s.aliases)?s.aliases.slice():[];
+    ex.forEach(function(id){var c=byId[id];if(c.name&&c.name!==g[1]&&al.indexOf(c.name)<0)al.push(c.name);
+      if(id!==s.id){if(!s.nif&&c.nif)s.nif=c.nif;["saas","cloud","install","holding"].forEach(function(k){if(s[k]==null&&c[k]!=null)s[k]=c[k];});remap[id]=s.id;}});
+    s.name=g[1];if(g[2])s.region=g[2];if(g[3])s.channel=g[3];s.pais=g[4];s.esId=g[0];if(al.length)s.aliases=al;n++;
+  });
+  var ids=Object.keys(remap);
+  if(ids.length){
+    // todas as referências a clientes passam para o cliente que fica
+    Object.keys(D).forEach(function(k){var arr=D[k];if(!Array.isArray(arr)||k==="clients")return;
+      arr.forEach(function(x){if(!x||typeof x!=="object")return;["clientId","cliId","clienteId"].forEach(function(f){if(x[f]&&remap[x[f]])x[f]=remap[x[f]];});});});
+    // especialidades repetidas depois da junção
+    var seen={};D.clientSpecs=(D.clientSpecs||[]).filter(function(s){var k=s.clientId+"|"+s.specialty;if(seen[k]){seen[k].at=seen[k].at||s.at;return false;}seen[k]=s;return true;});
+    D.clients=(D.clients||[]).filter(function(c){return !remap[c.id];});
+    ids.forEach(function(id){try{tombDel("cli",id);}catch(e){}});
+  }
+  D._esUnifV1={em:new Date().toISOString(),clientes:n,juntados:ids.length};
+  try{if(typeof logAct==="function")logAct("Clientes","Clientes de Espanha uniformizados com o MW Espanha: "+n+" clientes, "+ids.length+" duplicados juntados");}catch(e){}
+  try{if(typeof _idxClear==="function")_idxClear();}catch(e){}
+  return true;
+}
+
+/* ===== Clientes que só existiam no MW Espanha passam a existir no ERP (migração única, 30/09/2026) ===== */
+var MW_ES_NOVOS=[["c8", "Grupo Sanitas", "Madrid", "STEndoscopia", ""], ["c14", "Hospital Alcorcón", "Madrid", "STEndoscopia", "C/ Budapest, 1, 28922 Alcorcón, Madrid"], ["mt7lc9i7d0gr", "Hospital de Getafe", "Madrid", "STEndoscopia", ""], ["mt8qkb7cd8bn", "Clinica Sermeva de La Palma", "Canárias", "STEndoscopia", ""], ["mt8r33wvxltj", "Clinica San Roque Canarias", "Canárias", "STEndoscopia", ""], ["mt8t1z0b35n5", "Centro Medico Fuerteventura", "Canárias", "STEndoscopia", ""], ["c11", "Clínica San José", "Canárias", "STEndoscopia", ""], ["msd03ixpinn2", "ST Endoscopia", "Madrid", "STEndoscopia", "C/ José Isbert 20, 28223, Pozuelo de Alarcón"]];
+function mwUnifEspanhaV2(){
+  if(D._esUnifV2)return false;
+  var n=0;var nn=function(x){return String(x||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();};
+  MW_ES_NOVOS.forEach(function(g){
+    var ex=(D.clients||[]).filter(function(c){return c.esId===g[0]||nn(c.name)===nn(g[1])||(Array.isArray(c.aliases)&&c.aliases.some(function(a){return nn(a)===nn(g[1]);}));})[0];
+    if(ex){if(!ex.esId){ex.esId=g[0];ex.pais="Espanha";if(g[2])ex.region=g[2];if(g[3])ex.channel=g[3];if(g[4]&&!ex.address)ex.address=g[4];n++;}return;} // já existia com outro país: passa a ser de Espanha
+    var c={id:"es_"+g[0],name:g[1],pais:"Espanha",region:g[2]||"",channel:g[3]||"",esId:g[0],saas:false,cloud:false};if(g[4])c.address=g[4];
+    D.clients.push(c);n++;
+  });
+  D._esUnifV2={em:new Date().toISOString(),criados:n};
+  try{if(n&&typeof logAct==="function")logAct("Clientes","Criados no ERP "+n+" clientes que só existiam no MW Espanha");}catch(e){}
+  try{if(typeof _idxClear==="function")_idxClear();}catch(e){}
+  return true;
+}
 function matchClient(name){var n=normName(name);if(!n)return null;var best=null;
+  D.clients.forEach(function(c){if(best||!Array.isArray(c.aliases))return;if(c.aliases.some(function(x){return normName(x)===n;}))best=c;});if(best)return best;
   D.clients.forEach(function(c){var cn2=normName(c.name);if(cn2.length>2&&(n.indexOf(cn2)>=0||cn2.indexOf(n)>=0)){if(!best)best=c}});
   if(best)return best;
   var toks=n.split(" ");
@@ -1898,7 +1949,7 @@ function syncFacturacaoWB(wb,fname){
   // emparelhar com as linhas existentes deste ficheiro (preserva id e cliente)
   var old=(D.deals||[]).filter(function(d){return _isPipeRow(d)&&(d.fy||2026)===fy;});
   var byKey={};old.forEach(function(d){var k=[String(d.product||"").trim(),Number(d.value).toFixed(2),_padj(d),String(d.vendedor||"").trim()].join("|");(byKey[k]=byKey[k]||[]).push(d);});
-  var cliByNorm={};(D.clients||[]).forEach(function(c){var n=normName(c.name);if(n&&!cliByNorm[n])cliByNorm[n]=c;});
+  var cliByNorm={};(D.clients||[]).forEach(function(c){var n=normName(c.name);if(n&&!cliByNorm[n])cliByNorm[n]=c;(c.aliases||[]).forEach(function(x){var m=normName(x);if(m&&!cliByNorm[m])cliByNorm[m]=c;});});
   var kept=0,added=0,newCli=0;var used={};
   var out=recs.map(function(o){var k=[o.product.trim(),o.value.toFixed(2),o.adj,o.vendedor].join("|");var lst=byKey[k]||[];var pick=null;
     for(var i=0;i<lst.length;i++){if(!used[lst[i].id]&&lst[i].pRow===o.pRow){pick=lst[i];break;}}
@@ -2654,7 +2705,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
       var r=await sb.from("app_state").select("data").eq("id",stateId()).maybeSingle();
       if(r.error)throw r.error;
       var d=r.data&&r.data.data;
-      if(d&&Object.keys(d).length){D=d;}
+      if(d&&Object.keys(d).length){D=d;try{__lastData=JSON.stringify(d);__lastRev=d._rev||null;}catch(e){}}   // base = o que está no servidor (antes das correções automáticas)
       else if(currentRole!=="viewer"){await sb.from("app_state").upsert({id:stateId(),data:syncPayload()});} // semeia 1ª vez (linha da organização)
     }catch(e){toastSafe("Erro a carregar dados: "+(e.message||e));}
     try{if(typeof migrate==="function")migrate();}catch(e){}
@@ -2817,7 +2868,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   var __syncSetup=false;
   function setupSync(){
     if(__syncSetup)return;__syncSetup=true;
-    try{__lastData=JSON.stringify(syncPayload());__lastRev=D._rev||null;}catch(e){}
+    try{if(__lastData==null){__lastData=JSON.stringify(syncPayload());__lastRev=D._rev||null;}}catch(e){}
     // 1) ao voltar ao separador
     try{document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible")reloadState(false);});}catch(e){}
     try{window.addEventListener("focus",function(){reloadState(false);});}catch(e){}
