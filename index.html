@@ -604,7 +604,8 @@ function genReport(optYr,optMo){
   var prem={};COMS.forEach(function(c){prem[c]={lic:0,sub:0,fat:0};});
   D.deals.forEach(function(d){if(d.src!="pipe"||!Vt[d.type])return;if(!_inCut(d.date))return;var c=d.com||"Outros";if(!prem[c])prem[c]={lic:0,sub:0,fat:0};var v=Number(d.value)||0;if(d.sub)prem[c].sub+=v;else prem[c].lic+=v;var iv=invByDeal[d.id];if(iv&&_inCut(iv.date))prem[c].fat+=Number(iv.amount)||0;});
   // projeção recorrente
-  var proj=projRecorrente(yr+1,(window.__projAum!=null?window.__projAum:0));
+  var proj=projRecorrente(yr+1,(window.__projAum!=null?window.__projAum:0));var _pT=null;
+  try{if(typeof projProxAno==="function"){var _pp=projProxAno(null);if(_pp&&_pp.NY===yr+1){var _ft=0;(D.deals||[]).forEach(function(d){if(_pr(d))_ft+=Number(d.tProx)||0;});_pT={total:_pp.total,at:_pp.at,sub:_pp.nv,carry:_pp.carry,excl:_pp.excl||0,nExcl:(_pp.cand||[]).filter(function(c){return c.excl;}).length,file:_ft};proj.total=_pT.total;}}}catch(e){}
   // ---- componentes ----
   function mc(label,val,sub,cls,accent){return '<div class="metric-card'+(accent?" accent-"+accent:"")+'"><div class="metric-label">'+label+'</div><div class="metric-value">'+val+'</div>'+(sub?'<div class="metric-sub '+(cls||"neu")+'">'+sub+'</div>':'')+'</div>';}
   function prog(label,val,max,fill){var p=max?Math.min(100,Math.max(0,val/max*100)):0;return '<div class="progress-row"><div class="progress-header"><span class="progress-label">'+label+'</span><span class="progress-val">'+euro(val)+' / '+euro(max)+'</span></div><div class="progress-bar"><div class="progress-fill fill-'+(fill||"blue")+'" style="width:'+p+'%"></div></div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">'+Math.round(p)+'%</div></div>';}
@@ -622,8 +623,8 @@ function genReport(optYr,optMo){
   topC.forEach(function(e){P.faturacao+='<tr><td>'+esc(e[0])+'</td><td class="r">'+euro(e[1])+'</td><td class="r"><span class="pill blue">'+pctv(e[1],S.inv)+'%</span></td></tr>';});
   P.faturacao+='</table></div>';
   // VENDAS & PIPELINE
-  var vGanhas=D.deals.filter(function(d){return isWon(d)&&_inCut(d.date);});var vTot=vGanhas.reduce(function(a,d){return a+(Number(d.value)||0);},0);
-  P.vendas='<div class="metric-grid">'+mc("Vendas ganhas até "+moLbl,euro(vTot),vGanhas.length+" negócios","neu","blue")+mc("Pipeline aberto",euro(fases.lead+fases.proposta+fases.projeto),(faseN.lead+faseN.proposta+faseN.projeto)+" oportunidades · situação atual","neu","amber")+mc("Em proposta",euro(fases.proposta),faseN.proposta+" deals","neu")+mc("Base recorrente "+(yr+1),euro(proj.total),"projetada","neu","green")+'</div>';
+  var _adjNV=0,_adjAT=0,_adjN=0;(D.deals||[]).forEach(function(d){if(!_pr(d,yr))return;var g=_padj(d);if(!g||String(g).slice(0,4)!==String(yr)||String(g).slice(0,10)>_cut)return;var v=Number(d.value)||0;if(d.nat==="AT")_adjAT+=v;else if(d.nat==="NV")_adjNV+=v;else return;_adjN++;});var vTot=_adjNV+_adjAT;
+  P.vendas='<div class="metric-grid">'+mc("Adjudicado até "+moLbl,euro(vTot),"NV "+euro(_adjNV)+" · AT "+euro(_adjAT)+" · "+_adjN+" linhas","neu","blue")+mc("Pipeline aberto",euro(fases.lead+fases.proposta+fases.projeto),(faseN.lead+faseN.proposta+faseN.projeto)+" oportunidades · situação atual","neu","amber")+mc("Em proposta",euro(fases.proposta),faseN.proposta+" deals","neu")+mc("Base recorrente "+(yr+1),euro(proj.total),_pT?"coluna T sem duplicados":"projetada","neu","green")+'</div>';
   P.vendas+='<div class="card"><div class="card-header"><div class="card-title">Pipeline por fase</div></div>'+prog("Lead",fases.lead,fases.lead+fases.proposta+fases.projeto||1,"amber")+prog("Proposta",fases.proposta,fases.lead+fases.proposta+fases.projeto||1,"blue")+prog("Projeto/Adjudicação",fases.projeto,fases.lead+fases.proposta+fases.projeto||1,"green")+'</div>';
   // ORÇAMENTO
   var orc=(D.orcamento&&D.orcamento[String(yr)])||null;
@@ -639,20 +640,46 @@ function genReport(optYr,optMo){
     '<tr class="bold"><td>TOTAL</td><td class="r">'+euro(orc.totalCusto)+'</td><td class="r">'+euro(custoRealTot)+'</td><td class="r">'+pctv(custoRealTot,orc.totalCusto)+'%</td></tr></table></div>';}
   // CASHFLOW
   P.cashflow='<div class="metric-grid">'+mc("Recebido "+yr,euro(S.col),"cobranças","neu","green")+mc("Custos pagos",euro(_pagOp),"saídas operacionais até "+moLbl,"neu","red")+mc("Cashflow",euro(S.cf2),"recebido − custos",S.cf2>=0?"pos":"neg",S.cf2>=0?"green":"red")+mc("Pendente",euro(S.pend),"por cobrar","neg","amber")+'</div>';
+  P.cashflow+=(function(){var n=lastM+1;var inn=[],out=[],acc=[],a=0;for(var i=0;i<n;i++){inn.push(cobM[i]||0);out.push((_pm&&_pm.op?_pm.op[i]:cusM[i])||0);a+=inn[i]-out[i];acc.push(a);}
+    var all=inn.concat(out).concat(acc).concat([0]);var mx=Math.max.apply(null,all),mn=Math.min.apply(null,all);if(mx===mn)mx=mn+1;
+    var W=900,H=260,L=56,Rr=16,T=16,B=28;function X(i){return n>1?L+(W-L-Rr)*i/(n-1):L+(W-L-Rr)/2;}function Y(v){return T+(H-T-B)*(1-(v-mn)/(mx-mn));}
+    function path(arr){if(!arr.length)return "";var d="M"+X(0)+","+Y(arr[0]);for(var i=1;i<arr.length;i++){var x0=X(i-1),y0=Y(arr[i-1]),x1=X(i),y1=Y(arr[i]),cx=(x0+x1)/2;d+=" C"+cx+","+y0+" "+cx+","+y1+" "+x1+","+y1;}return d;}
+    function k(v){return Math.round(v/1000)+"k";}
+    var g='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block" font-family="inherit">';
+    for(var t=0;t<=4;t++){var v=mn+(mx-mn)*t/4;g+='<line x1="'+L+'" x2="'+(W-Rr)+'" y1="'+Y(v)+'" y2="'+Y(v)+'" stroke="#e0ddd8" stroke-width="1"/><text x="'+(L-8)+'" y="'+(Y(v)+4)+'" text-anchor="end" font-size="11" fill="#7a7871">'+k(v)+'</text>';}
+    if(mn<0)g+='<line x1="'+L+'" x2="'+(W-Rr)+'" y1="'+Y(0)+'" y2="'+Y(0)+'" stroke="#b0ada6" stroke-width="1.2" stroke-dasharray="4 4"/>';
+    var ML=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];for(var i2=0;i2<n;i2++)g+='<text x="'+X(i2)+'" y="'+(H-8)+'" text-anchor="middle" font-size="11" fill="#7a7871">'+ML[i2]+'</text>';
+    g+='<path d="'+path(inn)+'" fill="none" stroke="#3aab6e" stroke-width="2.5"/><path d="'+path(out)+'" fill="none" stroke="#e05252" stroke-width="2.5"/><path d="'+path(acc)+'" fill="none" stroke="#00669E" stroke-width="3"/>';
+    for(var i3=0;i3<n;i3++){g+='<circle cx="'+X(i3)+'" cy="'+Y(acc[i3])+'" r="3.5" fill="#00669E"><title>'+ML[i3]+': saldo acumulado '+euro(acc[i3])+'</title></circle><circle cx="'+X(i3)+'" cy="'+Y(inn[i3])+'" r="3" fill="#3aab6e"><title>'+ML[i3]+': recebido '+euro(inn[i3])+'</title></circle><circle cx="'+X(i3)+'" cy="'+Y(out[i3])+'" r="3" fill="#e05252"><title>'+ML[i3]+': pagamentos '+euro(out[i3])+'</title></circle>';}
+    g+='</svg>';
+    var leg='<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);margin-top:6px"><span><b style="color:#3aab6e">━</b> Recebido no mês</span><span><b style="color:#e05252">━</b> Pagamentos operacionais no mês</span><span><b style="color:#00669E">━</b> Saldo acumulado (recebido − pagamentos) · fim de '+moLbl+': <b>'+euro(a)+'</b></span></div>';
+    return '<div class="card"><div class="card-header"><div class="card-title">Evolução do cashflow · '+yr+'</div></div>'+g+leg+'</div>';})();
   P.cashflow+='<div class="grid-2">'+barsMonthly("Recebido por mês",cobM,"var(--green-mid)")+barsMonthly("Custos por mês",cusM,"var(--red-mid)")+'</div>';
   // CLIENTES & DÍVIDA
   P.clientes='<div class="metric-grid">'+mc("Clientes ativos",""+Object.keys(byC).length,"com faturação "+yr,"neu","blue")+mc("Dívida total",euro(S.debt),"por cobrar","neg","red")+mc("Cobrado",euro(S.col),pctv(S.col,S.col+S.pend)+"% do cobrável","pos","green")+mc("Top cliente",topC.length?euro(topC[0][1]):"—",topC.length?esc(topC[0][0]).slice(0,18):"","neu")+'</div>';
-  P.clientes+='<div class="card"><div class="card-header"><div class="card-title">Concentração — top clientes</div></div>';
-  var mxC=topC.length?topC[0][1]:1;topC.forEach(function(e){P.clientes+=prog(esc(e[0]).slice(0,30),e[1],mxC,"blue");});
+  P.clientes+='<div class="card"><div class="card-header"><div class="card-title">Concentração — peso de cada cliente no faturado</div></div>';
+  var mxC=topC.length?topC[0][1]:1;topC.forEach(function(e){var w=Math.max(1,e[1]/mxC*100),sh=S.inv?e[1]/S.inv*100:0;P.clientes+='<div class="progress-row"><div class="progress-header"><span class="progress-label">'+esc(e[0]).slice(0,40)+'</span><span class="progress-val">'+euro(e[1])+' · <b>'+(Math.round(sh*10)/10).toString().replace(".",",")+'% do faturado</b></span></div><div class="progress-bar"><div class="progress-fill fill-blue" style="width:'+w+'%"></div></div></div>';});
+  P.clientes+='<div style="font-size:12px;color:var(--text-muted);margin-top:6px">Percentagem = faturado ao cliente ÷ total faturado até '+moLbl+' ('+euro(S.inv)+'). A barra compara com o maior cliente.</div>';
   P.clientes+='</div>';
-  // OBJETIVOS PRÉMIO
-  var tLic=0,tSub=0,tFat=0,tOrc=0;COMS.forEach(function(c){tLic+=prem[c].lic;tSub+=prem[c].sub;tFat+=prem[c].fat;tOrc+=(PO[c]||0);});
-  P.objetivos='<div class="metric-grid">'+mc("Licenciamentos",euro(tLic),"conta × 1","neu","blue")+mc("Subscrições × 2",euro(tSub*2),"col. SUB × 2","neu","blue")+mc("Total NV prémio",euro(tLic+tSub*2),pctv(tLic+tSub*2,tOrc)+"% do orç. "+euro(tOrc),"pos","green")+mc("NV faturado",euro(tFat),pctv(tFat,tOrc)+"% do orçamento","neu","amber")+'</div>';
-  P.objetivos+=hbox("info","Regra do prémio","Novas vendas (tipo termina em V) adjudicadas no ano. Licenciamentos (col. SUB vazia) × 1; Subscrições (col. SUB) × 2. Total NV = licenciamentos + subscrições × 2, vs orçamento de cada comercial.");
-  P.objetivos+='<div class="card" style="margin-top:16px"><div class="card-header"><div class="card-title">NV adjudicadas '+yr+' por comercial</div></div><table><tr><th>Comercial</th><th class="r">Orçam.</th><th class="r">Licenc.</th><th class="r">Subs × 2</th><th class="r">Total NV</th><th class="r">% orç.</th><th class="r">Faturado</th></tr>';
-  COMS.forEach(function(c){var e=prem[c];var nv=e.lic+e.sub*2;var orc2=PO[c]||0;P.objetivos+='<tr><td class="bold">'+c+'</td><td class="r">'+euro(orc2)+'</td><td class="r">'+euro(e.lic)+'</td><td class="r" style="color:var(--blue)">'+euro(e.sub*2)+'</td><td class="r bold">'+euro(nv)+'</td><td class="r"><span class="pill '+(pctv(nv,orc2)>=100?"pos":pctv(nv,orc2)>=60?"neu":"neg")+'">'+pctv(nv,orc2)+'%</span></td><td class="r">'+euro(e.fat)+'</td></tr>';});
-  P.objetivos+='<tr class="bold" style="border-top:2px solid var(--border-strong)"><td>TOTAL</td><td class="r">'+euro(tOrc)+'</td><td class="r">'+euro(tLic)+'</td><td class="r" style="color:var(--blue)">'+euro(tSub*2)+'</td><td class="r">'+euro(tLic+tSub*2)+'</td><td class="r"><span class="pill pos">'+pctv(tLic+tSub*2,tOrc)+'%</span></td><td class="r">'+euro(tFat)+'</td></tr></table></div>';
-  // PROJEÇÃO RECORRENTE
+  // OBJETIVOS PRÉMIO — mesma regra e mesmos números da página Objetivos comerciais (DashVendas): faturadas primeiro (base das comissões), depois adjudicadas
+  (function(){var OC=null;try{OC=objComCalc(yr,_cut);}catch(e){}
+    if(!OC){P.objetivos='<div class="card">Sem dados do Faturação para '+yr+'.</div>';return;}
+    function tt(res){var o={lic:0,sub:0,fat:0,orc:0,nv:0};OC.COMS.forEach(function(c){var e=res[c]||{lic:0,sub:0,fat:0};o.lic+=e.lic;o.sub+=e.sub;o.fat+=e.fat;o.orc+=(OC.PO[c]||0);o.nv+=e.lic+e.sub*2;});return o;}
+    var tF=tt(OC.fat),tA=tt(OC.adj);
+    function tb(res,tit,sub){var T={lic:0,s2:0,nv:0,orc:0,fat:0};var x='<div class="card" style="margin-top:16px"><div class="card-header"><div class="card-title">'+tit+'</div></div><div style="font-size:12px;color:var(--text-muted);margin:-6px 0 8px">'+sub+'</div><table><tr><th>Comercial</th><th class="r">Orçam.</th><th class="r">Licenc.</th><th class="r">Subs × 2</th><th class="r">Total NV</th><th class="r">% orç.</th><th class="r">Valor real (s/ ×2)</th></tr>';
+      OC.COMS.forEach(function(c){var e=res[c]||{lic:0,sub:0,fat:0};var s2=e.sub*2,nv=e.lic+s2,orc=OC.PO[c]||0;T.lic+=e.lic;T.s2+=s2;T.nv+=nv;T.orc+=orc;T.fat+=e.fat;var po=pctv(nv,orc);
+        x+='<tr><td class="bold">'+esc(OC.CNM[c]||c)+'</td><td class="r">'+euro(orc)+'</td><td class="r">'+euro(e.lic)+'</td><td class="r" style="color:var(--blue)">'+euro(s2)+'</td><td class="r bold">'+euro(nv)+'</td><td class="r"><span class="pill '+(po>=100?"pos":po>=60?"neu":"neg")+'">'+po+'%</span></td><td class="r">'+euro(e.fat)+'</td></tr>';});
+      x+='<tr class="bold" style="border-top:2px solid var(--border-strong)"><td>TOTAL</td><td class="r">'+euro(T.orc)+'</td><td class="r">'+euro(T.lic)+'</td><td class="r" style="color:var(--blue)">'+euro(T.s2)+'</td><td class="r">'+euro(T.nv)+'</td><td class="r"><span class="pill pos">'+pctv(T.nv,T.orc)+'%</span></td><td class="r">'+euro(T.fat)+'</td></tr></table></div>';return x;}
+    P.objetivos='<div class="metric-grid">'+mc("NV faturado (prémio)",euro(tF.nv),pctv(tF.nv,tF.orc)+"% do orç. "+euro(tF.orc),tF.nv>=tF.orc?"pos":"neu","green")+mc("Licenc. faturados",euro(tF.lic),"conta × 1","neu","blue")+mc("Subscrições faturadas × 2",euro(tF.sub*2),"col. SUB × 2","neu","blue")+mc("NV adjudicado (prémio)",euro(tA.nv),pctv(tA.nv,tA.orc)+"% do orçamento","neu","amber")+'</div>';
+    P.objetivos+=hbox("info","Regra do prémio","Novas vendas (tipo termina em V). Licenciamentos (col. SUB vazia) × 1; Subscrições (col. SUB) × 2. <b>Faturadas</b> = data da fatura até "+moLbl+" (base das comissões); <b>adjudicadas</b> = data de adjudicação até "+moLbl+". Mesmos números da página Objetivos comerciais.");
+    P.objetivos+=tb(OC.fat,"NV faturadas "+yr+" por comercial","por data de fatura (col. I) até "+moLbl+" · DashVendas O/P/Q");
+    P.objetivos+=tb(OC.adj,"NV adjudicadas "+yr+" por comercial","por data de adjudicação (col. G) até "+moLbl+" · DashVendas K/L/M");
+  })();
+  // PROJEÇÃO RECORRENTE — coluna T do Faturação (M/AT e SUB a 105%, adjudicado do ano seguinte a 100%), sem duplicados
+  if(_pT){
+    P.projecao='<div class="metric-grid">'+mc("Base recorrente "+(yr+1),euro(_pT.total),"coluna T sem duplicados","neu","green")+mc("M / AT",euro(_pT.at),"renovações do ano","neu","blue")+mc("Subscrições",euro(_pT.sub),"SUB renovam","neu","blue")+mc("Já adjudicado "+(yr+1),euro(_pT.carry),"100% (mantém valor)","neu","amber")+'</div>';
+    P.projecao+=hbox("info","Como se chega a este valor","Coluna T do Faturação (todas as linhas): <b>"+euro(_pT.file)+"</b> − duplicados retirados: <b>"+euro(_pT.excl)+"</b> ("+_pT.nExcl+" linhas de clientes que já têm valor "+(yr+1)+": a mesma linha do ano corrente ×1,05 ou uma nota de crédito) = <b>"+euro(_pT.total)+"</b>. A lista dos duplicados, para confirmares um a um, está na página Projeção próximo ano.");
+  } else {
   P.projecao='<div class="metric-grid">'+mc("Base recorrente "+(yr+1),euro(proj.total),"transita automaticamente","neu","green")+mc("M / AT",euro(proj.at),"renova, mantém valor","neu","blue")+mc("Subscrições",euro(proj.sub),"renovam 100%","neu","blue")+mc("Manutenção licenças",euro(proj.lic),"EV/DV × 20%","neu","amber")+'</div>';
   P.projecao+=hbox("info","Regras de renovação","NC/cancelados não passam · M/AT renovam e mantêm o valor (M com NC não conta) · Subscrições renovam 100% · SV/HV/SMV/SUV one-shot · Licenciamento sem sub gera 20%. Aumento ponderável 5%/10%.");
   P.projecao+='<div class="card" style="margin-top:16px"><div class="card-header"><div class="card-title">Componentes da base recorrente '+(yr+1)+'</div></div><table><tr><th>Componente</th><th class="r">Valor '+yr+'</th><th class="r">Projetado '+(yr+1)+'</th><th>Regra</th></tr>'+
@@ -662,6 +689,7 @@ function genReport(optYr,optMo){
   '<tr><td>SV/HV/SMV/SUV</td><td class="r">'+euro(proj.oneShot)+'</td><td class="r">0 €</td><td style="font-size:12px;color:var(--text-muted)">one-shot</td></tr>'+
   '<tr class="bold" style="border-top:2px solid var(--border-strong)"><td>BASE RECORRENTE '+(yr+1)+'</td><td class="r"></td><td class="r" style="color:var(--green)">'+euro(proj.total)+'</td><td></td></tr></table>'+
   '<div style="font-size:12px;color:var(--text-muted);margin-top:10px">Com aumento: +5% → '+euro(proj.total*1.05)+' · +10% → '+euro(proj.total*1.10)+'</div></div>';
+  }
   // ================= MONTAGEM =================
   var NAV=[["resumo","Resumo Executivo"],["faturacao","Faturação"],["vendas","Vendas & Pipeline"],["orcamento","Orçamento vs Real"],["cashflow","Cashflow"],["clientes","Clientes & Dívida"],["objetivos","Objetivos Prémio"],["projecao","Projeção Recorrente"]];
   var nav="";NAV.forEach(function(x,i){nav+='<div class="nav-item'+(i==0?" active":"")+'" onclick="showPage(\''+x[0]+'\',this)"><span>'+x[1]+'</span></div>';});
@@ -1422,6 +1450,21 @@ if(cTab==="dashboard"){
   h+='</div>';
   h+='</div>';
   if(window.__movSearch)setTimeout(function(){try{movFilter(window.__movSearch);}catch(e){}},0);
+  var _yC=String(activeYear());var _MOc=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  var _cobRows=(_yearSel!=="all"&&typeof _pr==="function")?(D.deals||[]).filter(function(d){return _pr(d,_yC)&&d.paid&&String(d.payDate||"").slice(0,4)===_yC;}):[];
+  if(_cobRows.length){
+    var _cm=[0,0,0,0,0,0,0,0,0,0,0,0];_cobRows.forEach(function(d){var k=+String(d.payDate).slice(5,7)-1;if(k>=0&&k<12)_cm[k]+=Number(d.civa)||0;});
+    var _ct=_cm.reduce(function(a,b){return a+b;},0);var _nm=0;for(var _k=0;_k<12;_k++)if(_cm[_k])_nm=_k+1;
+    h+='<div class="cd"><div class="ch"><div class="ct2">Cobranças de '+_yC+' — '+fmt(_ct)+'</div><span style="font-size:12px;color:#6B7680">'+_cobRows.length+' linhas pagas</span></div>';
+    h+='<div style="font-size:12px;color:#6B7680;margin-bottom:10px">Valores <b>com IVA</b>, pela <b>data de pagamento</b> das linhas do Faturação (colunas K = «Pago» e L). É o mesmo cálculo do quadro COBRANÇAS do DashFacturas e bate com o KPI <b>Cobrado</b>.</div>';
+    h+='<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start"><table style="max-width:340px"><thead><tr><th>Mês</th><th style="text-align:right">Cobrado</th></tr></thead><tbody>'+
+      _cm.map(function(v,k){return '<tr><td>'+_MOc[k]+'</td><td style="text-align:right;'+(v?'font-weight:600':'color:#9AA3AB')+'">'+fmt(v)+'</td></tr>';}).join("")+
+      '<tr style="border-top:2px solid #C8CED3"><td style="font-weight:700">Total</td><td style="text-align:right;font-weight:800;color:'+R+'">'+fmt(_ct)+'</td></tr><tr><td>Média mensal</td><td style="text-align:right">'+fmt(_nm?_ct/_nm:0)+'</td></tr></tbody></table>';
+    h+='<div style="flex:1;min-width:320px;max-height:520px;overflow:auto"><table><thead><tr><th>Cliente</th><th>Fatura</th><th style="text-align:right">Valor c/IVA</th><th>Emitida</th><th>Paga</th></tr></thead><tbody>';
+    _cobRows.slice().sort(function(a,b){return String(b.payDate).localeCompare(String(a.payDate));}).forEach(function(d){var _cross=d.factDate&&String(d.factDate).slice(0,4)!==_yC;
+      h+='<tr><td style="font-weight:600">'+esc(cn(d.clientId))+'</td><td style="color:#5F6B75;font-size:12px">'+esc(d.fatNum||"")+(d.product?' · '+esc(String(d.product).slice(0,30)):'')+'</td><td style="text-align:right;font-weight:700">'+fmt(Number(d.civa)||0)+'</td><td style="font-size:11.5px;color:#6B7680">'+(d.factDate?fmtD(d.factDate):"—")+(_cross?' <span style="color:'+SL+';font-size:11px">(ano ant.)</span>':'')+'</td><td style="font-size:11.5px">'+fmtD(d.payDate)+'</td></tr>';});
+    h+='</tbody></table></div></div></div>';
+  } else {
   var _colYear=D.invoices.filter(function(i){var _cd=i.collDate||i.date;return i.collected&&inYear(_cd);});
   var _colSemData=_colYear.filter(function(i){return !i.collDate;});
   var _colTot=_colYear.reduce(function(a,i){return a+(Number(i.amount)||0);},0);
@@ -1435,6 +1478,7 @@ if(cTab==="dashboard"){
     });
     h+='</tbody></table></div>';}
   h+='</div>';
+  }
   }
 } else if(cTab==="caractfat"){
   var _Y=activeYear();
@@ -9577,6 +9621,38 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     app.innerHTML=h;
   }
   window.renderObjetivos=renderObjetivos;
+  window.objComCalc=function(yr,cutISO){var __sv=_yearSel;if(yr!=null)_yearSel=+yr;var __cut=null;if(cutISO){var __d=new Date(cutISO+"T12:00:00");__d.setDate(__d.getDate()+1);__cut=__d.getFullYear()+"-"+String(__d.getMonth()+1).padStart(2,"0")+"-"+String(__d.getDate()).padStart(2,"0");}
+  try{
+    var _y=String(activeYear());
+    var PO=(D.premioOrc&&D.premioOrc[_y])||(D.premioOrc&&D.premioOrc["2026"])||{Cv:145000,Pn:204500,Ar:205500,Espanha:25000,Angola:10000,Outros:10000};
+    var COMS=["Cv","Pn","Ar","Espanha","Angola","Outros"];
+    var V={SV:1,EV:1,DV:1,HV:1};
+    function comOf(dl){return dl.com||"Outros";}
+    // Réplica exata da DashVendas do Faturação: SUMIFS sobre o Pipe Line com os padrões da coluna P de cada linha
+    // (wildcards do Excel, sem distinção de maiúsculas). K/L: F="*V" e G no ano; O/P: F="*V" e I>=1/jan; SUB conta ×2.
+    function _pm(pat){if(Array.isArray(pat)){var fs=pat.map(_pm);return function(v){return fs.some(function(f){return f(v);});};}if(pat==="*O*-NOR"){return function(v){v=String(v||"").toUpperCase();return v.indexOf("O")>=0&&v.indexOf("NOR")<0;};}pat=String(pat).toUpperCase();if(pat.charAt(0)==="*"&&pat.slice(-1)==="*"){var core=pat.slice(1,-1);return function(v){return String(v||"").toUpperCase().indexOf(core)>=0;};}return function(v){return String(v||"").toUpperCase().trim()===pat;};}
+    // CP-NOR / RE-NOR contam para o Pedro Nogueira (PN)
+    var _PN=["*PN*","*NOR*"];
+    var PAT={adjK:{Cv:"*CV*",Pn:_PN,Ar:"*AR*",Espanha:"ES",Angola:"A",Outros:"O"},adjL:{Cv:"*CV*",Pn:_PN,Ar:"*AR*",Espanha:"*ES*",Angola:"A",Outros:"O"},
+             fat:{Cv:"*CV*",Pn:_PN,Ar:"*AR*",Espanha:"*ES*",Angola:"A",Outros:"*O*-NOR"},atT:{Cv:"*CV*",Pn:_PN,Ar:"*AR*",Espanha:"ES",Angola:"A"},atU:{Cv:"*CV*",Pn:_PN,Ar:"*AR*",Espanha:"ES",Angola:"A",Outros:"O"}};
+    var _a1=_y+"-01-01",_a2=__cut?__cut:(+_y+1)+"-01-01";
+    var _PL=(D.deals||[]).filter(function(dl){return _pr(dl,_y);});
+    function _sum(cond){var t=0;_PL.forEach(function(dl){if(cond(dl))t+=Number(dl.value)||0;});return t;}
+    function calc(mode){
+      var res={};COMS.forEach(function(c){var tot,sub;
+        if(mode==="adj"){var mK=_pm(PAT.adjK[c]),mL=_pm(PAT.adjL[c]);
+          tot=_sum(function(dl){var g=_padj(dl);return dl.nat==="NV"&&mK(dl.vendedor)&&g>=_a1&&g<_a2;});
+          sub=_sum(function(dl){var g=_padj(dl);return dl.nat==="NV"&&dl.sub&&mL(dl.vendedor)&&g>=_a1&&g<_a2;});}
+        else{var mF=_pm(PAT.fat[c]);
+          tot=_sum(function(dl){return dl.nat==="NV"&&mF(dl.vendedor)&&String(dl.factDate||"")>=_a1&&String(dl.factDate||"")<_a2;});
+          sub=_sum(function(dl){return dl.nat==="NV"&&dl.sub&&mF(dl.vendedor)&&String(dl.factDate||"")>=_a1&&String(dl.factDate||"")<_a2;});}
+        // K = total − L/2 (licenciamentos) ; L = SUB×2 ; fat = valor real faturado (sem ×2)
+        res[c]={lic:tot-sub,sub:sub,fat:tot};});
+      return res;
+    }
+    var adj=calc("adj"),fat=calc("fat");
+    var CNM={Cv:"CV · Carlos Veneno",Pn:"PN · Pedro Nogueira (inclui CP-NOR/RE-NOR)",Ar:"AR · Ana Rita Rodrigues",Espanha:"Espanha · Hugo Amaral (ES)",Angola:"Angola · Francisco Duarte (A)",Outros:"Outros · Francisco Duarte (O)"};
+    return {adj:adj,fat:fat,PO:PO,COMS:COMS,CNM:CNM};}finally{_yearSel=__sv;}};
   function renderObjComerciais(){
     var app=document.getElementById("app");
     var _y=String(activeYear());
