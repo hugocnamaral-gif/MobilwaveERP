@@ -10420,7 +10420,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     if(!adm)rows=rows.filter(function(){return true;});
     rows.sort(function(a,b){return a.d.localeCompare(b.d);});
     return sec("Aprovações",rows.length,adm?["Férias & ausências","mwGo('ferias')"]:null,rows.length?rows.slice(0,8).map(function(r){return r.h;}).join("")+(rows.length>8?'<div class="mw-empty">+ '+(rows.length-8)+' pendentes</div>':''):'<div class="mw-empty">Nada à espera de aprovação.</div>');}
-  function homeFollow(){var today=iso();var open=(D.deals||[]).filter(function(d){return d.src==="crm"&&(d.stage==="lead"||d.stage==="validar"||d.stage==="proposta");});
+  function homeFollow(){var today=iso();var open=(D.deals||[]).filter(function(d){return (typeof isCrmDeal==="function"?isCrmDeal(d):d.src==="crm")&&(d.stage==="lead"||d.stage==="validar"||d.stage==="proposta");});
     var mineL=open.filter(function(d){return mine(d.vendedor);});var useMine=window.__mwHome.fu==="meus"&&mineL.length>0;var L=useMine?mineL:open;
     L=L.map(function(d){var over=d.nextDate&&d.nextDate<today;var days=Math.floor((new Date(today)-new Date(d.date||today))/86400000);return {d:d,over:over,days:days,score:(over?1e6:0)+(d.nextDate===today?5e5:0)+days*10+Math.min(9,(d.value||0)/10000)};}).sort(function(a,b){return b.score-a.score;});
     var body=L.slice(0,8).map(function(o){var d=o.d;var who=(d.clientId&&typeof cn==="function")?cn(d.clientId):(d.crmConta||"—");var st=(typeof SL2!=="undefined"&&SL2[d.stage])||d.stage;
