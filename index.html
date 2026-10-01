@@ -124,6 +124,7 @@ tr:hover td{background:#EFF1F4}
 <div class="hdr"><div class="hdr-in">
 <div style="display:flex;align-items:center;gap:12px"><img id="mwlogo" style="width:50px;height:50px;object-fit:contain" alt="MW"><div><h1>Mobilwave</h1><div class="sub">Healthcare Solutions</div></div></div>
 <div style="display:flex;gap:8px">
+<select id="mkSel" onchange="mkSet(this.value)" title="Filtrar a app por mercado"><option value="todos">🌍 Todos os mercados</option><option value="portugal">🇵🇹 Portugal e outros</option><option value="espanha">🇪🇸 Espanha</option></select>
 <button class="btn bs hdr-rel" style="background:#5F6B75" onclick="askReport()" title="Relatório-resumo para imprimir ou guardar em PDF">Relatório</button>
 <button class="btn bs" id="btnInstall" style="background:#2E8C93;display:none" onclick="doInstall()">⬇️ Instalar App</button>
 </div></div></div>
@@ -11111,6 +11112,108 @@ document.addEventListener("change",function(ev){var t=ev.target;if(!t||t.id!=="f
     window.__esPlan=null;save();try{clM();}catch(e){}ren();
     toast("Dados de Espanha juntos ao ERP ("+D.esImport.n+" registos).",{type:"ok"});
   };
+})();
+
+</script>
+<script>
+/* ===================== FILTRO DE MERCADO: TODOS / PORTUGAL / ESPANHA (out 2026) =====================
+   Mostra o ERP só com o que é de Espanha (clientes com país Espanha ou Andorra) ou só com o resto (Portugal e outros).
+   Como funciona: enquanto um ecrã é desenhado, D passa a ser uma «vista» com as listas filtradas
+   (clientes, vendas, faturas, projetos, horas, contactos, reuniões, agenda, tickets, anexos, despesas…).
+   Gravar, sincronizar e todas as ações (editar, criar, apagar) trabalham sempre sobre os dados completos.
+   Orçamento, DR oficial, salários e RH são da empresa toda e não mudam com o filtro. */
+(function(){
+  var MK={mode:"todos",depth:0,real:null,view:null};window.__MK=MK;
+  try{var s=localStorage.getItem("mw_mercado");if(s==="espanha"||s==="portugal")MK.mode=s;}catch(e){}
+  var SPP={Espanha:1,Andorra:1};
+  function A(x){return Array.isArray(x)?x:[];}
+  function buildView(R){
+    var es=MK.mode==="espanha";
+    // é de Espanha o que pertence a um cliente com país Espanha/Andorra; tudo o resto (incl. o que não tem cliente) é «Portugal e outros»
+    var esC={};A(R.clients).forEach(function(c){if(c&&SPP[c.pais])esC[c.id]=1;});
+    var esD={};A(R.deals).forEach(function(d){if(d&&esC[d.clientId])esD[d.id]=1;});
+    function isES(x){if(!x)return false;if(esC[x.clientId]||esD[x.dealId])return true;return !x.clientId&&!x.dealId&&!!x.esId;}
+    function f(x){return isES(x)===es;}
+    var V={};for(var k in R)V[k]=R[k];
+    V.clients=A(R.clients).filter(function(c){return c&&!!SPP[c.pais]===es;});
+    V.deals=A(R.deals).filter(function(d){return d&&!!esC[d.clientId]===es;});
+    ["invoices","projectos","timesheets","tickets"].forEach(function(k){V[k]=A(R[k]).filter(f);});
+    ["contacts","reunioes","clientSpecs","upsells","attachments","bolsas"].forEach(function(k){if(Array.isArray(R[k]))V[k]=R[k].filter(f);});
+    V.agenda=A(R.agenda).filter(function(a){var e;if(a.linkId&&a.linkType==="cliente")e=!!esC[a.linkId];else if(a.linkId&&(a.linkType==="deal"||a.linkType==="venda"))e=!!esD[a.linkId];else e=!!a.esId;return e===es;});
+    V.expenses=A(R.expenses).filter(function(e){return (e.pais==="Espanha")===es;});
+    V.__mkView=MK.mode;V.__esC=esC;V.__esD=esD;
+    return V;
+  }
+  function on(){return MK.mode!=="todos";}
+  function enter(){
+    if(!on()||!D||D.__mkView)return false;
+    MK.real=D;MK.view=buildView(D);D=MK.view;
+    MK.tkReal=window.__tkArch;if(Array.isArray(MK.tkReal)){var _c=MK.view.__esC,_d=MK.view.__esD,_e=MK.mode==="espanha";window.__tkArch=MK.tkReal.filter(function(t){return !!(t&&(_c[t.clientId]||_d[t.dealId]))===_e;});}
+    try{_idxClear();}catch(e){}
+    // lembra o que cada lista filtrada tinha à entrada, para no fim passar aos dados completos o que o ecrã tiver criado
+    MK.seen={};for(var k in MK.view){if(Array.isArray(MK.view[k])&&MK.view[k]!==MK.real[k]){var ws=new WeakSet();MK.view[k].forEach(function(x){if(x&&typeof x==="object")ws.add(x);});MK.seen[k]=ws;}}
+    return true;
+  }
+  function mergeBack(){
+    try{var V=MK.view,R=MK.real;if(!V||!R)return;Object.keys(V).forEach(function(k){if(k==="__mkView"||k==="__esC"||k==="__esD")return;
+      if(MK.seen&&MK.seen[k]){if(Array.isArray(V[k])&&Array.isArray(R[k])){var ws=MK.seen[k];V[k].forEach(function(x){if(x&&typeof x==="object"&&!ws.has(x)){ws.add(x);if(R[k].indexOf(x)<0)R[k].push(x);}});}}
+      else if(V[k]!==R[k])R[k]=V[k];});}catch(e){}
+  }
+  function leave(){
+    if(!MK.real)return;
+    // registos criados durante o desenho (ex.: projeto criado automaticamente para uma venda ganha) e chaves novas: passam para os dados completos
+    if(D!==MK.view){ // os dados foram substituídos a meio (ex.: recarregados do servidor): ficam os novos, sem misturar com a vista
+      MK.real=null;MK.view=null;MK.seen=null;if(MK.tkReal!==undefined){window.__tkArch=MK.tkReal;MK.tkReal=undefined;}try{_idxClear();}catch(e){}return;}
+    mergeBack();
+    MK.seen=null;
+    D=MK.real;MK.real=null;MK.view=null;
+    if(MK.tkReal!==undefined){window.__tkArch=MK.tkReal;MK.tkReal=undefined;}
+    try{_idxClear();}catch(e){}
+  }
+  // corre fn com a vista filtrada (e o que essa função agendar com setTimeout/requestAnimationFrame também)
+  function run(fn,self,args){
+    if(!on()||MK.depth>0&&MK.real)return fn.apply(self,args);
+    var st=enter();MK.depth++;
+    var _st=window.setTimeout,_raf=window.requestAnimationFrame;
+    window.setTimeout=function(cb,ms){var a=[].slice.call(arguments,2);if(typeof cb!=="function"||MK.saving)return _st.apply(window,arguments);return _st.call(window,function(){return run(cb,window,a);},ms);};
+    if(_raf)window.requestAnimationFrame=function(cb){return _raf.call(window,function(t){return run(cb,window,[t]);});};
+    try{return fn.apply(self,args);}
+    finally{window.setTimeout=_st;if(_raf)window.requestAnimationFrame=_raf;MK.depth--;if(st)leave();}
+  }
+  window.mkRun=run;
+  function wrap(name){var f=window[name];if(typeof f!=="function"||f.__mk)return;var w=function(){return run(f,this,arguments);};w.__mk=1;window[name]=w;try{if(name==="ren")ren=w;if(name==="rPnl")rPnl=w;if(name==="genReport")genReport=w;}catch(e){}}
+  // gravar usa sempre os dados completos
+  function wrapSave(){var f=window.save;if(typeof f!=="function"||f.__mk)return;var w=function(){MK.saving=true;try{if(MK.real){mergeBack();var v=D;D=MK.real;try{return f.apply(this,arguments);}finally{D=v;}}return f.apply(this,arguments);}finally{MK.saving=false;}};w.__mk=1;window.save=w;try{save=w;}catch(e){}}
+  // o que vai para o Supabase é sempre o estado completo — nunca a vista filtrada
+  function wrapPayload(){var f=window.syncPayload;if(typeof f!=="function"||f.__mk)return;var w=function(){if(D&&D.__mkView){if(!MK.real)throw new Error("Vista filtrada sem dados completos — gravação bloqueada.");var v=D;D=MK.real;try{return f.apply(this,arguments);}finally{D=v;}}return f.apply(this,arguments);};w.__mk=1;window.syncPayload=w;try{syncPayload=w;}catch(e){}}
+  function wrapAll(){wrap("ren");wrap("rPnl");wrap("genReport");wrapSave();wrapPayload();}
+  wrapAll();var n=0;var iv=setInterval(function(){n++;wrapAll();if(n>40)clearInterval(iv);},300); // outros módulos voltam a embrulhar o rPnl ao arrancar
+
+  // ---------- seletor no cabeçalho + aviso ----------
+  var LBL={todos:"Todos os mercados",portugal:"🇵🇹 Portugal e outros",espanha:"🇪🇸 Espanha e Andorra"};
+  window.mkSet=function(m){MK.mode=(m==="espanha"||m==="portugal")?m:"todos";try{localStorage.setItem("mw_mercado",MK.mode);}catch(e){}paint();try{ren();}catch(e){}};
+  function paint(){
+    var sel=document.getElementById("mkSel");if(sel&&sel.value!==MK.mode)sel.value=MK.mode;
+    document.body.classList.toggle("mk-on",on());document.body.setAttribute("data-mercado",MK.mode);
+    var b=document.getElementById("mkBar");
+    if(!on()){if(b)b.style.display="none";return;}
+    if(!b){b=document.createElement("div");b.id="mkBar";var ct=document.getElementById("app");if(ct&&ct.parentNode)ct.parentNode.insertBefore(b,ct);else return;}
+    var R=D&&!D.__mkView?D:(MK.real||D);var V=buildView(R||{});
+    b.style.display="flex";
+    b.innerHTML='<span><b>'+LBL[MK.mode]+'</b> · a ver só '+V.clients.length+' clientes, '+V.deals.length+' vendas, '+V.invoices.length+' faturas e '+V.projectos.length+' projetos. Orçamento, DR, salários e RH continuam da empresa toda.</span><button onclick="mkSet(\'todos\')">Ver todos</button>';
+  }
+  window.mkPaint=paint;
+  var css=document.createElement("style");
+  css.textContent="#mkSel{border:1px solid #d5dbe0;border-radius:8px;padding:6px 8px;font:inherit;font-size:12.5px;background:#fff;color:#414D57;cursor:pointer}"+
+    "body.mk-on #mkSel{border-color:#2E8C93;background:#E8F4F5;color:#1F6B70;font-weight:600}"+
+    "#mkBar{display:none;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:9px 14px;border-radius:10px;background:#E8F4F5;border:1px solid #BFE0E3;color:#1F5B60;font-size:12.5px}"+
+    "body[data-mercado=portugal] #mkBar{background:#EEF3F8;border-color:#C9D7E6;color:#2C4A66}"+
+    "#mkBar button{border:1px solid currentColor;background:transparent;color:inherit;border-radius:7px;padding:4px 10px;font:inherit;font-size:12px;cursor:pointer}"+
+    "@media print{#mkBar,#mkSel{display:none!important}}";
+  document.head.appendChild(css);
+  function init(){paint();}
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
+  setInterval(function(){if(on())paint();},4000);
 })();
 
 </script>
