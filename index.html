@@ -216,7 +216,7 @@ function dealById(id){return _idxDeals()[id];}
 function clientById(id){return _idxClients()[id];}
 function _idxClear(){_mwIdxReset();window.__pfy=null;window.__idxD=null;window.__idxC=null;window.__idxIvD=null;window.__yid=null;window.__ay=null;}
 function cn(id){var c=_idxClients()[id];return c?c.name:"—"}
-function isWon(d){return !d.fromProj&&d.src!=="crm"&&(d.stage==="ganho"||d.stage==="projeto"||d.stage==="concluido")}
+function isWon(d){return !d.fromProj&&d.src!=="crm"&&!d.esHist&&(d.stage==="ganho"||d.stage==="projeto"||d.stage==="concluido")}
 function isCrmDeal(d){return !!d&&(d.src==="crm"||(!d.src&&!d.imported&&!d.fromProj));}
 function dealTitle(d){return d.clientId?cn(d.clientId):(d.crmConta||d.crmContacto||"—");}
 function isSubDeal(d){return !!(d&&(d.type==="AT"||d.type==="SUB"))}
@@ -693,7 +693,7 @@ function genReport(optYr,optMo){
   // ================= MONTAGEM =================
   var NAV=[["resumo","Resumo Executivo"],["faturacao","Faturação"],["vendas","Vendas & Pipeline"],["orcamento","Orçamento vs Real"],["cashflow","Cashflow"],["clientes","Clientes & Dívida"],["objetivos","Objetivos Prémio"],["projecao","Projeção Recorrente"]];
   var nav="";NAV.forEach(function(x,i){nav+='<div class="nav-item'+(i==0?" active":"")+'" onclick="showPage(\''+x[0]+'\',this)"><span>'+x[1]+'</span></div>';});
-  var pages="";NAV.forEach(function(x,i){pages+='<div id="page-'+x[0]+'" class="page'+(i==0?" active":"")+'">'+(P[x[0]]||"")+'</div>';});
+  var pages="";NAV.forEach(function(x,i){pages+='<div id="page-'+x[0]+'" class="page'+(i==0?" active":"")+'"><div class="ptit">'+(i+1)+'. '+x[1]+'</div>'+(P[x[0]]||"")+'</div>';});
   var CSS="\n:root{--bg:#f4f3f0;--surface:#fff;--surface2:#f0eeea;--border:#e0ddd8;--border-strong:#c8c5be;--text:#1a1917;--text-muted:#7a7871;--text-hint:#b0ada6;--blue:#00669E;--blue-light:#e6f3fa;--blue-mid:#3391c4;--green:#1a6b45;--green-light:#e6f4ec;--green-mid:#3aab6e;--red:#b83535;--red-light:#fdeaea;--red-mid:#e05252;--amber:#9a5f10;--amber-light:#fdf3e3;--amber-mid:#e8920a;--teal:#6BC2CC;--radius-sm:6px;--radius-md:10px;--radius-lg:14px}\n*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{font-size:14px}\nbody{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}\n.sidebar{width:220px;min-height:100vh;background:var(--surface);border-right:2px solid #00669E;display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0}\n.sidebar-logo{padding:24px 20px 18px;border-bottom:1px solid var(--border)}\n.logo-sub{font-size:12px;color:var(--text-muted);margin-top:2px}\n.sidebar-month{padding:14px 20px;background:var(--blue-light);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}\n.month-dot{width:8px;height:8px;border-radius:50%;background:var(--blue)}.month-label{font-size:12px;font-weight:500;color:var(--blue)}\n.nav-section{padding:16px 12px 8px}.nav-section-title{font-size:11px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.08em;padding:0 8px;margin-bottom:6px}\n.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;color:var(--text-muted);font-size:13px;margin-bottom:1px}\n.nav-item:hover{background:var(--surface2);color:var(--text)}.nav-item.active{background:var(--blue-light);color:var(--blue);font-weight:500}\n.sidebar-footer{margin-top:auto;padding:16px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--text-hint)}\n.main{margin-left:220px;flex:1;min-height:100vh}\n.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}\n.topbar-title{font-size:16px;font-weight:600;color:#00669E}.topbar-sub{font-size:12px;color:var(--text-muted);margin-top:1px}\n.content{padding:28px 32px;max-width:1100px}\n.page{display:none}.page.active{display:block}\n.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}\n.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px}\n.metric-card.accent-blue{border-top:3px solid var(--blue)}.metric-card.accent-green{border-top:3px solid var(--green-mid)}.metric-card.accent-red{border-top:3px solid var(--red-mid)}.metric-card.accent-amber{border-top:3px solid var(--amber-mid)}\n.metric-label{font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}\n.metric-value{font-size:22px;font-weight:700;line-height:1;letter-spacing:-.5px}.metric-sub{font-size:11px;margin-top:6px}\n.metric-sub.pos{color:var(--green)}.metric-sub.neg{color:var(--red)}.metric-sub.neu{color:var(--text-muted)}\n.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:18px}\n.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}\n.card-title{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}\n.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px}\ntable{width:100%;border-collapse:collapse;font-size:13px}\nth{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;padding:8px 10px;border-bottom:1px solid var(--border);text-align:left}\nth.r{text-align:right}td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:middle}\ntd.r{text-align:right}td.bold,.bold{font-weight:600}tr:last-child td{border-bottom:none}\n.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:12px;font-weight:500}\n.pill.pos{background:var(--green-light);color:var(--green)}.pill.neg{background:var(--red-light);color:var(--red)}.pill.neu{background:var(--surface2);color:var(--text-muted)}.pill.blue{background:var(--blue-light);color:var(--blue)}\n.progress-row{margin-bottom:12px}.progress-header{display:flex;justify-content:space-between;margin-bottom:5px}\n.progress-label{font-size:12px;color:var(--text)}.progress-val{font-size:12px;color:var(--text-muted)}\n.progress-bar{background:var(--surface2);border-radius:3px;height:8px;overflow:hidden}.progress-fill{height:100%;border-radius:3px}\n.fill-blue{background:var(--blue)}.fill-green{background:var(--green-mid)}.fill-red{background:var(--red-mid)}.fill-amber{background:var(--amber-mid)}\n.highlight-box{padding:14px 16px;border-radius:10px;margin-top:14px;border:1px solid}\n.highlight-box.info{background:var(--blue-light);border-color:#c0d8f5}.highlight-box.warning{background:var(--amber-light);border-color:#f5d9a0}.highlight-box.danger{background:var(--red-light);border-color:#f5c0c0}.highlight-box.success{background:var(--green-light);border-color:#b0e0c8}\n.highlight-title{font-size:12px;font-weight:600;margin-bottom:3px}.highlight-box.info .highlight-title{color:var(--blue)}.highlight-box.success .highlight-title{color:var(--green)}.highlight-box.danger .highlight-title{color:var(--red)}.highlight-box.warning .highlight-title{color:var(--amber)}\n.highlight-body{font-size:12px;color:var(--text-muted);line-height:1.5}\n@media(max-width:900px){.sidebar{width:0;display:none}.main{margin-left:0}.grid-2{grid-template-columns:1fr}.metric-grid{grid-template-columns:1fr 1fr}}\n";
   var H='<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+empresa+' · Report · '+yr+'</title><style>'+CSS+'</style></head><body>'+
   '<aside class="sidebar"><div class="sidebar-logo"><img src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDI1LjQuMSwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkxheWVyXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4IgoJIHZpZXdCb3g9IjAgMCAxMTMzLjkgOTM1LjQiIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDExMzMuOSA5MzUuNDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPgo8c3R5bGUgdHlwZT0idGV4dC9jc3MiPgoJLnN0MHtmaWxsOiMwMDY2OUU7fQoJLnN0MXtmaWxsOiM2QkMyQ0M7fQoJLnN0MntmaWxsOiM0RjYxODA7fQo8L3N0eWxlPgo8Zz4KCTxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik0xMzkuNCw2NzAuOWMxNC43LDAsMjYuMiw0LjIsMzQuNCwxMi44YzguMyw4LjUsMTIuNCwyMC44LDEyLjQsMzd2NzkuMmgtMTh2LTc4LjdjMC0xMS4yLTIuOS0xOS42LTguNy0yNS4zCgkJYy01LjgtNS44LTEzLjUtOC43LTIzLjEtOC43Yy0xMC42LDAtMTksMy0yNS4xLDkuMWMtNi4xLDUuOS05LjEsMTUuMS05LjEsMjcuNXY3Ni4xSDg0di03OC43YzAtMTEuMy0yLjgtMTkuOC04LjQtMjUuNQoJCWMtNS41LTUuNy0xMy04LjYtMjIuNi04LjZjLTEwLjcsMC0xOS4yLDMtMjUuNSw5LjFjLTYuMiw2LjEtOS4zLDE1LjItOS4zLDI3LjV2NzYuMUgwVjY3Mi40aDE3LjV2MTguNmMzLjgtNi4zLDktMTEuMiwxNS44LTE0LjgKCQljNi45LTMuNSwxNC45LTUuMywyNC01LjNjOS41LDAsMTcuNiwxLjksMjQuNCw1LjZjNi45LDMuOCwxMiw5LDE1LjMsMTUuN2M0LTYuOCw5LjctMTIsMTYuOS0xNS43CgkJQzEyMS41LDY3Mi44LDEyOS45LDY3MC45LDEzOS40LDY3MC45Ii8+Cgk8cGF0aCBjbGFzcz0ic3QwIiBkPSJNMjcxLjQsODAxYy05LjYsMC0xOC4yLTIuMS0yNS45LTYuNGMtNy43LTQuMi0xMy43LTEwLjEtMTgtMTcuNWMtNC4zLTcuNS02LjQtMTYtNi40LTI1LjUKCQljMC05LjUsMi4xLTE3LjksNi40LTI1LjNjNC40LTcuNSwxMC40LTEzLjQsMTgtMTcuNWM3LjctNC4yLDE2LjMtNi40LDI1LjktNi40czE4LjIsMi4xLDI1LjcsNi40YzcuNyw0LjEsMTMuNiwxMCwxNy44LDE3LjUKCQljNC40LDcuNCw2LjYsMTUuOCw2LjYsMjUuM2MwLDkuNS0yLjIsMTgtNi42LDI1LjVjLTQuMiw3LjQtMTAuMiwxMy4yLTE3LjgsMTcuNUMyODkuNSw3OTguOSwyODEsODAxLDI3MS40LDgwMSBNMjcxLjQsNzg1LjcKCQljNi4yLDAsMTEuNy0xLjQsMTYuNi00LjJjNS0yLjksOC45LTYuOSwxMS43LTEyYzIuOC01LjIsNC4yLTExLjIsNC4yLTE3LjljMC02LjctMS40LTEyLjYtNC4yLTE3LjdjLTIuOC01LjItNi43LTkuMi0xMS43LTEyCgkJYy00LjktMi44LTEwLjQtNC4yLTE2LjYtNC4yYy02LjIsMC0xMS44LDEuNC0xNi44LDQuMmMtNC45LDIuOC04LjcsNi44LTExLjcsMTJjLTIuOCw1LjEtNC4yLDExLTQuMiwxNy43YzAsNi43LDEuNCwxMi42LDQuMiwxNy45CgkJYzIuOSw1LjEsNi44LDkuMSwxMS43LDEyQzI1OS42LDc4NC4zLDI2NS4yLDc4NS43LDI3MS40LDc4NS43Ii8+Cgk8cGF0aCBjbGFzcz0ic3QwIiBkPSJNNDA2LDcwMi40YzkuNCwwLDE3LjcsMi4xLDI1LjEsNi4yYzcuNCw0LjEsMTMuMiw5LjksMTcuMywxNy4zYzQuMyw3LjQsNi40LDE2LDYuNCwyNS43CgkJYzAsOS43LTIuMSwxOC4zLTYuNCwyNS45Yy00LjEsNy40LTkuOSwxMy4yLTE3LjMsMTcuM2MtNy40LDQuMS0xNS44LDYuMi0yNS4xLDYuMmMtNy4yLDAtMTMuNy0xLjQtMTkuNy00LjIKCQljLTUuOS0yLjgtMTAuOS02LjktMTQuOC0xMi4ydjE1LjNoLTE2LjhWNjY0LjdoMTcuNXY1My4yYzMuOS01LjEsOC43LTguOSwxNC42LTExLjVDMzkyLjcsNzAzLjgsMzk5LDcwMi40LDQwNiw3MDIuNCBNNDA0LjUsNzg1LjcKCQljNi4yLDAsMTEuNy0xLjQsMTYuNi00LjJjNS0yLjksOC45LTYuOSwxMS43LTEyYzIuOS01LjIsNC40LTExLjIsNC40LTE3LjljMC02LjctMS41LTEyLjYtNC40LTE3LjdjLTIuOC01LjItNi43LTkuMi0xMS43LTEyCgkJYy00LjktMi44LTEwLjQtNC4yLTE2LjYtNC4yYy02LjEsMC0xMS42LDEuNC0xNi42LDQuMmMtNSwyLjgtOC45LDYuOC0xMS43LDEyYy0yLjgsNS4xLTQuMiwxMS00LjIsMTcuN2MwLDYuNywxLjQsMTIuNiw0LjIsMTcuOQoJCWMyLjgsNS4xLDYuNyw5LjEsMTEuNywxMkMzOTIuOSw3ODQuMywzOTguNCw3ODUuNyw0MDQuNSw3ODUuNyIvPgoJPHBhdGggY2xhc3M9InN0MCIgZD0iTTQ4OCw3MDMuM2gxNy41djk2LjZINDg4VjcwMy4zeiBNNDk2LjgsNjg0LjdjLTMuNCwwLTYuMy0xLjEtOC42LTMuM2MtMi4yLTIuMi0zLjMtNC45LTMuMy04CgkJYzAtMy4yLDEuMS01LjgsMy4zLThjMi4zLTIuMyw1LjItMy41LDguNi0zLjVjMy40LDAsNi4yLDEuMSw4LjQsMy4zYzIuMywyLjEsMy41LDQuNywzLjUsNy44YzAsMy4zLTEuMiw2LjEtMy41LDguNAoJCUM1MDMsNjgzLjcsNTAwLjIsNjg0LjcsNDk2LjgsNjg0LjciLz4KCTxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik01NzcuNCw4MDFjLTkuNCwwLTE2LjYtMi42LTIxLjctNy43Yy01LjEtNS4yLTcuNy0xMi41LTcuNy0yMS45VjY2NC43aDE3LjVWNzcwYzAsNS4yLDEuMiw5LjIsMy42LDEyCgkJYzIuNiwyLjgsNi4zLDQuMiwxMS4zLDQuMmMzLDAsNS45LTAuNiw4LjYtMS44bDAuOSwxNC40QzU4NS45LDgwMC4yLDU4MS43LDgwMSw1NzcuNCw4MDEiLz4KCTxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik03NjIuOSw3MDMuM3Y1My40YzAsMTQuMi0zLjUsMjUuMS0xMC42LDMyLjhjLTcsNy43LTE3LjIsMTEuNS0zMC42LDExLjVjLTE1LjgsMC0yNi43LTUuOC0zMi44LTE3LjMKCQljLTMuMiw1LjgtNy41LDEwLjItMTIuOSwxMy4xYy01LjMsMi44LTEyLDQuMi0yMCw0LjJjLTEzLjUsMC0yMy43LTMuOC0zMC44LTExLjVjLTYuOS03LjctMTAuNC0xOC42LTEwLjQtMzIuOHYtNTMuNGgxNy41djUxLjcKCQljMCwxMC4zLDEuOSwxOCw1LjYsMjNjMy44LDQuOSw5LjgsNy4zLDE4LDcuM2M4LjMsMCwxNC4zLTIuNSwxOC4yLTcuNWM0LTUsNi0xMi42LDYtMjIuOHYtNTEuN2gxNy41djUxLjcKCQljMCwxMC4yLDEuOSwxNy44LDUuOCwyMi44YzQsNSwxMC4xLDcuNSwxOC40LDcuNWM4LjEsMCwxNC4xLTIuNCwxNy44LTcuM2MzLjgtNSw1LjYtMTIuNiw1LjYtMjN2LTUxLjdINzYyLjl6Ii8+Cgk8cGF0aCBjbGFzcz0ic3QwIiBkPSJNODk1LjQsNzAzLjN2OTYuNmgtMTYuOHYtMTUuM2MtMy45LDUuMy04LjgsOS40LTE0LjgsMTIuMmMtNS45LDIuOC0xMi41LDQuMi0xOS43LDQuMgoJCWMtOS40LDAtMTcuNy0yLjEtMjUuMS02LjJjLTcuNC00LjEtMTMuMi05LjktMTcuNS0xNy4zYy00LjEtNy41LTYuMi0xNi4yLTYuMi0yNS45YzAtOS43LDIuMS0xOC4zLDYuMi0yNS43CgkJYzQuMi03LjQsMTAuMS0xMy4yLDE3LjUtMTcuM2M3LjQtNC4xLDE1LjgtNi4yLDI1LjEtNi4yYzYuOSwwLDEzLjMsMS4zLDE5LjEsNGM1LjgsMi42LDEwLjcsNi40LDE0LjYsMTEuNXYtMTQuNkg4OTUuNHoKCQkgTTg0NS43LDc4NS43YzYuMSwwLDExLjYtMS40LDE2LjYtNC4yYzUtMi45LDguOS02LjksMTEuNy0xMmMyLjgtNS4yLDQuMi0xMS4yLDQuMi0xNy45YzAtNi43LTEuNC0xMi42LTQuMi0xNy43CgkJYy0yLjgtNS4yLTYuNy05LjItMTEuNy0xMmMtNS0yLjgtMTAuNS00LjItMTYuNi00LjJjLTYuMiwwLTExLjgsMS40LTE2LjgsNC4yYy00LjksMi44LTguNyw2LjgtMTEuNywxMmMtMi44LDUuMS00LjIsMTEtNC4yLDE3LjcKCQljMCw2LjcsMS40LDEyLjYsNC4yLDE3LjljMi45LDUuMSw2LjgsOS4xLDExLjcsMTJDODMzLjksNzg0LjMsODM5LjUsNzg1LjcsODQ1LjcsNzg1LjciLz4KCTxwb2x5Z29uIGNsYXNzPSJzdDAiIHBvaW50cz0iMTAyMyw3MDMuMyA5ODAuOCw3OTkuOSA5NjIuOSw3OTkuOSA5MjAuNiw3MDMuMyA5MzguOSw3MDMuMyA5NzIsNzgwLjcgMTAwNS45LDcwMy4zIAkiLz4KCTxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik0xMDg5LjMsNzg1LjdjMTEuNSwwLDIwLjgtMy45LDI3LjktMTEuN2w5LjUsMTEuM2MtNC4yLDUuMS05LjcsOS0xNi4yLDExLjdjLTYuNCwyLjctMTMuNyw0LTIxLjcsNAoJCWMtMTAuMiwwLTE5LjItMi4xLTI3LjEtNi4yYy03LjktNC4yLTE0LTEwLjEtMTguNC0xNy43Yy00LjMtNy41LTYuNC0xNi02LjQtMjUuNWMwLTkuNCwyLjEtMTcuOCw2LjItMjUuMwoJCWM0LjItNy41LDEwLTEzLjQsMTcuMy0xNy41YzcuNC00LjIsMTUuNy02LjQsMjUtNi40YzguNywwLDE2LjcsMiwyMy45LDZjNy4yLDMuOSwxMi45LDkuNCwxNy4xLDE2LjZjNC4zLDcuMiw2LjQsMTUuNCw2LjYsMjQuOAoJCWwtNzYuNywxNC45YzIuNCw2LjcsNi41LDExLjgsMTIuMiwxNS41QzEwNzQuMiw3ODMuOCwxMDgxLjIsNzg1LjcsMTA4OS4zLDc4NS43IE0xMDg1LjMsNzE3LjJjLTYuMSwwLTExLjUsMS40LTE2LjQsNC4yCgkJYy00LjcsMi44LTguNCw2LjctMTEuMSwxMS44Yy0yLjcsNS00LDEwLjgtNCwxNy41djEuOGw2MS44LTExLjdjLTEuNi03LTUuMS0xMi43LTEwLjYtMTcuMUMxMDk5LjUsNzE5LjQsMTA5Myw3MTcuMiwxMDg1LjMsNzE3LjIiCgkJLz4KPC9nPgo8Zz4KCTxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik0yNDcuNiwxMS43QzIyOCw0LjYsMjA3LjksMS4xLDE4Ny4yLDEuMWMtMjAuMSwwLTQwLjIsMy41LTYwLjMsMTAuNmMtMTkuNSw3LjEtMzguNCwxNy43LTU2LjgsMzEuOAoJCUM1MS44LDU3LDM1LjgsNzUuMiwyMi4yLDk4LjJjLTEzLjYsMjMtMjEsNTAuMy0yMi4yLDgyLjFWNDk5YzAsMTYuNSw1LjksMzAuMywxNy44LDQxLjVjMTIuNCwxMC42LDI2LjksMTUuOSw0My41LDE1LjkKCQljMzUuNS0yLjksNTQuNy0yMi4xLDU3LjctNTcuNFYxODcuNGMwLjYtMTQuMSwzLjUtMjUuOSw4LjktMzUuM2M1LjMtMTAsMTEuMi0xNy43LDE3LjctMjNjNi41LTUuOSwxMy0xMCwxOS41LTEyLjQKCQljNy4xLTIuOSwxNC4yLTQuNCwyMS4zLTQuNGM3LjEsMCwxNC4yLDEuNSwyMS4zLDQuNGM3LjEsMi40LDEzLjksNi41LDIwLjQsMTIuNGM2LjUsNS4zLDEyLjQsMTIuOSwxNy43LDIzYzUuMyw5LjQsOCwyMS4yLDgsMzUuMwoJCVY0OTljMCwxNi41LDUuOSwzMC4zLDE3LjcsNDEuNWMxMi40LDEwLjYsMjYuOSwxNS45LDQzLjUsMTUuOWMzNS41LTIuOSw1NS0yMi4xLDU4LjYtNTcuNFYxODcuNGMwLjYtMTQuMSwzLjUtMjUuOSw4LjktMzUuMwoJCWM1LjMtMTAsMTEuMi0xNy43LDE3LjctMjNjNi41LTUuOSwxMy0xMCwxOS41LTEyLjRjNy4xLTIuOSwxNC4yLTQuNCwyMS4zLTQuNGM3LjEsMCwxNC4yLDEuNSwyMS4zLDQuNGM3LjEsMi40LDEzLjksNi41LDIwLjQsMTIuNAoJCWM2LjUsNS4zLDEyLjQsMTIuOSwxNy44LDIzYzUuMyw5LjQsOCwyMS4yLDgsMzUuM1YyMzhsMTE5LjgsMzAuN3YtODguNGMwLTMxLjgtNy4xLTU5LjEtMjEuMy04Mi4xYy0xMy42LTIzLTI5LjYtNDEuMi00Ny45LTU0LjcKCQljLTE3LjctMTQuMS0zNi43LTI0LjctNTYuOC0zMS44Yy0xOS41LTcuMS0zOS42LTEwLjYtNjAuMy0xMC42Yy0yMC4xLDAtNDAuMiwzLjUtNjAuMywxMC42QzM2MiwxOC43LDM0My4xLDI5LDMyNC43LDQyLjYKCQljLTMuNSwyLjktNi44LDUuOS05LjgsOC44Yy0zLjUtMi45LTYuOC01LjktOS44LTguOEMyODYuOSwyOSwyNjcuNywxOC43LDI0Ny42LDExLjciLz4KCTxwYXRoIGNsYXNzPSJzdDEiIGQ9Ik04ODYuMyw1NDUuOGMxOS41LDcuMSwzOS42LDEwLjYsNjAuMywxMC42YzIwLjEsMCw0MC4yLTMuNSw2MC4zLTEwLjZjMTkuNS03LjEsMzguNC0xNy43LDU2LjgtMzEuOAoJCWMxOC4zLTEzLjUsMzQuMy0zMS44LDQ3LjktNTQuN2MxMy42LTIzLDIxLTUwLjMsMjIuMi04Mi4xVjU4LjVjMC0xNi41LTUuOS0zMC4zLTE3LjgtNDEuNWMtMTIuNC0xMC42LTI2LjktMTUuOS00My41LTE1LjkKCQljLTM1LjUsMi45LTU0LjcsMjIuMS01Ny43LDU3LjR2MzExLjZjLTAuNiwxNC4xLTMuNSwyNS45LTguOSwzNS4zYy01LjMsMTAtMTEuMiwxNy43LTE3LjcsMjNjLTYuNSw1LjktMTMsMTAtMTkuNSwxMi40CgkJYy03LjEsMi45LTE0LjIsNC40LTIxLjMsNC40Yy03LjEsMC0xNC4yLTEuNS0yMS4zLTQuNGMtNy4xLTIuNC0xMy45LTYuNS0yMC40LTEyLjRjLTYuNS01LjMtMTIuNC0xMy0xNy43LTIzCgkJYy01LjMtOS40LTgtMjEuMi04LTM1LjNWNTguNWMwLTE2LjUtNS45LTMwLjMtMTcuNy00MS41Qzg0OS45LDYuNCw4MzUuNCwxLjEsODE4LjksMS4xYy0zNS41LDIuOS01NSwyMi4xLTU4LjYsNTcuNHYzMTEuNgoJCWMtMC42LDE0LjEtMy41LDI1LjktOC45LDM1LjNjLTUuMywxMC0xMS4yLDE3LjctMTcuNywyM2MtNi41LDUuOS0xMywxMC0xOS41LDEyLjRjLTcuMSwyLjktMTQuMiw0LjQtMjEuMyw0LjQKCQljLTcuMSwwLTE0LjItMS41LTIxLjMtNC40Yy03LjEtMi40LTEzLjktNi41LTIwLjQtMTIuNGMtNi41LTUuMy0xMi40LTEzLTE3LjgtMjNjLTUuMy05LjQtOC0yMS4yLTgtMzUuM3YtNTAuNmwtMTE5LjgtMzAuN3Y4OC40CgkJYzAsMzEuOCw3LjEsNTkuMSwyMS4zLDgyLjFjMTMuNiwyMywyOS42LDQxLjIsNDcuOSw1NC43YzE3LjcsMTQuMSwzNi43LDI0LjcsNTYuOCwzMS44YzE5LjUsNy4xLDM5LjYsMTAuNiw2MC4zLDEwLjYKCQljMjAuMSwwLDQwLjItMy41LDYwLjMtMTAuNmMxOS41LTcuMSwzOC40LTE3LjQsNTYuOC0zMC45YzMuNS0yLjksNi44LTUuOSw5LjgtOC44YzMuNSwyLjksNi44LDUuOSw5LjgsOC44CgkJQzg0Nyw1MjguNCw4NjYuMiw1MzguNyw4ODYuMyw1NDUuOCIvPgo8L2c+CjxnPgoJPHBvbHlnb24gY2xhc3M9InN0MiIgcG9pbnRzPSI0OC41LDg2OS43IDQ4LjUsODk4LjggNyw4OTguOCA3LDg2OS43IDAsODY5LjcgMCw5MzUgNyw5MzUgNyw5MDQuOCA0OC41LDkwNC44IDQ4LjUsOTM1IDU1LjQsOTM1IAoJCTU1LjQsODY5LjcgCSIvPgoJPHBhdGggY2xhc3M9InN0MiIgZD0iTTEyOC4xLDkxMi41SDg2LjRjMC40LDUuMSwyLjQsOS4yLDYsMTIuNGMzLjYsMy4xLDguMiw0LjcsMTMuNyw0LjdjMy4xLDAsNS45LTAuNSw4LjUtMS42CgkJYzIuNi0xLjEsNC44LTIuNyw2LjctNC45bDMuOCw0LjNjLTIuMiwyLjYtNSw0LjYtOC4zLDZjLTMuMywxLjQtNi45LDIuMS0xMC45LDIuMWMtNS4xLDAtOS43LTEuMS0xMy43LTMuMmMtMy45LTIuMi03LTUuMi05LjItOQoJCWMtMi4yLTMuOC0zLjMtOC4xLTMuMy0xMi45YzAtNC44LDEtOS4xLDMuMS0xMi45YzIuMi0zLjgsNS4xLTYuNyw4LjctOC45YzMuNy0yLjEsNy45LTMuMiwxMi41LTMuMmM0LjYsMCw4LjgsMS4xLDEyLjQsMy4yCgkJYzMuNywyLjEsNi41LDUuMSw4LjYsOC45YzIuMSwzLjcsMy4xLDgsMy4xLDEyLjlMMTI4LjEsOTEyLjV6IE0xMDQsODkxLjJjLTQuOCwwLTguOCwxLjUtMTIuMSw0LjZjLTMuMiwzLTUuMSw2LjktNS41LDExLjhoMzUuNAoJCWMtMC40LTQuOC0yLjMtOC44LTUuNi0xMS44QzExMi45LDg5Mi43LDEwOC45LDg5MS4yLDEwNCw4OTEuMiIvPgoJPHBhdGggY2xhc3M9InN0MiIgZD0iTTE2Nyw4ODUuNWM2LjUsMCwxMS41LDEuNiwxNSw0LjhjMy41LDMuMiw1LjIsNy45LDUuMiwxNC4yVjkzNWgtNi40di03LjZjLTEuNSwyLjUtMy44LDQuNS02LjcsNgoJCWMtMi45LDEuNC02LjQsMi4yLTEwLjQsMi4yYy01LjYsMC0xMC0xLjMtMTMuMy0zLjljLTMuMy0yLjYtNC45LTYuMS00LjktMTAuNGMwLTQuMiwxLjUtNy41LDQuNi0xMC4xYzMuMS0yLjYsOC0zLjgsMTQuNy0zLjhoMTUuOAoJCXYtM2MwLTQuMi0xLjItNy40LTMuNi05LjZjLTIuNC0yLjItNS45LTMuNC0xMC41LTMuNGMtMy4yLDAtNi4yLDAuNS05LjEsMS42Yy0yLjksMS01LjQsMi40LTcuNSw0LjJsLTMtNC45CgkJYzIuNS0yLjEsNS42LTMuNyw5LjEtNC45QzE1OS4zLDg4Ni4xLDE2Myw4ODUuNSwxNjcsODg1LjUgTTE2NC42LDkzMC4yYzMuOCwwLDctMC44LDkuOC0yLjVjMi43LTEuNyw0LjctNC4yLDYuMS03LjV2LThoLTE1LjYKCQljLTguNSwwLTEyLjgsMi45LTEyLjgsOC44YzAsMi45LDEuMSw1LjEsMy4zLDYuOEMxNTcuNSw5MjkuNCwxNjAuNiw5MzAuMiwxNjQuNiw5MzAuMiIvPgoJPHJlY3QgeD0iMjE0LjQiIHk9Ijg2NS43IiBjbGFzcz0ic3QyIiB3aWR0aD0iNi43IiBoZWlnaHQ9IjY5LjIiLz4KCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0yNzUuMyw5MzJjLTEuMywxLjEtMi44LDItNC43LDIuNmMtMS44LDAuNi0zLjgsMC44LTUuOCwwLjhjLTQuNywwLTguMy0xLjItMTAuOC0zLjdjLTIuNS0yLjUtMy44LTYtMy44LTEwLjUKCQl2LTI5LjdoLTguOXYtNS42aDguOXYtMTAuN2g2Ljd2MTAuN2gxNS4ydjUuNkgyNTd2MjkuM2MwLDIuOSwwLjcsNS4yLDIuMiw2LjdjMS41LDEuNSwzLjcsMi4yLDYuNSwyLjJjMS40LDAsMi43LTAuMiw0LTAuNgoJCWMxLjMtMC40LDIuNS0xLjEsMy40LTEuOUwyNzUuMyw5MzJ6Ii8+Cgk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMzIyLDg4NS41YzYuMywwLDExLjIsMS44LDE0LjksNS40YzMuNywzLjUsNS42LDguNyw1LjYsMTUuNlY5MzVoLTYuN3YtMjcuOGMwLTUuMS0xLjMtOS0zLjktMTEuNwoJCWMtMi42LTIuNy02LjMtNC0xMS4xLTRjLTUuNCwwLTkuNiwxLjYtMTIuOCw0LjhjLTMuMSwzLjEtNC42LDcuNC00LjYsMTNWOTM1aC02Ljd2LTY5LjJoNi43djI4LjdjMS44LTIuOSw0LjQtNS4xLDcuNi02LjYKCQlDMzE0LjEsODg2LjMsMzE3LjgsODg1LjUsMzIyLDg4NS41Ii8+Cgk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMzkwLjYsOTM1LjRjLTQuOSwwLTkuNC0xLjEtMTMuMy0zLjJjLTMuOS0yLjEtNi45LTUuMS05LjEtOC45Yy0yLjItMy44LTMuMy04LjItMy4zLTEzCgkJYzAtNC44LDEuMS05LjEsMy4zLTEyLjljMi4yLTMuOCw1LjItNi44LDkuMS04LjljMy45LTIuMSw4LjMtMy4yLDEzLjMtMy4yYzQuMywwLDguMSwwLjgsMTEuNSwyLjVjMy40LDEuNiw2LjEsNCw4LjEsNy4ybC01LDMuNAoJCWMtMS42LTIuNC0zLjctNC4yLTYuMy01LjRjLTIuNS0xLjItNS4zLTEuOS04LjItMS45Yy0zLjYsMC02LjksMC44LTkuOCwyLjRjLTIuOCwxLjYtNS4xLDMuOC02LjcsNi43Yy0xLjYsMi45LTIuNCw2LjItMi40LDEwCgkJYzAsMy44LDAuOCw3LjEsMi40LDEwLjFjMS42LDIuOSwzLjksNS4xLDYuNyw2LjdjMi45LDEuNSw2LjIsMi4zLDkuOCwyLjNjMywwLDUuNy0wLjYsOC4yLTEuOGMyLjUtMS4yLDQuNi0zLDYuMy01LjRsNSwzLjQKCQljLTIsMy4yLTQuNiw1LjYtOC4xLDcuM0MzOTguNyw5MzQuNiwzOTQuOCw5MzUuNCwzOTAuNiw5MzUuNCIvPgoJPHBhdGggY2xhc3M9InN0MiIgZD0iTTQ0OS44LDg4NS41YzYuNSwwLDExLjUsMS42LDE1LDQuOGMzLjUsMy4yLDUuMiw3LjksNS4yLDE0LjJWOTM1aC02LjR2LTcuNmMtMS41LDIuNS0zLjgsNC41LTYuNyw2CgkJYy0yLjksMS40LTYuNCwyLjItMTAuNCwyLjJjLTUuNiwwLTEwLTEuMy0xMy4zLTMuOWMtMy4zLTIuNi00LjktNi4xLTQuOS0xMC40YzAtNC4yLDEuNS03LjUsNC42LTEwLjFjMy4xLTIuNiw4LTMuOCwxNC43LTMuOGgxNS44CgkJdi0zYzAtNC4yLTEuMi03LjQtMy42LTkuNmMtMi40LTIuMi01LjktMy40LTEwLjUtMy40Yy0zLjIsMC02LjIsMC41LTkuMSwxLjZjLTIuOSwxLTUuNCwyLjQtNy41LDQuMmwtMy00LjkKCQljMi41LTIuMSw1LjYtMy43LDkuMS00LjlDNDQyLjIsODg2LjEsNDQ1LjksODg1LjUsNDQ5LjgsODg1LjUgTTQ0Ny40LDkzMC4yYzMuOCwwLDctMC44LDkuOC0yLjVjMi43LTEuNyw0LjctNC4yLDYuMS03LjV2LThoLTE1LjYKCQljLTguNSwwLTEyLjgsMi45LTEyLjgsOC44YzAsMi45LDEuMSw1LjEsMy4zLDYuOEM0NDAuNCw5MjkuNCw0NDMuNSw5MzAuMiw0NDcuNCw5MzAuMiIvPgoJPHBhdGggY2xhc3M9InN0MiIgZD0iTTUwMy43LDg5NS41YzEuNi0zLjMsMy45LTUuOCw3LTcuNWMzLjItMS43LDctMi41LDExLjctMi41djYuNGwtMS42LTAuMWMtNS4zLDAtOS40LDEuNi0xMi4zLDQuOAoJCWMtMywzLjItNC41LDcuNi00LjUsMTMuM3YyNWgtNi43di00OS4xaDYuNFY4OTUuNXoiLz4KCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik01ODYuNSw5MTIuNWgtNDEuN2MwLjQsNS4xLDIuNCw5LjIsNiwxMi40YzMuNiwzLjEsOC4yLDQuNywxMy43LDQuN2MzLjEsMCw1LjktMC41LDguNS0xLjYKCQljMi42LTEuMSw0LjgtMi43LDYuNy00LjlsMy44LDQuM2MtMi4yLDIuNi01LDQuNi04LjMsNmMtMy4zLDEuNC02LjksMi4xLTEwLjksMi4xYy01LjEsMC05LjctMS4xLTEzLjctMy4yYy0zLjktMi4yLTctNS4yLTkuMi05CgkJYy0yLjItMy44LTMuMy04LjEtMy4zLTEyLjljMC00LjgsMS05LjEsMy4xLTEyLjljMi4yLTMuOCw1LjEtNi43LDguNy04LjljMy43LTIuMSw3LjktMy4yLDEyLjUtMy4yczguOCwxLjEsMTIuNCwzLjIKCQlzNi41LDUuMSw4LjYsOC45YzIuMSwzLjcsMy4xLDgsMy4xLDEyLjlMNTg2LjUsOTEyLjV6IE01NjIuNSw4OTEuMmMtNC44LDAtOC44LDEuNS0xMi4xLDQuNmMtMy4yLDMtNS4xLDYuOS01LjUsMTEuOGgzNS40CgkJYy0wLjQtNC44LTIuMy04LjgtNS42LTExLjhDNTcxLjQsODkyLjcsNTY3LjMsODkxLjIsNTYyLjUsODkxLjIiLz4KPC9nPgo8Zz4KCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik02NTguNiw5MzUuNGMtNCwwLTcuOS0wLjYtMTEuNy0xLjdjLTMuNy0xLjItNi41LTIuNi04LjYtNC40bDMtNS4yYzIuMSwxLjYsNC43LDMsNy45LDQKCQljMy4yLDEsNi40LDEuNSw5LjksMS41YzQuNiwwLDcuOS0wLjcsMTAuMS0yYzIuMi0xLjQsMy4zLTMuNCwzLjMtNmMwLTEuOC0wLjYtMy4yLTEuOC00LjJjLTEuMi0xLjEtMi43LTEuOC00LjYtMi4zCgkJYy0xLjgtMC42LTQuMy0xLjEtNy4zLTEuNmMtNC0wLjctNy4zLTEuNS05LjgtMi4yYy0yLjUtMC44LTQuNi0yLjEtNi40LTRjLTEuNy0xLjktMi42LTQuNC0yLjYtNy43YzAtNC4xLDEuNy03LjUsNS4yLTEwLjEKCQljMy41LTIuNiw4LjMtMy45LDE0LjUtMy45YzMuMiwwLDYuNCwwLjQsOS43LDEuM2MzLjIsMC44LDUuOSwxLjksOCwzLjNsLTIuOSw1LjNjLTQuMS0yLjgtOS00LjItMTQuNy00LjJjLTQuMywwLTcuNiwwLjctOS44LDIuMgoJCWMtMi4yLDEuNS0zLjIsMy40LTMuMiw1LjljMCwxLjksMC42LDMuNCwxLjgsNC41YzEuMywxLjEsMi44LDIsNC42LDIuNWMxLjgsMC41LDQuNCwxLDcuNiwxLjZjNCwwLjcsNy4yLDEuNSw5LjYsMi4yCgkJYzIuNCwwLjcsNC41LDIsNi4yLDMuOGMxLjcsMS44LDIuNiw0LjMsMi42LDcuNWMwLDQuMy0xLjgsNy43LTUuNSwxMC4zQzY3MC4xLDkzNC4yLDY2NS4xLDkzNS40LDY1OC42LDkzNS40Ii8+Cgk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNzIxLDkzNS40Yy00LjgsMC05LjEtMS4xLTEzLTMuMmMtMy45LTIuMi02LjktNS4yLTkuMS05cy0zLjMtOC4xLTMuMy0xMi45YzAtNC44LDEuMS05LjEsMy4zLTEyLjkKCQljMi4yLTMuOCw1LjItNi43LDkuMS04LjljMy45LTIuMSw4LjItMy4yLDEzLTMuMmM0LjgsMCw5LjEsMS4xLDEzLDMuMmMzLjksMi4xLDYuOSw1LjEsOSw4LjljMi4yLDMuOCwzLjMsOC4xLDMuMywxMi45CgkJYzAsNC44LTEuMSw5LjEtMy4zLDEyLjljLTIuMiwzLjgtNS4xLDYuOC05LDlDNzMwLjIsOTM0LjQsNzI1LjgsOTM1LjQsNzIxLDkzNS40IE03MjEsOTI5LjZjMy41LDAsNi43LTAuOCw5LjUtMi4zCgkJYzIuOC0xLjYsNS4xLTMuOSw2LjYtNi44YzEuNi0yLjksMi40LTYuMiwyLjQtMTBjMC0zLjctMC44LTcuMS0yLjQtMTBjLTEuNi0yLjktMy44LTUuMi02LjYtNi43Yy0yLjgtMS42LTUuOS0yLjQtOS41LTIuNAoJCWMtMy41LDAtNi43LDAuOC05LjYsMi40Yy0yLjgsMS42LTUsMy44LTYuNiw2LjdjLTEuNiwyLjktMi40LDYuMi0yLjQsMTBjMCwzLjcsMC44LDcuMSwyLjQsMTBjMS42LDIuOSwzLjksNS4yLDYuNiw2LjgKCQlDNzE0LjMsOTI4LjgsNzE3LjUsOTI5LjYsNzIxLDkyOS42Ii8+Cgk8cmVjdCB4PSI3NjkuMSIgeT0iODY1LjgiIGNsYXNzPSJzdDIiIHdpZHRoPSI2LjciIGhlaWdodD0iNjkuMiIvPgoJPHBhdGggY2xhc3M9InN0MiIgZD0iTTg0OC41LDg4NS45VjkzNUg4NDJ2LTljLTEuOCwzLTQuMiw1LjMtNy4zLDdjLTMuMSwxLjYtNi42LDIuNC0xMC42LDIuNGMtNi41LDAtMTEuNy0xLjgtMTUuNC01LjMKCQljLTMuNy0zLjYtNS42LTguOS01LjYtMTUuOHYtMjguNWg2Ljd2MjcuOGMwLDUuMiwxLjMsOS4xLDMuOSwxMS44YzIuNiwyLjcsNi4zLDQsMTEuMSw0YzUuMiwwLDkuNC0xLjYsMTIuNC00LjcKCQljMy0zLjIsNC42LTcuNiw0LjYtMTMuMnYtMjUuN0g4NDguNXoiLz4KCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik05MDIuNiw5MzJjLTEuMywxLjEtMi44LDItNC43LDIuNmMtMS44LDAuNi0zLjgsMC44LTUuOCwwLjhjLTQuNywwLTguMy0xLjItMTAuOC0zLjdjLTIuNS0yLjUtMy44LTYtMy44LTEwLjUKCQl2LTI5LjdoLTguOXYtNS42aDguOXYtMTAuN2g2Ljd2MTAuN2gxNS4ydjUuNmgtMTUuMnYyOS4zYzAsMi45LDAuNyw1LjIsMi4yLDYuN2MxLjUsMS41LDMuNywyLjIsNi41LDIuMmMxLjQsMCwyLjctMC4yLDQtMC42CgkJYzEuMy0wLjQsMi41LTEuMSwzLjQtMS45TDkwMi42LDkzMnoiLz4KCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik05MjMuOSw4ODUuOWg2LjdWOTM1aC02LjdWODg1Ljl6IE05MjcuMyw4NzUuMmMtMS40LDAtMi42LTAuNS0zLjUtMS40Yy0wLjktMC45LTEuNC0yLjEtMS40LTMuNAoJCWMwLTEuMiwwLjUtMi4zLDEuNC0zLjNjMS0wLjksMi4xLTEuNCwzLjUtMS40YzEuNCwwLDIuNiwwLjUsMy41LDEuNGMwLjksMC45LDEuNCwxLjksMS40LDMuMmMwLDEuNC0wLjUsMi41LTEuNCwzLjUKCQlDOTI5LjgsODc0LjcsOTI4LjcsODc1LjIsOTI3LjMsODc1LjIiLz4KCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik05NzguNyw5MzUuNGMtNC44LDAtOS4xLTEuMS0xMy0zLjJjLTMuOS0yLjItNi45LTUuMi05LjEtOXMtMy4zLTguMS0zLjMtMTIuOWMwLTQuOCwxLjEtOS4xLDMuMy0xMi45CgkJYzIuMi0zLjgsNS4yLTYuNyw5LjEtOC45YzMuOS0yLjEsOC4yLTMuMiwxMy0zLjJjNC44LDAsOS4xLDEuMSwxMywzLjJjMy45LDIuMSw2LjksNS4xLDksOC45YzIuMiwzLjgsMy4zLDguMSwzLjMsMTIuOQoJCWMwLDQuOC0xLjEsOS4xLTMuMywxMi45Yy0yLjIsMy44LTUuMSw2LjgtOSw5Qzk4Ny44LDkzNC40LDk4My41LDkzNS40LDk3OC43LDkzNS40IE05NzguNyw5MjkuNmMzLjUsMCw2LjctMC44LDkuNS0yLjMKCQljMi44LTEuNiw1LjEtMy45LDYuNi02LjhjMS42LTIuOSwyLjQtNi4yLDIuNC0xMGMwLTMuNy0wLjgtNy4xLTIuNC0xMHMtMy44LTUuMi02LjYtNi43Yy0yLjgtMS42LTUuOS0yLjQtOS41LTIuNAoJCWMtMy41LDAtNi43LDAuOC05LjYsMi40Yy0yLjgsMS42LTUsMy44LTYuNiw2LjdjLTEuNiwyLjktMi40LDYuMi0yLjQsMTBjMCwzLjcsMC44LDcuMSwyLjQsMTBjMS42LDIuOSwzLjksNS4yLDYuNiw2LjgKCQlDOTcyLDkyOC44LDk3NS4yLDkyOS42LDk3OC43LDkyOS42Ii8+Cgk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMTA1Mi4yLDg4NS41YzYuMywwLDExLjIsMS44LDE0LjksNS40YzMuNywzLjUsNS42LDguNyw1LjYsMTUuNlY5MzVoLTYuN3YtMjcuOGMwLTUuMS0xLjMtOS0zLjktMTEuNwoJCWMtMi42LTIuNy02LjMtNC0xMS4xLTRjLTUuNCwwLTkuNiwxLjYtMTIuOCw0LjhjLTMuMSwzLjEtNC42LDcuNC00LjYsMTNWOTM1aC02Ljd2LTQ5LjFoNi40djljMS44LTMsNC40LTUuMyw3LjYtNi45CgkJQzEwNDQuMSw4ODYuNCwxMDQ3LjksODg1LjUsMTA1Mi4yLDg4NS41Ii8+Cgk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMTExMy4zLDkzNS40Yy00LDAtNy45LTAuNi0xMS43LTEuN2MtMy43LTEuMi02LjUtMi42LTguNi00LjRsMy01LjJjMi4xLDEuNiw0LjcsMyw3LjksNAoJCWMzLjIsMSw2LjQsMS41LDkuOSwxLjVjNC42LDAsNy45LTAuNywxMC4xLTJjMi4yLTEuNCwzLjMtMy40LDMuMy02YzAtMS44LTAuNi0zLjItMS44LTQuMmMtMS4yLTEuMS0yLjctMS44LTQuNi0yLjMKCQljLTEuOC0wLjYtNC4zLTEuMS03LjMtMS42Yy00LTAuNy03LjMtMS41LTkuOC0yLjJjLTIuNS0wLjgtNC42LTIuMS02LjQtNGMtMS43LTEuOS0yLjYtNC40LTIuNi03LjdjMC00LjEsMS43LTcuNSw1LjItMTAuMQoJCWMzLjUtMi42LDguMy0zLjksMTQuNS0zLjljMy4yLDAsNi40LDAuNCw5LjcsMS4zYzMuMiwwLjgsNS45LDEuOSw4LDMuM2wtMi45LDUuM2MtNC4xLTIuOC05LTQuMi0xNC43LTQuMmMtNC4zLDAtNy42LDAuNy05LjgsMi4yCgkJYy0yLjIsMS41LTMuMiwzLjQtMy4yLDUuOWMwLDEuOSwwLjYsMy40LDEuOCw0LjVjMS4zLDEuMSwyLjgsMiw0LjYsMi41YzEuOCwwLjUsNC40LDEsNy42LDEuNmM0LDAuNyw3LjIsMS41LDkuNiwyLjIKCQljMi40LDAuNyw0LjUsMiw2LjIsMy44YzEuNywxLjgsMi42LDQuMywyLjYsNy41YzAsNC4zLTEuOCw3LjctNS41LDEwLjNDMTEyNC43LDkzNC4yLDExMTkuNyw5MzUuNCwxMTEzLjMsOTM1LjQiLz4KPC9nPgo8L3N2Zz4K" style="width:140px;height:auto;display:block;margin-bottom:6px" alt="Mobilwave"><div class="logo-sub">Report Financeiro '+yr+'</div></div>'+
@@ -702,8 +702,11 @@ function genReport(optYr,optMo){
   '<div class="sidebar-footer">Dados até '+_cut.split("-").reverse().join("/")+'<br>Gerado '+now.toLocaleDateString("pt-PT")+'<br>pipeline e projeção: situação atual</div></aside>'+
   '<main class="main"><div class="topbar"><div><div class="topbar-title" id="ptitle">Resumo Executivo</div><div class="topbar-sub">'+empresa+' · exercício '+yr+' · até '+moLbl+'</div></div><button onclick="window.print()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer" class="print-btn">Imprimir / PDF</button></div><div class="content">'+pages+'</div></main>'+
   '<scr'+'ipt>var TITLES='+'{resumo:"Resumo Executivo",faturacao:"Faturação",vendas:"Vendas & Pipeline",orcamento:"Orçamento vs Real",cashflow:"Cashflow",clientes:"Clientes & Dívida",objetivos:"Objetivos Prémio",projecao:"Projeção Recorrente"};'+
-  'function showPage(id,el){document.querySelectorAll(".page").forEach(function(p){p.classList.remove("active");});document.getElementById("page-"+id).classList.add("active");document.querySelectorAll(".nav-item").forEach(function(n){n.classList.remove("active");});if(el)el.classList.add("active");document.getElementById("ptitle").textContent=TITLES[id]||"";window.scrollTo(0,0);}</scr'+'ipt>'+
-  '<style>@media print{.sidebar,.print-btn{display:none!important}.main{margin-left:0!important}.page{display:block!important;page-break-after:always}.topbar{position:static!important}}</style>'+
+  'function showPage(id,el){document.querySelectorAll(".page").forEach(function(p){p.classList.remove("active");});document.getElementById("page-"+id).classList.add("active");document.querySelectorAll(".nav-item").forEach(function(n){n.classList.remove("active");});if(el)el.classList.add("active");document.getElementById("ptitle").textContent=TITLES[id]||"";window.scrollTo(0,0);}'+
+  'function __allPages(on){document.body.classList.toggle("printall",!!on);}window.addEventListener("beforeprint",function(){__allPages(true);});window.addEventListener("afterprint",function(){__allPages(false);});'+
+  'if(window.matchMedia){var __mq=window.matchMedia("print");var __f=function(m){__allPages(m.matches);};if(__mq.addEventListener)__mq.addEventListener("change",__f);else if(__mq.addListener)__mq.addListener(__f);}</scr'+'ipt>'+
+  '<style>body.printall .page{display:block!important}body.printall .ptit{display:block}</style>'+
+  '<style>.ptit{display:none}@media print{@page{size:A4;margin:12mm}html,body{display:block!important;min-height:0!important;height:auto!important;overflow:visible!important;background:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.sidebar,.print-btn{display:none!important}.main{margin-left:0!important;display:block!important;min-height:0!important;overflow:visible!important}.content{max-width:none!important;padding:0!important}.topbar{position:static!important;padding:0 0 10px!important;border:none!important}#ptitle{display:none}.page{display:block!important;break-after:page;page-break-after:always}.page:last-child{break-after:auto;page-break-after:auto}.ptit{display:block;font-size:18px;font-weight:700;color:#00669E;margin:0 0 12px;padding-bottom:6px;border-bottom:2px solid #00669E}.card,.metric-card,.highlight-box,.progress-row,tr{break-inside:avoid;page-break-inside:avoid}.grid-2{display:block!important}.grid-2>.card{margin-bottom:14px}.metric-grid{display:grid!important;grid-template-columns:repeat(4,1fr)!important}}</style>'+
   '</body></html>';
   _yearSel=_savedYS;
   var w=window.open("","_blank");w.document.write(H);w.document.close();
@@ -7288,6 +7291,10 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     h+='<div style="font-size:12.5px;color:#5F6B75;margin-bottom:10px">Substitui todo o estado pela versão preparada (clientes, deals, faturas, projetos, horas, bolsas, tickets…). É o que vai para o Supabase.</div>';
     h+='<label class="btn" style="background:'+R+';cursor:pointer;display:inline-block">📥 Importar JSON<input type="file" accept=".json" onchange="impData(event)" style="display:none"></label>';
     h+='<button class="btn bs" style="background:'+SL+';margin-left:8px" onclick="expData()">⬇️ Exportar backup atual</button></div>';
+    // MW Espanha → ERP (junta sem substituir)
+    h+='<div class="cd" style="border-left:3px solid #2E8C93"><div class="ct2" style="margin-bottom:8px">🇪🇸 Juntar dados do MW Espanha</div>';
+    h+='<div style="font-size:12.5px;color:#5F6B75;margin-bottom:10px">Escolhe um backup JSON exportado do MW Espanha. <b>Não substitui nada</b>: junta ao ERP os clientes, vendas, faturas, projetos, horas, contactos, reuniões, agenda, anexos, tickets e despesas que ainda não existem cá. Mostra primeiro o que vai entrar. Pode repetir-se sem duplicar.'+(D.esImport?'<br><b>Última junção:</b> '+String(D.esImport.em).slice(0,16).replace("T"," ")+' · '+D.esImport.n+' registos.':'')+'</div>';
+    h+='<label class="btn" style="background:#2E8C93;cursor:pointer;display:inline-block">🇪🇸 Escolher backup do MW Espanha<input type="file" accept=".json" onchange="esImportFile(this)" style="display:none"></label></div>';
     // Despesas Excel
     h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">2 · Despesas de Excel (extrato)</div>';
     h+='<div style="font-size:12.5px;color:#5F6B75;margin-bottom:10px">Importa movimentos de despesa de um Excel com colunas Data, Valor, Tipo/Categoria e Descrição.</div>';
@@ -10554,7 +10561,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
       '<button class="btn bs" style="background:#4E86B0" onclick="openVerifyM()">Verificar (sem importar)</button>'+
       '<button class="btn bs" style="background:#5F6B75" onclick="expData()">Exportar cópia (JSON)</button>'+
       '<button class="btn bs" style="background:#5F6B75" onclick="expCSV()">CSV para contabilidade</button>'+
-      '<label class="btn bs" style="background:#fff;color:#B94A3E;border:1px solid #E7C1BC;cursor:pointer">Restaurar cópia…<input type="file" accept=".json" onchange="impData(event)" style="display:none"></label>'+
+      '<label class="btn bs" style="background:#2E8C93;cursor:pointer" title="Junta ao ERP o que existe no MW Espanha e ainda não está cá (não substitui nada)">🇪🇸 Juntar MW Espanha…<input type="file" accept=".json" onchange="esImportFile(this)" style="display:none"></label>'+'<label class="btn bs" style="background:#fff;color:#B94A3E;border:1px solid #E7C1BC;cursor:pointer">Restaurar cópia…<input type="file" accept=".json" onchange="impData(event)" style="display:none"></label>'+
       '<button class="btn bs" style="background:#fff;color:#B94A3E;border:1px solid #E7C1BC" onclick="rstData()">Repor dados de fábrica…</button></div>';
     var head=app.firstElementChild;app.insertBefore(c,head?head.nextSibling:app.firstChild);}
   var _post=post;post=function(){_post();try{dataCard();}catch(e){}};window.mwPost=post;
@@ -10912,6 +10919,200 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
 /* Novo deal: ao escolher o cliente, sugere o gestor de conta desse cliente */
 document.addEventListener("change",function(ev){var t=ev.target;if(!t||t.id!=="f1t")return;try{var nm=String(t.value||"").trim().toLowerCase();var c=(D.clients||[]).filter(function(x){return String(x.name||"").toLowerCase()===nm;})[0];if(!c||!c.gestorConta)return;
   var gc=document.getElementById("f_gc");if(!gc||gc.value)return;gc.value=c.gestorConta;var s=gc.previousSibling;if(s&&s.tagName==="SELECT"){var has=Array.prototype.some.call(s.options,function(o){return o.value===c.gestorConta;});if(!has){var o=document.createElement("option");o.value=c.gestorConta;o.textContent=c.gestorConta;s.appendChild(o);}s.value=c.gestorConta;}}catch(e){}},true);
+</script>
+<script>
+/* ===================== JUNTAR DADOS DO MW ESPANHA (out 2026) =====================
+   Lê um backup JSON do MW Espanha e junta ao ERP tudo o que ainda não existe cá, sem duplicar:
+   clientes, vendas, faturas, projetos (tarefas e horas), horas, contactos, reuniões, agenda, anexos,
+   especialidades, tickets, upsells, compras, ausências, despesas e o registo de atividade.
+   · O que já está ligado (erpId / erpProjId / erpDespId) não se duplica: só se completam campos vazios.
+   · O que se cria leva id «es_<id de Espanha>» e esId — assim o MW Espanha reconhece-o como seu quando volta do ERP.
+   · Vendas ganhas antes de 2026 entram como arquivo (esHist): aparecem nas listas mas não contam como adjudicado.
+   · Faturas de Espanha entram como histórico (preERP): não mexem na faturação reconciliada com o SAF-T.
+   · Pode correr-se mais de uma vez: na segunda já não cria nada de novo. */
+(function(){
+  function nrm(s){return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g," ").trim();}
+  function cp(o){return JSON.parse(JSON.stringify(o));}
+  function arr(x){return Array.isArray(x)?x:[];}
+  function byId(a){var m={};arr(a).forEach(function(x){if(x&&x.id!=null)m[x.id]=x;});return m;}
+  var SP={Espanha:1,Andorra:1};
+  var LINKF=["erpId","erpIds","_erpFup","_fupSent","erpVendedor","erpRemovido","erpProjId","_erpHash","erpDespId"];
+  function strip(o){LINKF.forEach(function(k){delete o[k];});return o;}
+  function eid(id){return "es_"+id;}
+
+  // devolve {plan, resumo}; não altera D
+  function esPlan(E,tkArch){
+    var R={cli:{novos:[],ligados:0},deal:{novos:[],ligados:0,completados:[]},inv:{novos:[],ligados:0},
+      proj:{novos:[],completados:[]},exp:{novos:[],ligados:0},lst:{}};
+    var cliMap={},dealMap={},invMap={};
+    var eC=byId(D.clients),eD=byId(D.deals),eI=byId(D.invoices);
+    var spC=arr(D.clients).filter(function(c){return SP[c.pais];});
+    // ---------- clientes ----------
+    arr(E.clients).forEach(function(c){
+      var t=null;
+      arr(c.erpIds).some(function(i){if(eC[i]){t=i;return true;}return false;});
+      if(!t&&eC[eid(c.id)])t=eid(c.id);
+      if(!t){var hit=arr(D.clients).filter(function(x){return x.esId===c.id;})[0];if(hit)t=hit.id;}
+      if(!t){var n=nrm(c.name);var hit2=spC.filter(function(x){return nrm(x.name)===n;})[0];if(hit2)t=hit2.id;}
+      if(t){cliMap[c.id]=t;R.cli.ligados++;return;}
+      var nc={id:eid(c.id),esId:c.id,name:c.name,pais:/andorra/i.test(c.region||"")?"Andorra":"Espanha",region:c.region||"Espanha",channel:c.channel||"Directo",saas:!!c.saas,cloud:!!c.cloud,install:[]};
+      ["nif","gestorConta","stResp","lat","lng","morada","holding"].forEach(function(k){if(c[k]!=null&&c[k]!=="")nc[k]=c[k];});
+      cliMap[c.id]=nc.id;R.cli.novos.push(nc);
+    });
+    function mc(id){return id?(cliMap[id]||""):"";}
+    // ---------- vendas ----------
+    var usados={};arr(E.deals).forEach(function(d){if(d.erpId)usados[d.erpId]=1;});
+    arr(E.deals).forEach(function(d){
+      var t=null;
+      if(d.erpId&&eD[d.erpId])t=d.erpId;
+      if(!t&&eD[eid(d.id)])t=eid(d.id);
+      if(!t){var h=arr(D.deals).filter(function(x){return x.esId===d.id;})[0];if(h)t=h.id;}
+      var v=Number(d.value)||0;
+      if(!t&&v>0&&/^(ganho|projeto|concluido)$/.test(d.stage||"")){ // a mesma venda histórica já no ERP (mesmo cliente, valor e ano)
+        var cl=mc(d.clientId);
+        var h2=arr(D.deals).filter(function(x){return cl&&x.clientId===cl&&!usados[x.id]&&!x.esId&&String(x.date||"").slice(0,4)===String(d.date||"").slice(0,4)&&Math.abs((Number(x.value)||0)-v)<=Math.max(1,v*0.01);})[0];
+        if(h2){t=h2.id;usados[t]=1;R.deal.completados.push({id:t,set:{esId:d.id}});}
+      }
+      if(t){dealMap[d.id]=t;R.deal.ligados++;
+        var x=eD[t],set={};
+        if(x)["lostReason","lostDate","nextAction","nextDate","stResp"].forEach(function(k){if(d[k]&&!x[k])set[k]=d[k];});
+        if(Object.keys(set).length)R.deal.completados.push({id:t,set:set});
+        return;}
+      var nd=strip(cp(d));nd.id=eid(d.id);nd.esId=d.id;nd.clientId=mc(d.clientId);nd.src="espanha";
+      var cc=null;R.cli.novos.concat(D.clients).some(function(c){if(c.id===nd.clientId){cc=c;return true;}return false;});nd.pais=cc&&cc.pais==="Andorra"?"Andorra":"Espanha";
+      if(/^(ganho|projeto|concluido)$/.test(nd.stage||"")&&String(nd.date||"")<"2026-01-01")nd.esHist=true;
+      dealMap[d.id]=nd.id;R.deal.novos.push(nd);
+    });
+    function md(id){return id?(dealMap[id]||""):"";}
+    // ---------- faturas ----------
+    var numERP={};arr(D.invoices).forEach(function(i){if(i.num)(numERP[i.num]=numERP[i.num]||[]).push(i.id);});
+    arr(E.invoices).forEach(function(i){
+      var t=null;
+      if(i.erpId&&eI[i.erpId])t=i.erpId;
+      if(!t&&eI[eid(i.id)])t=eid(i.id);
+      if(!t&&i.num&&numERP[i.num])t=numERP[i.num][0]; // a mesma fatura (Espanha divide-a por linhas)
+      if(t){invMap[i.id]=t;R.inv.ligados++;return;}
+      var ni=strip(cp(i));ni.id=eid(i.id);ni.esId=i.id;ni.dealId=md(i.dealId);
+      var dd=null;R.deal.novos.concat(D.deals).some(function(x){if(x.id===ni.dealId){dd=x;return true;}return false;});
+      ni.clientId=dd?dd.clientId:"";var cc=null;R.cli.novos.concat(D.clients).some(function(c){if(dd&&c.id===dd.clientId){cc=c;return true;}return false;});
+      if(cc)ni.clienteNome=cc.name;ni.amountCiva=Number(i.amountCiva!=null?i.amountCiva:i.amount)||0;ni.preERP=true;ni.src="espanha";
+      if(!ni.num)ni.num="";if(ni.collDate==null)ni.collDate="";
+      invMap[i.id]=ni.id;R.inv.novos.push(ni);
+    });
+    // ---------- projetos (tarefas e horas) ----------
+    var eP=byId(D.projectos);
+    arr(E.projectos).forEach(function(p){
+      var t=null;
+      if(p.erpProjId&&eP[p.erpProjId])t=p.erpProjId;
+      if(!t&&eP[eid(p.id)])t=eid(p.id);
+      if(!t){var h=arr(D.projectos).filter(function(x){return x.esId===p.id;})[0];if(h)t=h.id;}
+      var mine=arr(p.tarefas).filter(function(x){return !x.erpTaskId&&x.origem!=="ERP";});
+      var hm=arr(p.horas).filter(function(x){return !x.erpHoraId&&x.origem!=="ERP";});
+      if(t){var tp=eP[t];
+        var tt={};arr(tp.tarefas).forEach(function(x){tt[x.id]=1;tt["t|"+nrm(x.titulo)]=1;});
+        var hh={};arr(tp.horas).forEach(function(x){hh[x.id]=1;hh[(x.data||"")+"|"+nrm(x.colaborador)+"|"+(Math.round((Number(x.horas)||0)*100)/100)]=1;});
+        var nt=mine.filter(function(x){return !tt[x.id]&&!tt["t|"+nrm(x.titulo)];}).map(cp);
+        var nh=hm.filter(function(x){return !hh[x.id]&&!hh[(x.data||"")+"|"+nrm(x.colaborador)+"|"+(Math.round((Number(x.horas)||0)*100)/100)];}).map(cp);
+        if(nt.length||nh.length)R.proj.completados.push({id:t,tarefas:nt,horas:nh});
+        return;}
+      var np=strip(cp(p));np.id=eid(p.id);np.esId=p.id;np.dealId=md(p.dealId);np.tarefas=mine.map(cp);np.horas=hm.map(cp);
+      if(!np.nome){var dd=null;R.deal.novos.concat(D.deals).some(function(x){if(x.id===np.dealId){dd=x;return true;}return false;});np.nome=dd?(dd.product||""):"";}
+      ["fases","riscos","entregaveis","integracoes"].forEach(function(k){if(!Array.isArray(np[k]))np[k]=[];});
+      if(np.note==null)np.note="";
+      R.proj.novos.push(np);
+    });
+    // ---------- listas simples ----------
+    function lista(nome,key,fix,dupKey){
+      var ex=byId(D[key]);var dk={};
+      if(dupKey)arr(D[key]).concat(arr(key==="tickets"?tkArch:[])).forEach(function(x){var k=dupKey(x,true);if(k)dk[k]=1;});
+      var out=[];
+      arr(E[key]).forEach(function(x){
+        if(ex[eid(x.id)]||ex[x.id]&&key!=="contacts"&&key!=="clientSpecs")return;
+        if(arr(D[key]).some(function(y){return y.esId===x.id;}))return;
+        var n=cp(x);n.id=eid(x.id);n.esId=x.id;if(fix&&fix(n,x)===false)return;
+        if(dupKey){var k=dupKey(n,false);if(k&&dk[k])return;if(k)dk[k]=1;}
+        out.push(n);});
+      R.lst[key]={nome:nome,novos:out};
+    }
+    lista("Contactos","contacts",function(n){n.clientId=mc(n.clientId);});
+    lista("Reuniões","reunioes",function(n){n.clientId=mc(n.clientId);n.dealId=md(n.dealId);});
+    lista("Agenda","agenda",function(n){if(n.linkId){if(n.linkType==="cliente")n.linkId=mc(n.linkId)||n.linkId;else if(n.linkType==="deal"||n.linkType==="venda")n.linkId=md(n.linkId)||n.linkId;}});
+    lista("Horas (registos)","timesheets",function(n){n.dealId=md(n.dealId)||"";n.clientId=mc(n.clientId)||"";if(n.ticketId)n.ticketId=eid(n.ticketId);if(n.reuniaoId)n.reuniaoId=eid(n.reuniaoId);});
+    lista("Anexos","attachments",function(n){n.dealId=md(n.dealId)||n.dealId;},function(n){return n.path?"p|"+n.path:null;});
+    lista("Especialidades","clientSpecs",function(n){n.clientId=mc(n.clientId);},function(n){return n.clientId+"|"+nrm(n.specialty);});
+    lista("Tickets","tickets",function(n){n.clientId=mc(n.clientId)||"";if(n.dealId)n.dealId=md(n.dealId)||"";},function(n){return nrm(n.titulo)+"|"+String(n.createdAt||"").slice(0,10);});
+    lista("Upsells","upsells",function(n){n.clientId=mc(n.clientId)||"";});
+    lista("Compras","compras",null,function(n){return nrm(n.item)+"|"+(n.pedidoEm||"");});
+    lista("Ausências","absences",null,function(n){return (n.email||"")+"|"+(n.start||"")+"|"+(n.tipo||"");});
+    lista("Atividade","activities",function(n){if(n.type==="ERP")return false;n.origem="espanha";if(!/^🇪🇸/.test(n.desc||""))n.desc="🇪🇸 "+(n.desc||"");});
+    // ---------- despesas ----------
+    var expK={};arr(D.expenses).forEach(function(e){expK[String(e.date||"").slice(0,10)+"|"+(Math.round((Number(e.amount)||0)*100)/100)]=e;});
+    var expId=byId(D.expenses);
+    arr(E.expenses).forEach(function(e){
+      if(e.erpDespId||expId[eid(e.id)]||arr(D.expenses).some(function(y){return y.esId===e.id;})){R.exp.ligados++;return;}
+      var tw=expK[String(e.date||"").slice(0,10)+"|"+(Math.round((Number(e.amount)||0)*100)/100)];
+      if(tw){R.exp.ligados++;return;}
+      var n=strip(cp(e));n.id=eid(e.id);n.esId=e.id;n.pais="Espanha";n.src="espanha";if(n.projetoId)n.projetoId=md(n.projetoId)||"";
+      R.exp.novos.push(n);});
+    return R;
+  }
+
+  function esCount(R){
+    var t=R.cli.novos.length+R.deal.novos.length+R.inv.novos.length+R.proj.novos.length+R.exp.novos.length+R.deal.completados.length+R.proj.completados.length;
+    Object.keys(R.lst).forEach(function(k){t+=R.lst[k].novos.length;});return t;}
+
+  function esApply(R){
+    ["clients","deals","invoices","projectos","expenses","contacts","reunioes","agenda","timesheets","attachments","clientSpecs","tickets","upsells","compras","absences","activities"].forEach(function(k){if(!Array.isArray(D[k]))D[k]=[];});
+    R.cli.novos.forEach(function(x){D.clients.push(x);});
+    R.deal.novos.forEach(function(x){D.deals.push(x);});
+    var eD=byId(D.deals);R.deal.completados.forEach(function(c){var d=eD[c.id];if(d)Object.keys(c.set).forEach(function(k){d[k]=c.set[k];});});
+    R.inv.novos.forEach(function(x){D.invoices.push(x);});
+    R.proj.novos.forEach(function(x){D.projectos.push(x);});
+    var eP=byId(D.projectos);R.proj.completados.forEach(function(c){var p=eP[c.id];if(!p)return;p.tarefas=arr(p.tarefas).concat(c.tarefas);p.horas=arr(p.horas).concat(c.horas);});
+    R.exp.novos.forEach(function(x){D.expenses.push(x);});
+    Object.keys(R.lst).forEach(function(k){R.lst[k].novos.forEach(function(x){D[k].push(x);});});
+    D.activities.sort(function(a,b){return String(b.ts||b.date||"").localeCompare(String(a.ts||a.date||""));});
+    D.esImport={em:new Date().toISOString(),n:esCount(R)};
+  }
+  window.esPlan=esPlan;window.esApply=esApply;window.esCount=esCount;
+
+  function linha(l,n,extra){return '<tr><td>'+l+'</td><td class="r" style="text-align:right;font-weight:700">'+n+'</td><td style="font-size:12px;color:#5F6B75">'+(extra||"")+'</td></tr>';}
+  window.esImportFile=function(inp){
+    var f=inp.files&&inp.files[0];if(!f)return;inp.value="";
+    var r=new FileReader();
+    r.onload=function(ev){
+      var E;try{E=JSON.parse(ev.target.result);}catch(e){toast("Ficheiro inválido: "+e.message,{type:"error"});return;}
+      if(!E||!Array.isArray(E.deals)||!Array.isArray(E.clients)){toast("Isto não parece um backup do MW Espanha.",{type:"error"});return;}
+      var go=function(arch){
+        var R;try{R=esPlan(E,arch||[]);}catch(e){toast("Erro a comparar: "+e.message,{type:"error"});return;}
+        window.__esPlan=R;var tot=esCount(R);
+        var h='<div style="font-size:12.5px;color:#5F6B75;margin-bottom:10px">Comparei o backup de Espanha com o ERP. Entra só o que ainda não existe cá; o que já está ligado não se duplica.</div>';
+        h+='<table style="width:100%;font-size:13px"><tr><th style="text-align:left">O quê</th><th style="text-align:right">Novos</th><th></th></tr>';
+        h+=linha("Clientes",R.cli.novos.length,R.cli.ligados+" já existiam"+(R.cli.novos.length?" · novos: "+R.cli.novos.map(function(c){return esc(c.name);}).join(", "):""));
+        h+=linha("Vendas",R.deal.novos.length,R.deal.ligados+" já existiam · "+R.deal.novos.filter(function(d){return d.esHist;}).length+" históricas (não contam como adjudicado)");
+        h+=linha("Vendas completadas",R.deal.completados.length,"campos vazios no ERP preenchidos com os de Espanha");
+        h+=linha("Faturas",R.inv.novos.length,R.inv.ligados+" já existiam · as novas entram como histórico (não mexem na faturação)");
+        h+=linha("Projetos",R.proj.novos.length,R.proj.completados.length+" projetos do ERP recebem tarefas/horas lançadas em Espanha");
+        Object.keys(R.lst).forEach(function(k){h+=linha(R.lst[k].nome,R.lst[k].novos.length,"");});
+        h+=linha("Despesas",R.exp.novos.length,R.exp.ligados+" já existiam no ERP (mesma data e valor)");
+        h+='</table>';
+        if(R.lst.attachments&&R.lst.attachments.novos.length)h+='<div style="font-size:12px;color:#9a5f10;margin-top:8px">Os ficheiros dos anexos estão guardados no Supabase de Espanha: ficam visíveis aqui depois de correres a cópia de anexos (passo 3 das instruções).</div>';
+        h+=tot?'<button class="btn" style="background:#2E8C93;width:100%;margin-top:12px" onclick="esImportGo()">Juntar '+tot+' registos ao ERP</button>':'<div style="margin-top:12px;font-weight:600;color:#1a6b45">Nada a juntar: o ERP já tem tudo o que está neste backup.</div>';
+        document.getElementById("mArea").innerHTML=mWrap("Juntar dados do MW Espanha",h);
+      };
+      if(typeof window.loadTicketArch==="function"){window.loadTicketArch(function(){go(window.__tkArch||[]);});}else go([]);
+    };
+    r.readAsText(f);
+  };
+  window.esImportGo=function(){
+    var R=window.__esPlan;if(!R)return;
+    try{esApply(R);}catch(e){toast("Erro ao juntar: "+e.message,{type:"error"});return;}
+    try{logAct("Importação","Dados do MW Espanha juntos ao ERP: "+D.esImport.n+" registos");}catch(e){}
+    window.__esPlan=null;save();try{clM();}catch(e){}ren();
+    toast("Dados de Espanha juntos ao ERP ("+D.esImport.n+" registos).",{type:"ok"});
+  };
+})();
+
 </script>
 </body>
 </html>
