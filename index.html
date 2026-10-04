@@ -138,6 +138,22 @@ tr:hover td{background:#EFF1F4}
 <div id="mArea"></div>
 
 <script>
+/* ===== Desempenho (auditoria out 2026): formatadores de data e número reutilizados =====
+   toLocaleString / toLocaleDateString criavam um formatador novo em cada chamada (milhares por ecrã).
+   Agora cada combinação idioma+opções é criada uma vez. O texto produzido é exatamente o mesmo. */
+(function(){try{
+  var DF={},NF={};
+  function key(l,o){return String(l||"")+"|"+(o?JSON.stringify(o):"");}
+  function df(l,o,def){var k=def+key(l,o);var f=DF[k];if(!f){var oo=o;if(!o||(o.weekday===undefined&&o.year===undefined&&o.month===undefined&&o.day===undefined&&o.hour===undefined&&o.minute===undefined&&o.second===undefined&&o.dateStyle===undefined&&o.timeStyle===undefined&&o.dayPeriod===undefined&&o.fractionalSecondDigits===undefined)){oo={};if(o)for(var x in o)oo[x]=o[x];if(def!=="t"){oo.year="numeric";oo.month="numeric";oo.day="numeric";}if(def!=="d"){oo.hour="numeric";oo.minute="numeric";oo.second="numeric";}}f=DF[k]=new Intl.DateTimeFormat(l,oo);}return f;}
+  var _ls=Date.prototype.toLocaleString,_ld=Date.prototype.toLocaleDateString,_lt=Date.prototype.toLocaleTimeString;
+  Date.prototype.toLocaleString=function(l,o){try{if(isNaN(this))return _ls.call(this,l,o);return df(l,o,"a").format(this);}catch(e){return _ls.call(this,l,o);}};
+  Date.prototype.toLocaleDateString=function(l,o){try{if(isNaN(this)||(o&&(o.hour!==undefined||o.minute!==undefined||o.second!==undefined||o.timeStyle!==undefined)))return _ld.call(this,l,o);return df(l,o,"d").format(this);}catch(e){return _ld.call(this,l,o);}};
+  Date.prototype.toLocaleTimeString=function(l,o){try{if(isNaN(this)||(o&&(o.year!==undefined||o.month!==undefined||o.day!==undefined||o.weekday!==undefined||o.dateStyle!==undefined)))return _lt.call(this,l,o);return df(l,o,"t").format(this);}catch(e){return _lt.call(this,l,o);}};
+  var _nl=Number.prototype.toLocaleString;
+  Number.prototype.toLocaleString=function(l,o){try{var k=key(l,o);var f=NF[k]||(NF[k]=new Intl.NumberFormat(l,o));return f.format(this);}catch(e){return _nl.call(this,l,o);}};
+}catch(e){}})();
+</script>
+<script>
 var R="#2E8C93",G="#C98F34",GD="#C98F34",GRN="#3E9E7A",BLU="#4E86B0",PUR="#37506A",SL="#5F6B75",TEAL="#2E8C93",DNG="#C0564A";
 var STAGES=["lead","validar","proposta","ganho","projeto","concluido"]; var SL2={lead:"Oportunidade identificada",validar:"Por validar",proposta:"Proposta submetida",projeto:"Em projeto",ganho:"Adjudicado e sem NE",concluido:"Concluído",perdido:"Perdido",exec:"Em projeto"}; var SC={lead:R,validar:BLU,proposta:G,projeto:PUR,ganho:GRN,concluido:"#2E8C93",perdido:"#5F6B75",exec:PUR};
 var SPECS=["Gastro","Pneumo","ORL","Cardio","Uro","Ginecologia","Dermatologia","Oftalmologia","Neurologia","Anatomia Patológica","Imagem","Filestream","Integração"];
@@ -171,6 +187,14 @@ function parseHM(v){if(v==null)return 0;v=String(v).trim().replace(",",".");if(v
 function fmtHM(dec){dec=Number(dec)||0;var ng=dec<0;dec=Math.abs(dec);var hh=Math.floor(dec+1e-9);var mm=Math.round((dec-hh)*60);if(mm===60){hh++;mm=0;}return (ng?"-":"")+hh+":"+(mm<10?"0":"")+mm;}
 window.parseHM=parseHM;window.fmtHM=fmtHM;
 function esc(t){return String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+/* Higiene de texto (auditoria out 2026): nos campos curtos que se mostram em muitos ecrãs, o carácter «<» é trocado por «‹».
+   Assim um nome vindo de uma importação (Odoo, Excel, MW Espanha) nunca pode ser lido como HTML, seja qual for o ecrã. */
+var MW_SAN={clients:["name","region","channel","gestorConta","holding","tipoCliente","nif","phone","web"],deals:["product","specialty","vendedor","crmConta","crmContacto","gestorConta","nextAction","lostReason","type"],contacts:["name","role","phone","email"],
+  activities:["desc","type","email"],clientSpecs:["specialty"],projectos:["nome","gestor","gestorConta"],expenses:["desc","type","client","bank"],invoices:["num","clienteNome"],tickets:["titulo","assignee"],reunioes:["assunto","local","participantes","participantesCliente"],
+  agenda:["titulo","local"],bolsas:["nota"],inventory:["nome","serial","localizacao","categoria"],upsells:["descricao"],compras:["item","fornecedor"],timesheets:["nome"]};
+function mwSanitize(){var n=0;try{for(var k in MW_SAN){var a=D&&D[k];if(!Array.isArray(a))continue;var fs=MW_SAN[k];for(var i=0;i<a.length;i++){var r=a[i];if(!r)continue;for(var j=0;j<fs.length;j++){var v=r[fs[j]];if(typeof v==="string"&&v.indexOf("<")>=0){r[fs[j]]=v.replace(/</g,"\u2039");n++;}}}}}catch(e){}return n;}
+window.mwSanitize=mwSanitize;
+
 var _yearSel=null;/* null = automático (ano civil corrente) */
 function yearsInData(){
   if(window.__yid)return window.__yid;   // memoizado — invalidado em _idxClear() (save/ren) e setYear()
@@ -288,7 +312,7 @@ function emoSvg(e,sz){var m=window.__EMOSVG[e];if(!m)return e;sz=sz||18;return '
 window.emoSvg=emoSvg;
 window.movFilter=function(q){q=(q||"").mwFold();var box=document.getElementById("movList");if(!box)return;var rows=box.querySelectorAll(".movrow");for(var i=0;i<rows.length;i++){rows[i].style.display=(!q||rows[i].textContent.mwFold().indexOf(q)>=0)?"":"none";}};
 function pgHead(icon,title,action){return'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px"><div style="display:flex;align-items:center;gap:11px"><div style="width:34px;height:34px;border-radius:10px;background:'+rgba(R,.1)+';display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;color:'+R+'">'+(typeof emoSvg==="function"?emoSvg(icon,18):icon)+'</div><h2 style="font-size:19px;font-weight:600;color:#28313A;letter-spacing:-.2px">'+title+'</h2></div>'+(action||'')+'</div>'}
-function selF(lbl,opts,val,onch){var h='<div><label style="font-size:11px;color:#5F6B75;display:block;margin-bottom:3px">'+lbl+'</label><select onchange="'+onch+'" style="border:1px solid #E4E8EB;border-radius:6px;padding:5px 8px;font-size:12px;font-family:inherit;background:#fff;color:#2B3540">';opts.forEach(function(o){h+='<option value="'+o+'"'+(o===val?" selected":"")+'>'+o+'</option>'});h+='</select></div>';return h}
+function selF(lbl,opts,val,onch){var h='<div><label style="font-size:11px;color:#5F6B75;display:block;margin-bottom:3px">'+lbl+'</label><select onchange="'+onch+'" style="border:1px solid #E4E8EB;border-radius:6px;padding:5px 8px;font-size:12px;font-family:inherit;background:#fff;color:#2B3540">';opts.forEach(function(o){h+='<option value="'+esc(o)+'"'+(o===val?" selected":"")+'>'+esc(o)+'</option>'});h+='</select></div>';return h}
 /* Caracterização do cliente: o que foi registado à mão (clientSpecs, Cloud, SaaS) mais o que vem das vendas ganhas.
    Especialidade = especialidade clínica de uma venda ganha; produtos e serviços = Manutenção, Cloud, SaaS, Integração, Filestream. */
 function clientCaract(){
@@ -315,6 +339,7 @@ function clRowsHtml(){
     var car=CAR[cl.id]||{spec:{},prod:{}};
     if(ctF.spec&&ctF.spec!=="Todos"&&!car.spec[ctF.spec])return false;
     if(ctF.prod&&ctF.prod!=="Todos"&&!car.prod[ctF.prod])return false;
+    if(ctF.tipo&&ctF.tipo!=="Todos"){if(ctF.tipo==="Sem tipo"){if(cl.tipoCliente)return false;}else if(cl.tipoCliente!==ctF.tipo)return false;}
     if(ctF.gc&&ctF.gc!=="Todos"){if(ctF.gc==="Sem gestor"){if(cl.gestorConta)return false;}else if(cl.gestorConta!==ctF.gc)return false;}
     return true;
   }).sort(function(a,b){return a.name.localeCompare(b.name)});
@@ -334,7 +359,7 @@ function clRowsHtml(){
     }
     var cl=it.cl;
     var specs=D.clientSpecs.filter(function(s){return s.clientId===cl.id});var car=CAR[cl.id]||{spec:{},prod:{}};var _ed=canEditSpecs();
-    h+='<tr><td><a onclick="openClient(\''+cl.id+'\')" style="font-weight:600;color:'+R+';cursor:pointer;text-decoration:none;border-bottom:1px dotted '+rgba(R,.4)+'" title="Ver ficha, morada e contactos">'+esc(cl.name)+'</a>'+((D.contacts||[]).filter(function(x){return x.clientId===cl.id}).length?' <span style="font-size:11px;color:#6B7680">\ud83d\udc64'+(D.contacts||[]).filter(function(x){return x.clientId===cl.id}).length+'</span>':'')+(cl.gestorConta?'<div style="font-size:11px;color:#6B7680;margin-top:1px">GC: '+esc(cl.gestorConta)+'</div>':'')+'</td><td>'+esc(cl.region||"—")+'</td><td>'+esc(cl.channel||"—")+'</td><td>';
+    h+='<tr><td><a onclick="openClient(\''+cl.id+'\')" style="font-weight:600;color:'+R+';cursor:pointer;text-decoration:none;border-bottom:1px dotted '+rgba(R,.4)+'" title="Ver ficha, morada e contactos">'+esc(cl.name)+'</a>'+((D.contacts||[]).filter(function(x){return x.clientId===cl.id}).length?' <span style="font-size:11px;color:#6B7680">\ud83d\udc64'+(D.contacts||[]).filter(function(x){return x.clientId===cl.id}).length+'</span>':'')+(cl.gestorConta||cl.tipoCliente?'<div style="font-size:11px;color:#6B7680;margin-top:1px">'+(cl.tipoCliente?esc(cl.tipoCliente):'')+(cl.gestorConta&&cl.tipoCliente?' · ':'')+(cl.gestorConta?'GC: '+esc(cl.gestorConta):'')+'</div>':'')+'</td><td>'+esc(cl.region||"—")+'</td><td>'+esc(cl.channel||"—")+'</td><td>';
     PROD_SERV.forEach(function(pn){if(!car.prod[pn])return;var pc2=pn===P_AT?GRN:pn==="Cloud"?BLU:pn==="SaaS"?PUR:SL;h+='<span style="background:'+rgba(pc2,.12)+';color:'+pc2+';border-radius:5px;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap;margin:1px 4px 1px 0;display:inline-block">'+(pn===P_AT?"Manutenção ativa":pn==="Cloud"?"☁ Cloud":pn)+'</span>';});
     h+='</td><td>';
     var _shown={};
@@ -798,11 +823,11 @@ function ctRowsHtml(q){
   if(!list.length)return '<tr><td colspan="6" style="text-align:center;padding:24px;color:#6B7680">'+(all.length?"Nenhum contacto corresponde à procura.":"Ainda não há contactos. Usa \u201c+ Contacto\u201d para adicionares o primeiro.")+'</td></tr>';
   var h="";
   list.forEach(function(c){
-    h+='<tr><td><a onclick="openClient(\''+c.clientId+'\')" style="font-weight:600;color:'+R+';cursor:pointer;border-bottom:1px dotted '+rgba(R,.4)+'">'+cn(c.clientId)+'</a></td>';
+    h+='<tr><td><a onclick="openClient(\''+c.clientId+'\')" style="font-weight:600;color:'+R+';cursor:pointer;border-bottom:1px dotted '+rgba(R,.4)+'">'+esc(cn(c.clientId))+'</a></td>';
     h+='<td style="font-weight:600">'+esc(c.name)+(c.notes?'<div style="font-size:11px;color:#6B7680;font-weight:400">'+esc(c.notes.slice(0,50))+'</div>':'')+'</td>';
     h+='<td style="color:#5F6B75">'+(c.role?esc(c.role):"—")+(c.specialty?' '+bdg(c.specialty,BLU):'')+'</td>';
-    h+='<td>'+(c.phone?'<a href="tel:'+c.phone.replace(/\s/g,"")+'" style="color:'+BLU+';text-decoration:none">'+c.phone+'</a>':'<span style="color:#C6CDD4">—</span>')+'</td>';
-    h+='<td>'+(c.email?'<a href="mailto:'+c.email+'" style="color:'+BLU+';text-decoration:none">'+c.email+'</a>':'<span style="color:#C6CDD4">—</span>')+'</td>';
+    h+='<td>'+(c.phone?'<a href="tel:'+c.phone.replace(/\s/g,"")+'" style="color:'+BLU+';text-decoration:none">'+esc(c.phone)+'</a>':'<span style="color:#C6CDD4">—</span>')+'</td>';
+    h+='<td>'+(c.email?'<a href="mailto:'+esc(c.email)+'" style="color:'+BLU+';text-decoration:none">'+esc(c.email)+'</a>':'<span style="color:#C6CDD4">—</span>')+'</td>';
     h+='<td style="text-align:right;white-space:nowrap"><button class="btn bs" style="background:#2E8C93" onclick="ctReuniao(\''+c.id+'\')" title="Marcar visita ou reunião com este contacto (sem projeto associado)">Visita / reunião</button> <button class="btn bs" style="background:'+SL+'" onclick="editCt(\''+c.id+'\')" title="Editar contacto">Editar</button> <button style="background:none;border:none;font-size:13px;cursor:pointer;color:#C6CDD4" onclick="delCt(\''+c.id+'\')" title="Remover">✕</button></td></tr>';
   });
   return h;
@@ -818,7 +843,7 @@ function openCtM(opts){opts=opts||{};var editId=opts.editId,preClient=opts.clien
     +'<div class="r2">'+fld("Telefone",'<input id="f4" value="'+(c&&c.phone?String(c.phone).replace(/"/g,"&quot;"):"")+'">')
     +fld("Email",'<input type="email" id="f5" value="'+(c&&c.email?String(c.email).replace(/"/g,"&quot;"):"")+'">')+'</div>'
     +fld("Especialidade (opcional)",sel("f7",[{v:"",t:"— sem especialidade —"}].concat(SPEC_CLIN.map(function(x){return{v:x,t:x};})),c&&c.specialty?c.specialty:""))
-    +fld("Notas",'<textarea id="f6">'+(c&&c.notes?c.notes:"")+'</textarea>')
+    +fld("Notas",'<textarea id="f6">'+(c&&c.notes?esc(c.notes):"")+'</textarea>')
     +'<button class="btn" style="background:'+R+';width:100%;margin-top:6px" onclick="svCt(\''+(editId||"")+'\')">Guardar</button>');}
 function svCt(editId){
   var data={clientId:document.getElementById("f1").value,name:document.getElementById("f2").value.trim(),role:document.getElementById("f3").value.trim(),phone:document.getElementById("f4").value.trim(),email:document.getElementById("f5").value.trim(),notes:document.getElementById("f6").value.trim(),specialty:(document.getElementById("f7")||{}).value||""};
@@ -839,9 +864,10 @@ function openAddrM(clientId){var cl=D.clients.find(function(c){return c.id===cli
     +'<div class="r2">'+fld("Região",sel("f4",regs,cl.region))+fld("Canal",sel("f5",chans,cl.channel))+'</div>'
     +fld("País",sel("f6",PAISES,cl.pais||"Portugal"))
     +'<div class="r2">'+fld("Holding / grupo (opcional)",'<input id="f7h" list="dl_hold" autocomplete="off" placeholder="ex.: Grupo Lusíadas" value="'+esc(cl.holding||"")+'"><datalist id="dl_hold">'+[...new Set(D.clients.map(function(c){return c.holding}).filter(Boolean))].sort().map(function(x){return '<option value="'+esc(x)+'"></option>';}).join("")+'</datalist>')+fld("Gestor de conta",'<input id="f8g" list="dl_gc" autocomplete="off" placeholder="colaborador" value="'+esc(cl.gestorConta||"")+'"><datalist id="dl_gc">'+Object.keys(D.hrPeople||{}).map(function(k){return (D.hrPeople[k]||{}).nome||"";}).filter(Boolean).sort().map(function(x){return '<option value="'+esc(x)+'"></option>';}).join("")+'</datalist>')+'</div>'
+    +fld("Tipo de cliente",'<input id="f9t" list="dl_tc" autocomplete="off" placeholder="ex.: Prime, Zona Norte" value="'+esc(cl.tipoCliente||"")+'"><datalist id="dl_tc">'+[...new Set(["Prime","Zona"].concat(D.clients.map(function(c){return c.tipoCliente}).filter(Boolean)))].sort().map(function(x){return '<option value="'+esc(x)+'"></option>';}).join("")+'</datalist>')
     +'<div style="font-size:11.5px;color:#6B7680;margin:-4px 0 6px">Clientes com a mesma holding aparecem agrupados no Diretório, com os totais do grupo. As fichas continuam separadas.</div>'
     +'<div style="border-top:1px solid #EFF1F4;margin:14px 0 10px;padding-top:10px;font-size:11px;font-weight:700;color:#5F6B75;text-transform:uppercase;letter-spacing:.4px">Morada e contactos gerais</div>'
-    +fld("Morada",'<textarea id="f1" placeholder="Rua, código postal, cidade">'+(cl.address||"")+'</textarea>')
+    +fld("Morada",'<textarea id="f1" placeholder="Rua, código postal, cidade">'+esc(cl.address||"")+'</textarea>')
     +'<div class="r2">'+fld("Telefone geral",'<input id="f2" value="'+(cl.phone?String(cl.phone).replace(/"/g,"&quot;"):"")+'">')
     +fld("Website",'<input id="f3" value="'+(cl.web?String(cl.web).replace(/"/g,"&quot;"):"")+'">')+'</div>'
     +'<button class="btn" style="background:'+R+';width:100%;margin-top:6px" onclick="svAddr(\''+clientId+'\')">Guardar</button>');}
@@ -854,6 +880,7 @@ function svAddr(clientId){var cl=D.clients.find(function(c){return c.id===client
   cl.channel=document.getElementById("f5").value;
   var _pe=document.getElementById("f6");if(_pe)cl.pais=_pe.value;
   var _ph=document.getElementById("f7h");if(_ph){var _hv=_ph.value.trim();if(_hv)cl.holding=_hv;else delete cl.holding;}
+  var _pt=document.getElementById("f9t");if(_pt){var _tv2=_pt.value.trim();if(_tv2)cl.tipoCliente=_tv2;else delete cl.tipoCliente;}
   var _pg=document.getElementById("f8g");if(_pg){var _gv=_pg.value.trim();if(_gv)cl.gestorConta=_gv;else delete cl.gestorConta;}
   cl.address=document.getElementById("f1").value.trim();
   cl.phone=document.getElementById("f2").value.trim();
@@ -876,16 +903,16 @@ function openClient(clientId){
   b+='<div style="border-top:1px solid #EFF1F4;padding-top:12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div class="ct2">Morada e contactos gerais</div><button class="btn bs" style="background:'+SL+'" onclick="openAddrM(\''+clientId+'\')">✎ Editar cliente</button></div>';
   if(cl.address||cl.phone||cl.web){
     b+='<div style="font-size:12.5px;color:#2B3540;line-height:1.7">';
-    if(cl.address)b+='📍 '+String(cl.address).replace(/\n/g,"<br>&nbsp;&nbsp;&nbsp;")+'<br>';
-    if(cl.phone)b+='📞 <a href="tel:'+cl.phone.replace(/\s/g,"")+'" style="color:'+BLU+';text-decoration:none">'+cl.phone+'</a><br>';
-    if(cl.web)b+='🌐 '+cl.web;
+    if(cl.address)b+='📍 '+esc(String(cl.address)).replace(/\n/g,"<br>&nbsp;&nbsp;&nbsp;")+'<br>';
+    if(cl.phone)b+='📞 <a href="tel:'+cl.phone.replace(/\s/g,"")+'" style="color:'+BLU+';text-decoration:none">'+esc(cl.phone)+'</a><br>';
+    if(cl.web)b+='🌐 '+esc(cl.web);
     b+='</div>';
   } else b+='<div style="font-size:12px;color:#6B7680">Sem morada registada.</div>';
   b+='</div>';
   b+='<div style="border-top:1px solid #EFF1F4;padding-top:12px;margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="ct2">Contactos ('+cts.length+')</div><button class="btn bs" style="background:'+R+'" onclick="openCtM({clientId:\''+clientId+'\'})">+ Contacto</button></div>';
   if(!cts.length)b+='<div style="font-size:12px;color:#6B7680">Sem contactos registados.</div>';
   cts.forEach(function(c){
-    b+='<div style="padding:9px 0;border-bottom:1px solid #f8f7f5"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><div style="flex:1"><div style="font-size:13px;font-weight:600">'+c.name+'</div>'+(c.role?'<div style="font-size:12px;color:#5F6B75">'+c.role+'</div>':'')+'<div style="font-size:11.5px;margin-top:3px">'+(c.phone?'<a href="tel:'+c.phone.replace(/\s/g,"")+'" style="color:'+BLU+';text-decoration:none">📞 '+c.phone+'</a>&nbsp;&nbsp;':'')+(c.email?'<a href="mailto:'+c.email+'" style="color:'+BLU+';text-decoration:none">✉️ '+c.email+'</a>':'')+'</div>'+(c.notes?'<div style="font-size:12px;color:#6B7680;margin-top:3px">'+c.notes+'</div>':'')+'</div><div style="white-space:nowrap"><button style="background:none;border:1px solid #BFE0E3;border-radius:6px;font-size:11px;cursor:pointer;color:#2E8C93;padding:2px 7px" onclick="ctReuniao(\''+c.id+'\')">Visita / reunião</button><button style="background:none;border:none;font-size:12px;cursor:pointer;color:#C6CDD4" onclick="editCt(\''+c.id+'\')">✎</button><button style="background:none;border:none;font-size:12px;cursor:pointer;color:#C6CDD4" onclick="delCt(\''+c.id+'\')">✕</button></div></div></div>'});
+    b+='<div style="padding:9px 0;border-bottom:1px solid #f8f7f5"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(c.name)+'</div>'+(c.role?'<div style="font-size:12px;color:#5F6B75">'+esc(c.role)+'</div>':'')+'<div style="font-size:11.5px;margin-top:3px">'+(c.phone?'<a href="tel:'+c.phone.replace(/\s/g,"")+'" style="color:'+BLU+';text-decoration:none">📞 '+esc(c.phone)+'</a>&nbsp;&nbsp;':'')+(c.email?'<a href="mailto:'+esc(c.email)+'" style="color:'+BLU+';text-decoration:none">✉️ '+esc(c.email)+'</a>':'')+'</div>'+(c.notes?'<div style="font-size:12px;color:#6B7680;margin-top:3px">'+esc(c.notes)+'</div>':'')+'</div><div style="white-space:nowrap"><button style="background:none;border:1px solid #BFE0E3;border-radius:6px;font-size:11px;cursor:pointer;color:#2E8C93;padding:2px 7px" onclick="ctReuniao(\''+c.id+'\')">Visita / reunião</button><button style="background:none;border:none;font-size:12px;cursor:pointer;color:#C6CDD4" onclick="editCt(\''+c.id+'\')">✎</button><button style="background:none;border:none;font-size:12px;cursor:pointer;color:#C6CDD4" onclick="delCt(\''+c.id+'\')">✕</button></div></div></div>'});
   b+='</div>';
   document.getElementById("mArea").innerHTML=mWrap(cl.name,b);}
 function openHolding(name){
@@ -1364,10 +1391,11 @@ if(cTab==="dashboard"){
   var prodOpts=["Todos"].concat(PROD_SERV);
   var gcOpts=["Todos"].concat([...new Set(D.clients.map(function(c){return c.gestorConta}).filter(Boolean))].sort()).concat(["Sem gestor"]);
   if(ctF.prod===undefined)ctF.prod="Todos";if(ctF.gc===undefined)ctF.gc="Todos";
-  h=pgHead("📇","Diretório de clientes",'<button class="btn" style="background:'+R+'" onclick="openCM()">+ Cliente Novo</button>');
+  h=pgHead("📇","Diretório de clientes",(canEditSpecs()?'<button class="btn bs" style="background:'+SL+'" onclick="impCliAttrs()" title="Excel com as colunas Cliente, Gestor de conta e Tipo de cliente">Importar gestores e tipos</button> ':'')+'<button class="btn" style="background:'+R+'" onclick="openCM()">+ Cliente Novo</button>');
   h+='<div class="cd" style="padding:14px;margin-bottom:14px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">';
   h+=selF("Região",regs,ctF.region,"setCTF('region',this.value)");
-  h+=selF("Canal",chans,ctF.channel,"setCTF('channel',this.value)");
+  var tcOpts=["Todos"].concat([...new Set(D.clients.map(function(c){return c.tipoCliente}).filter(Boolean))].sort()).concat(["Sem tipo"]);if(ctF.tipo===undefined)ctF.tipo="Todos";ctF.channel="Todos";
+  h+=selF("Tipo de cliente",tcOpts,ctF.tipo,"setCTF('tipo',this.value)");
   h+=selF("Especialidade",specOpts,ctF.spec,"setCTF('spec',this.value)");
   h+=selF("Produtos e serviços",prodOpts,ctF.prod,"setCTF('prod',this.value)");
   h+=selF("Gestor de conta",gcOpts,ctF.gc,"setCTF('gc',this.value)");
@@ -1468,7 +1496,7 @@ if(cTab==="dashboard"){
   } else if(finSub==="despesas"){
   h+='<div class="ins"><div style="font-size:12.5px;color:#5F6B75;line-height:1.7"><b>Como se ligam os custos de '+yearLabel()+':</b> pagamentos totais (banco, c/IVA) <b>'+fmt(S.exp)+'</b> = pagamentos operacionais <b>'+fmt(S.expOp)+'</b> + IVA/IRC entregues ao Estado <b>'+fmt(S.impostos)+'</b>. O <b>custo do P&L</b> é <b>'+fmt(S.expPL)+'</b>: os pagamentos operacionais sem o IVA dedutível e com as reclassificações contabilísticas (é o mesmo número do P&L e do KPI Custos).</div></div>';
   h+='<div class="cd"><div class="ch"><div class="ct2">Despesas</div><div style="display:flex;gap:6px;align-items:center"><button class="btn bs" style="background:#2E8C93" onclick="syncExtrato()">📥 Extrato bancário</button><label class="btn bs" style="background:'+SL+';cursor:pointer;margin:0">📄 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="impDespesasXlsx(this)"></label><button class="btn bs" style="background:'+R+'" onclick="openEM(\'\')">+ Despesa</button></div></div><div style="font-size:12px;color:#6B7680;margin-bottom:8px">Clica numa despesa para editar, atribuir a projeto/cliente ou eliminar. Importar Excel: colunas <b>data</b>, <b>a que se refere</b>, <b>valor</b>, <b>tipo</b>.</div>'+'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"><select onchange="window.__expAloc=this.value;rPnl()" style="border:1px solid #E4E8EB;border-radius:8px;padding:6px 9px;font-size:12px"><option value="">Alocação: todas</option><option value="sim"'+(window.__expAloc==="sim"?" selected":"")+'>Alocadas a projeto</option><option value="nao"'+(window.__expAloc==="nao"?" selected":"")+'>Não alocadas a projeto</option></select><select onchange="window.__expPais=this.value;rPnl()" style="border:1px solid #E4E8EB;border-radius:8px;padding:6px 9px;font-size:12px"><option value="">País: todos</option><option value="PT"'+(window.__expPais==="PT"?" selected":"")+'>Portugal</option><option value="ES"'+(window.__expPais==="ES"?" selected":"")+'>Espanha</option></select>'+(function(){var _l=D.expenses.filter(function(e){return e.pais==="Espanha"&&inYear(e.date);});var _t=_l.reduce(function(a,e){return a+(Number(e.amount)||0);},0);return _l.length?'<span style="font-size:12px;color:#5F6B75;align-self:center">🇪🇸 Espanha '+yearLabel()+': <b>'+fmt(_t)+'</b> ('+_l.length+' despesas)</span>':"";})()+'</div>'+'<div style="max-height:560px;overflow:auto">';
-  D.expenses.filter(function(e){var al=!!e.projetoId;if(window.__expAloc==="sim"&&!al)return false;if(window.__expAloc==="nao"&&al)return false;if(window.__expPais==="ES"&&e.pais!=="Espanha")return false;if(window.__expPais==="PT"&&e.pais==="Espanha")return false;return true;}).slice().sort(function(a,b){return b.date.localeCompare(a.date)}).forEach(function(e){var _pj=e.projetoId?(dealById(e.projetoId)||null):null;var _tag=[e.type,(_pj?cn(_pj.clientId):""),e.client].filter(Boolean).join(" · ");h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f8f7f5;cursor:pointer" onclick="openEM(\''+e.id+'\')"><div><div style="font-size:12px;font-weight:500">'+esc(e.desc||"—")+'</div><div style="font-size:11px;color:#5F6B75">'+fmtD(e.date)+(e.bank?" · "+esc(e.bank):"")+(_tag?" · "+esc(_tag):"")+'</div></div><div style="display:flex;align-items:center;gap:6px">'+(e.pais==="Espanha"?'<span title="Despesa de Espanha (vai para o MW Espanha)" style="font-size:11px;font-weight:600;color:#B94A3E;border:1px solid #E7C1BC;border-radius:6px;padding:1px 6px;white-space:nowrap">ES</span>':'')+(e.nota?'<span style="font-size:11px;color:#5F6B75;border:1px solid #E4E8EB;border-radius:6px;padding:1px 6px;white-space:nowrap">'+esc(e.nota)+'</span>':'')+(e.reembolsoId?'<span style="font-size:11px;font-weight:600;color:'+BLU+';border:1px solid '+rgba(BLU,.4)+';border-radius:6px;padding:1px 6px;white-space:nowrap">reembolso</span>':'')+(e.projetoId?'<span style="font-size:11px;font-weight:600;color:'+GRN+';border:1px solid '+rgba(GRN,.4)+';border-radius:6px;padding:1px 6px;white-space:nowrap">alocado</span>':'')+'<span style="font-weight:600;color:'+R+';font-size:12px;white-space:nowrap">-'+fmt(e.amount)+'</span><button class="btn bs" style="background:'+SL+'" onclick="event.stopPropagation();openEM(\''+e.id+'\')">Editar</button><button style="background:none;border:none;font-size:12px;cursor:pointer;color:#ccc" onclick="event.stopPropagation();delEx(\''+e.id+'\')">✕</button></div></div>'});
+  D.expenses.filter(function(e){var al=!!e.projetoId;if(window.__expAloc==="sim"&&!al)return false;if(window.__expAloc==="nao"&&al)return false;if(window.__expPais==="ES"&&e.pais!=="Espanha")return false;if(window.__expPais==="PT"&&e.pais==="Espanha")return false;if(_yearSel!=="all"&&!inYear(String(e.date||"").slice(0,10)))return false;return true;}).slice().sort(function(a,b){return b.date.localeCompare(a.date)}).forEach(function(e){var _pj=e.projetoId?(dealById(e.projetoId)||null):null;var _tag=[e.type,(_pj?cn(_pj.clientId):""),e.client].filter(Boolean).join(" · ");h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f8f7f5;cursor:pointer" onclick="openEM(\''+e.id+'\')"><div><div style="font-size:12px;font-weight:500">'+esc(e.desc||"—")+'</div><div style="font-size:11px;color:#5F6B75">'+fmtD(e.date)+(e.bank?" · "+esc(e.bank):"")+(_tag?" · "+esc(_tag):"")+'</div></div><div style="display:flex;align-items:center;gap:6px">'+(e.pais==="Espanha"?'<span title="Despesa de Espanha (vai para o MW Espanha)" style="font-size:11px;font-weight:600;color:#B94A3E;border:1px solid #E7C1BC;border-radius:6px;padding:1px 6px;white-space:nowrap">ES</span>':'')+(e.nota?'<span style="font-size:11px;color:#5F6B75;border:1px solid #E4E8EB;border-radius:6px;padding:1px 6px;white-space:nowrap">'+esc(e.nota)+'</span>':'')+(e.reembolsoId?'<span style="font-size:11px;font-weight:600;color:'+BLU+';border:1px solid '+rgba(BLU,.4)+';border-radius:6px;padding:1px 6px;white-space:nowrap">reembolso</span>':'')+(e.projetoId?'<span style="font-size:11px;font-weight:600;color:'+GRN+';border:1px solid '+rgba(GRN,.4)+';border-radius:6px;padding:1px 6px;white-space:nowrap">alocado</span>':'')+'<span style="font-weight:600;color:'+R+';font-size:12px;white-space:nowrap">-'+fmt(e.amount)+'</span><button class="btn bs" style="background:'+SL+'" onclick="event.stopPropagation();openEM(\''+e.id+'\')">Editar</button><button style="background:none;border:none;font-size:12px;cursor:pointer;color:#ccc" onclick="event.stopPropagation();delEx(\''+e.id+'\')">✕</button></div></div>'});
   h+='</div></div>';
   } else {
   var _movPend=!!window.__movPend;var _ylab=(typeof _yearSel!=="undefined"&&_yearSel==="all")?"(todos os anos)":activeYear();var _dd=function(a,b){return (b.date||"").localeCompare(a.date||"")};
@@ -1616,7 +1644,7 @@ if(cTab==="dashboard"){
 } else if(cTab==="contactos"){
   window._ctSearch=window._ctSearch||"";
   var all=(D.contacts||[]).slice().sort(function(a,b){var ca=cn(a.clientId),cb2=cn(b.clientId);return ca===cb2?a.name.localeCompare(b.name):ca.localeCompare(cb2)});
-  h=pgHead("👤","Contactos",'<button class="btn" style="background:'+R+'" onclick="openCtM()">+ Contacto</button>');
+  h=pgHead("👤","Contactos",'<button class="btn bs" style="background:'+SL+'" onclick="impContactosOdoo()" title="Lê a exportação de contactos do Odoo e mostra o que entra antes de gravar">Importar do Odoo</button> <button class="btn" style="background:'+R+'" onclick="openCtM()">+ Contacto</button>');
   h+='<div class="kr">'+kpi("Contactos",""+all.length,"",BLU,BLU)+kpi("Clientes com contacto",""+[...new Set(all.map(function(c){return c.clientId}))].length+" de "+D.clients.length,"",GD,G)+kpi("Com email",""+all.filter(function(c){return c.email}).length,"",GRN,GRN)+'</div>';
   h+='<div class="cd" style="padding:14px;margin-bottom:14px"><input id="ctSearch" placeholder="Procurar por nome, função, cliente, telefone ou email…" value="'+String(window._ctSearch||"").replace(/"/g,"&quot;")+'" oninput="ctFilter(this.value)" style="width:100%;border:1px solid #E4E8EB;border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;outline:none"></div>';
   h+='<div class="cd"><div style="overflow-x:auto"><table><tr><th>Cliente</th><th>Nome</th><th>Função</th><th>Telefone</th><th>Email</th><th style="text-align:right"></th></tr><tbody id="ctRows">'+ctRowsHtml(window._ctSearch)+'</tbody></table></div></div>';
@@ -1813,16 +1841,16 @@ function promptM(msg,onOk,opts){opts=opts||{};var def=opts.default||"";var ph=op
 function __promptOk(){var e=document.getElementById("__promptInput");var v=e?e.value:"";var cb=window.__promptCb;clM();if(cb)cb(v);}
 function mWrap(t,b){return'<div class="mbg" onclick="clM()"><div class="mdl" onclick="event.stopPropagation()"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3>'+t+'</h3><button style="background:none;border:none;font-size:18px;cursor:pointer;color:#999" onclick="clM()">✕</button></div>'+b+'</div></div>'}
 function fld(l,h){return'<div class="fld"><label>'+l+'</label>'+h+'</div>'}
-function sel(id,opts,v){var h='<select id="'+id+'">';opts.forEach(function(o){var val=typeof o==="object"?o.v:o,txt=typeof o==="object"?o.t:o;h+='<option value="'+val+'"'+(val===v?" selected":"")+'>'+txt+'</option>'});return h+'</select>'}
+function sel(id,opts,v){var h='<select id="'+id+'">';opts.forEach(function(o){var val=typeof o==="object"?o.v:o,txt=typeof o==="object"?o.t:o;h+='<option value="'+String(val==null?"":val).replace(/"/g,"&quot;").replace(/</g,"&lt;")+'"'+(val===v?" selected":"")+'>'+String(txt==null?"":txt).replace(/</g,"&lt;")+'</option>'});return h+'</select>'}
 
-function dmArtRowHTML(i,a){a=a||{};var IVA=[23,13,6,0,21,10,4];var ivaOpts=IVA.map(function(v){return '<option value="'+v+'"'+((Number(a.iva)||0)===v?' selected':'')+'>'+v+'%</option>';}).join("");return '<div class="dm_art" style="display:grid;grid-template-columns:1fr 48px 78px 66px 26px;gap:5px;margin-bottom:5px;align-items:center"><input class="dma_desc" value="'+esc(a.desc||"")+'" placeholder="artigo / descrição" oninput="dmArtCalc()"><input class="dma_qtd" type="number" step="1" min="0" value="'+(a.qtd!=null?a.qtd:1)+'" title="Quantidade" oninput="dmArtCalc()"><input class="dma_preco" type="number" step="0.01" min="0" value="'+(a.precoUnit!=null?a.precoUnit:0)+'" title="Preço unitário" oninput="dmArtCalc()"><select class="dma_iva" title="Taxa de IVA" onchange="dmArtCalc()">'+ivaOpts+'</select><button type="button" class="btn bs" style="background:#fff;color:'+DNG+';border:1px solid '+rgba(DNG,.3)+';padding:0 6px" onclick="dmDelArt(this)">\u00d7</button></div>';}
+function dmArtRowHTML(i,a){a=a||{};var IVA=[23,13,6,0,21,10,4];var ivaOpts=IVA.map(function(v){return '<option value="'+v+'"'+((Number(a.iva)||0)===v?' selected':'')+'>'+v+'%</option>';}).join("");return '<div class="dm_art" style="display:grid;grid-template-columns:minmax(0,1fr) 48px 78px 56px 66px 26px;gap:5px;margin-bottom:5px;align-items:center"><input class="dma_desc" value="'+esc(a.desc||"")+'" placeholder="artigo / descrição" oninput="dmArtCalc()"><input class="dma_qtd" type="number" step="1" min="0" value="'+(a.qtd!=null?a.qtd:1)+'" title="Quantidade" oninput="dmArtCalc()"><input class="dma_preco" type="number" step="0.01" min="0" value="'+(a.precoUnit!=null?a.precoUnit:0)+'" title="Preço unitário" oninput="dmArtCalc()"><input class="dma_dsc" type="number" step="1" min="0" max="100" value="'+(Number(a.desconto)||0)+'" title="Desconto (%)" oninput="dmArtCalc()"><select class="dma_iva" title="Taxa de IVA" onchange="dmArtCalc()">'+ivaOpts+'</select><button type="button" class="btn bs" style="background:#fff;color:'+DNG+';border:1px solid '+rgba(DNG,.3)+';padding:0 6px" onclick="dmDelArt(this)">\u00d7</button></div>';}
 window.dmAddArt=function(){var box=document.getElementById("dm_arts");if(!box)return;box.insertAdjacentHTML("beforeend",dmArtRowHTML(box.querySelectorAll(".dm_art").length,{qtd:1,precoUnit:0,iva:23}));dmArtCalc();};
 window.dmDelArt=function(btn){try{var row=btn.closest(".dm_art");if(row)row.parentNode.removeChild(row);}catch(e){}dmArtCalc();};
-window.dmArtCalc=function(){var net=0,iva=0,n=0;try{Array.prototype.forEach.call(document.querySelectorAll("#dm_arts .dm_art"),function(r){var q=Number(r.querySelector(".dma_qtd").value)||0;var pu=Number(r.querySelector(".dma_preco").value)||0;var iv=Number(r.querySelector(".dma_iva").value)||0;var ln=q*pu;net+=ln;iva+=ln*iv/100;n++;});}catch(e){}var el=document.getElementById("dm_arttot");if(el)el.innerHTML=n?("L\u00edquido <b>"+fmt(net)+"</b> \u00b7 IVA "+fmt(iva)+" \u00b7 Total <b>"+fmt(net+iva)+"</b>"):"";var vf=document.getElementById("f5");if(vf&&n)vf.value=Math.round(net*100)/100;};
+window.dmArtCalc=function(){var net=0,iva=0,n=0;try{Array.prototype.forEach.call(document.querySelectorAll("#dm_arts .dm_art"),function(r){var q=Number(r.querySelector(".dma_qtd").value)||0;var pu=Number(r.querySelector(".dma_preco").value)||0;var iv=Number(r.querySelector(".dma_iva").value)||0;var ds=Math.min(100,Math.max(0,Number((r.querySelector(".dma_dsc")||{}).value)||0));var ln=q*pu*(1-ds/100);net+=ln;iva+=ln*iv/100;n++;});}catch(e){}var el=document.getElementById("dm_arttot");if(el)el.innerHTML=n?("L\u00edquido <b>"+fmt(net)+"</b> \u00b7 IVA "+fmt(iva)+" \u00b7 Total <b>"+fmt(net+iva)+"</b>"):"";var vf=document.getElementById("f5");if(vf&&n)vf.value=Math.round(net*100)/100;};
 function openDM(opts){opts=opts||{};var editId=opts.editId,preClient=opts.clientId;var dl=editId?D.deals.find(function(x){return x.id===editId}):null;var cs=D.clients.map(function(c){return{v:c.id,t:c.name}});var stageKeys=STAGES.slice();["perdido","concluido"].forEach(function(s){if(stageKeys.indexOf(s)<0)stageKeys.push(s);});if(dl&&dl.stage&&stageKeys.indexOf(dl.stage)<0)stageKeys.push(dl.stage);var sg=stageKeys.map(function(s){return{v:s,t:SL2[s]||s}});document.getElementById("mArea").innerHTML=mWrap(dl?"Editar Deal":(preClient?"Nova Especialidade — "+cn(preClient):"Novo Deal"),fld("Cliente",'<input id="f1t" list="dl_clis" autocomplete="off" placeholder="escreve para procurar…" value="'+esc(dl?cn(dl.clientId):(preClient?cn(preClient):""))+'"><datalist id="dl_clis">'+D.clients.map(function(c){return '<option value="'+esc(c.name)+'"></option>';}).join("")+'</datalist><input type="hidden" id="f1" value="'+(dl?dl.clientId:(preClient||""))+'">')+fld("Produto",'<input id="f2" value="'+(dl?dl.product.replace(/"/g,"&quot;"):"")+'">')+'<div class="r2">'+fld("Especialidade",sel("f3",SPECS,dl?dl.specialty:"Gastro"))+fld("Tipo",sel("f4",[{v:"NV",t:"NV · Nova venda"},{v:"AT",t:"Manutenção"},{v:"SUB",t:"SUB · Subscrição"},{v:"SV",t:"SV · Serviço"}],dl?dl.type:"NV"))+'</div><div class="r2">'+fld("Valor €",'<input type="number" id="f5" value="'+(dl?dl.value:0)+'">')+fld("ARR €",'<input type="number" id="f6" value="'+(dl?dl.arr:0)+'">')+'</div>'+(function(){var _me="";try{var _hp=D.hrPeople||{};var _em=(window.__mwEmail||"").toLowerCase();Object.keys(_hp).forEach(function(k){if(k.toLowerCase()===_em)_me=(_hp[k]||{}).nome||"";});}catch(e){}
   var _cl=dl?clientById(dl.clientId):(preClient?clientById(preClient):null);
   var _vd=dl?(dl.vendedor||""):_me;var _gc=dl?(dl.gestorConta||(_cl&&_cl.gestorConta)||""):((_cl&&_cl.gestorConta)||"");
-  return '<div class="r2">'+fld("Responsável (vendedor)",'<input id="f_vd" value="'+esc(_vd)+'" placeholder="colaborador">')+fld("Gestor de conta",'<input id="f_gc" value="'+esc(_gc)+'" placeholder="colaborador">')+'</div><div style="font-size:11.5px;color:#6B7680;margin:-4px 0 8px">O gestor de conta fica associado ao cliente e aparece por defeito nos outros negócios dele.</div>';})()+fld("Etapa",sel("f7",sg,dl?dl.stage:"lead"))+fld("Data",'<input type="date" id="f8" value="'+(dl?dl.date:_hojeLocal())+'">')+'<div class="r2">'+fld("Próxima ação",'<input id="f9" placeholder="ex.: ligar ao Dr. Elvira" value="'+(dl&&dl.nextAction?String(dl.nextAction).replace(/"/g,"&quot;"):"")+'">')+fld("Data follow-up",'<input type="date" id="f10" value="'+(dl&&dl.nextDate?dl.nextDate:"")+'">')+'</div>'+fld("Data perdida (só se perdido)",'<input type="date" id="f11" value="'+(dl&&dl.lostDate?dl.lostDate:"")+'">')+fld("Razão da perda (só se perdido)",'<input id="f12" value="'+(dl&&dl.lostReason?String(dl.lostReason).replace(/"/g,"&quot;"):"")+'">')+'<div style="margin-top:10px;border-top:1px solid #f0e6d8;padding-top:8px"><div style="font-size:11px;font-weight:700;color:#5F6B75;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Artigos da proposta</div><div style="display:grid;grid-template-columns:1fr 48px 78px 66px 26px;gap:5px;font-size:11px;color:#6B7680;text-transform:uppercase;letter-spacing:.03em;margin-bottom:3px"><span>Artigo</span><span>Qtd</span><span>Preço</span><span>IVA</span><span></span></div><div id="dm_arts">'+((dl&&dl.artigos&&dl.artigos.length)?dl.artigos.map(function(a,i){return dmArtRowHTML(i,a);}).join(""):"")+'</div><button type="button" class="btn bs" style="background:'+SL+';margin-top:4px" onclick="dmAddArt()">+ Artigo</button> <span id="dm_arttot" style="font-size:11.5px;color:#5F6B75;margin-left:8px"></span><div style="font-size:12px;color:#6B7680;margin-top:4px">O valor do deal é preenchido pela soma dos artigos (sem IVA). Junta os artigos que compõem a proposta.</div></div>'+'<button class="btn" style="background:'+R+';width:100%;margin-top:6px" onclick="svDl(\''+(editId||"")+'\')">Guardar</button>')}
+  return '<div class="r2">'+fld("Responsável (vendedor)",'<input id="f_vd" value="'+esc(_vd)+'" placeholder="colaborador">')+fld("Gestor de conta",'<input id="f_gc" value="'+esc(_gc)+'" placeholder="colaborador">')+'</div><div style="font-size:11.5px;color:#6B7680;margin:-4px 0 8px">O gestor de conta fica associado ao cliente e aparece por defeito nos outros negócios dele.</div>';})()+fld("Etapa",sel("f7",sg,dl?dl.stage:"lead"))+fld("Data",'<input type="date" id="f8" value="'+(dl?dl.date:_hojeLocal())+'">')+'<div class="r2">'+fld("Próxima ação",'<input id="f9" placeholder="ex.: ligar ao Dr. Elvira" value="'+(dl&&dl.nextAction?String(dl.nextAction).replace(/"/g,"&quot;"):"")+'">')+fld("Data follow-up",'<input type="date" id="f10" value="'+(dl&&dl.nextDate?dl.nextDate:"")+'">')+'</div>'+fld("Data perdida (só se perdido)",'<input type="date" id="f11" value="'+(dl&&dl.lostDate?dl.lostDate:"")+'">')+fld("Razão da perda (só se perdido)",'<input id="f12" value="'+(dl&&dl.lostReason?String(dl.lostReason).replace(/"/g,"&quot;"):"")+'">')+'<div style="margin-top:10px;border-top:1px solid #f0e6d8;padding-top:8px"><div style="font-size:11px;font-weight:700;color:#5F6B75;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Artigos da proposta</div><div style="display:grid;grid-template-columns:minmax(0,1fr) 48px 78px 56px 66px 26px;gap:5px;font-size:11px;color:#6B7680;text-transform:uppercase;letter-spacing:.03em;margin-bottom:3px"><span>Artigo</span><span>Qtd</span><span>Preço</span><span>Desc.%</span><span>IVA</span><span></span></div><div id="dm_arts">'+((dl&&dl.artigos&&dl.artigos.length)?dl.artigos.map(function(a,i){return dmArtRowHTML(i,a);}).join(""):"")+'</div><button type="button" class="btn bs" style="background:'+SL+';margin-top:4px" onclick="dmAddArt()">+ Artigo</button> <button type="button" class="btn bs" style="background:#2E8C93;margin-top:4px" onclick="fotoGaleria()">🖼 Escolher com fotos</button> <span id="dm_arttot" style="font-size:11.5px;color:#5F6B75;margin-left:8px"></span><div style="font-size:12px;color:#6B7680;margin-top:4px">O valor da oportunidade é a soma das linhas, já com desconto e sem IVA. Escolhe os artigos do catálogo: o preço aparece sozinho. Uma linha a 0 € fica registada na mesma.</div></div>'+'<button class="btn" style="background:'+R+';width:100%;margin-top:6px" onclick="svDl(\''+(editId||"")+'\')">Guardar</button>')}
 function editDl(id){openDM({editId:id})}
 function editARR(id){var d=D.deals.find(function(x){return x.id===id});if(!d)return;promptM("ARR anual (€) para "+cn(d.clientId)+"\n"+d.product.slice(0,50)+"\n\nValor recorrente por ano (12× a mensalidade):",function(v){var n=Number(String(v).replace(",","."));if(isNaN(n)||n<0){toast("Valor inválido.",{type:"error"});return}var old=d.arr||0;d.arr=n;logAct("Nota","ARR atualizado: "+cn(d.clientId)+" — "+fmt(old)+" → "+fmt(n)+"/ano");save();ren()},{default:String(d.arr||0),okLabel:"Guardar ARR"})}
 function addSpecialty(clientId){openDM({clientId:clientId})}
@@ -1830,7 +1858,7 @@ function openSpecM(opts){opts=opts||{};var editId=opts.editId,preClient=opts.cli
 function editSpec(id){openSpecM({editId:id})}
 function svSpec(editId){var data={clientId:document.getElementById("f1").value,specialty:document.getElementById("f2").value,at:document.getElementById("f3").value==="1"};if(editId){var sp=D.clientSpecs.find(function(x){return x.id===editId});if(sp){Object.assign(sp,data);logAct("Cliente","Especialidade atualizada: "+cn(data.clientId)+" — "+data.specialty+(data.at?" (Manutenção ativa)":""))}}else{data.id=uid();D.clientSpecs.push(data);logAct("Cliente","Especialidade adicionada: "+cn(data.clientId)+" — "+data.specialty)}save();clM();ren()}
 function delSpec(id){confirmM("Remover esta especialidade do registo?",function(){tombDel("spec",id);D.clientSpecs=D.clientSpecs.filter(function(s){return s.id!==id});save();ren()},{yesLabel:"Remover"})}
-function svDl(editId){var _ct=document.getElementById("f1t");var _cid=(document.getElementById("f1")||{}).value||"";if(_ct){var _nm=(_ct.value||"").trim().toLowerCase();var _m=D.clients.filter(function(c){return (c.name||"").toLowerCase()===_nm;})[0];if(_m)_cid=_m.id;}if(!_cid){if(typeof toast==="function")toast("Escolhe um cliente da lista.",{type:"error"});return}var data={clientId:_cid,product:document.getElementById("f2").value,specialty:document.getElementById("f3").value,type:document.getElementById("f4").value,stage:document.getElementById("f7").value,value:Number(document.getElementById("f5").value),arr:Number(document.getElementById("f6").value),date:document.getElementById("f8").value,nextAction:(document.getElementById("f9")||{}).value||"",nextDate:(document.getElementById("f10")||{}).value||"",lostDate:(document.getElementById("f11")||{}).value||"",lostReason:(document.getElementById("f12")||{}).value||"",vendedor:((document.getElementById("f_vd")||{}).value||"").trim(),gestorConta:((document.getElementById("f_gc")||{}).value||"").trim()};try{if(data.gestorConta){var _c9=clientById(_cid);if(_c9)_c9.gestorConta=data.gestorConta;}}catch(e){}var _arts=[];try{Array.prototype.forEach.call(document.querySelectorAll("#dm_arts .dm_art"),function(r){var d=(r.querySelector(".dma_desc").value||"").trim();var q=Number(r.querySelector(".dma_qtd").value)||0;var pu=Number(r.querySelector(".dma_preco").value)||0;var iv=Number(r.querySelector(".dma_iva").value)||0;if(d||pu)_arts.push({desc:d,qtd:q||1,precoUnit:pu,iva:iv});});}catch(e){}data.artigos=_arts;if(_arts.length)data.value=Math.round(_arts.reduce(function(a,x){return a+((Number(x.qtd)||0)*(Number(x.precoUnit)||0));},0)*100)/100;if(editId){var dl=D.deals.find(function(x){return x.id===editId});if(dl){Object.assign(dl,data);logAct("Pipeline","Deal editado: "+cn(data.clientId)+" — "+data.product.slice(0,35)+(data.value>0?" ("+fmt(data.value)+")":""))}}else{data.id=uid();D.deals.push(data);logAct(data.stage==="proposta"?"Proposta":"Pipeline","Novo deal ["+SL2[data.stage]+"]: "+cn(data.clientId)+" — "+data.product.slice(0,35)+(data.value>0?" ("+fmt(data.value)+")":""))}save();clM();ren()}
+function svDl(editId){var _ct=document.getElementById("f1t");var _cid=(document.getElementById("f1")||{}).value||"";if(_ct){var _nm=(_ct.value||"").trim().toLowerCase();var _m=D.clients.filter(function(c){return (c.name||"").toLowerCase()===_nm;})[0];if(_m)_cid=_m.id;}if(!_cid){if(typeof toast==="function")toast("Escolhe um cliente da lista.",{type:"error"});return}var data={clientId:_cid,product:document.getElementById("f2").value,specialty:document.getElementById("f3").value,type:document.getElementById("f4").value,stage:document.getElementById("f7").value,value:Number(document.getElementById("f5").value),arr:Number(document.getElementById("f6").value),date:document.getElementById("f8").value,nextAction:(document.getElementById("f9")||{}).value||"",nextDate:(document.getElementById("f10")||{}).value||"",lostDate:(document.getElementById("f11")||{}).value||"",lostReason:(document.getElementById("f12")||{}).value||"",vendedor:((document.getElementById("f_vd")||{}).value||"").trim(),gestorConta:((document.getElementById("f_gc")||{}).value||"").trim()};try{if(data.gestorConta){var _c9=clientById(_cid);if(_c9)_c9.gestorConta=data.gestorConta;}}catch(e){}var _arts=[];try{Array.prototype.forEach.call(document.querySelectorAll("#dm_arts .dm_art"),function(r){var d=(r.querySelector(".dma_desc").value||"").trim();var q=Number(r.querySelector(".dma_qtd").value)||0;var pu=Number(r.querySelector(".dma_preco").value)||0;var iv=Number(r.querySelector(".dma_iva").value)||0;var dsc=Math.min(100,Math.max(0,Number((r.querySelector(".dma_dsc")||{}).value)||0));if(d){var _l={desc:d,qtd:q||1,precoUnit:pu,iva:iv};if(dsc)_l.desconto=dsc;_arts.push(_l);}});}catch(e){}data.artigos=_arts;if(_arts.length)data.value=Math.round(_arts.reduce(function(a,x){return a+((Number(x.qtd)||0)*(Number(x.precoUnit)||0)*(1-(Number(x.desconto)||0)/100));},0)*100)/100;if(editId){var dl=D.deals.find(function(x){return x.id===editId});if(dl){Object.assign(dl,data);logAct("Pipeline","Deal editado: "+cn(data.clientId)+" — "+data.product.slice(0,35)+(data.value>0?" ("+fmt(data.value)+")":""))}}else{data.id=uid();D.deals.push(data);logAct(data.stage==="proposta"?"Proposta":"Pipeline","Novo deal ["+SL2[data.stage]+"]: "+cn(data.clientId)+" — "+data.product.slice(0,35)+(data.value>0?" ("+fmt(data.value)+")":""))}save();clM();ren()}
 function openEM(id){var e=id?(D.expenses||[]).find(function(x){return x.id===id}):null;var projs=[{v:"",t:"— sem projeto —"}].concat((D.projectos||[]).map(function(p){var d=(D.deals||[]).find(function(x){return x.id===p.dealId})||{};return {v:p.dealId,t:cn(d.clientId)+" · "+String(d.product||p.nome||"").slice(0,26)};}));document.getElementById("mArea").innerHTML=mWrap(e?"Editar Despesa":"Nova Despesa",fld("Descrição / a que se refere",'<input id="f1" value="'+esc(e?(e.desc||""):"")+'">')+'<div class="r2">'+fld("Valor €",'<input type="number" step="0.01" id="f2" value="'+(e?e.amount:0)+'">')+fld("Data",'<input type="date" id="f3" value="'+(e?e.date:_hojeLocal())+'">')+'</div><div class="r2">'+fld("Banco",sel("f4",["Santander","CGD",""],e?(e.bank||""):"Santander"))+fld("Tipo",sel("f5",["Viagem","Combustível","Telecomunicações","Eletricidade","Software","Serviços","Marketing","Equipamento","Stock","Outro"],e?(e.type||"Outro"):"Viagem"))+'</div><div class="r2">'+fld("Projeto (opcional)",sel("f7",projs,e?(e.projetoId||""):""))+fld("Cliente (opcional)",'<input id="f6" value="'+esc(e?(e.client||""):"")+'">')+'</div>'+'<div class="r2">'+fld("País",sel("f_pais",[{v:"",t:"Portugal"},{v:"Espanha",t:"Espanha (vai para o MW Espanha)"}],e?(e.pais||""):""))+fld("Nota",'<input id="f_nota" value="'+esc(e?(e.nota||""):"")+'" placeholder="ex.: tesla, 2º PEC">')+'</div>'+(id?'<button class="btn bs" style="background:#fff;color:'+DNG+';border:1px solid '+rgba(DNG,.3)+';width:100%;margin-bottom:6px" onclick="delEx(\''+id+'\')">Eliminar</button>':'')+'<button class="btn" style="background:'+R+';width:100%;margin-top:6px" onclick="svEx(\''+(id||"")+'\')">Guardar</button>')}
 function svEx(id){var e=id?(D.expenses||[]).find(function(x){return x.id===id}):null;var rec=e||{id:uid()};rec.desc=document.getElementById("f1").value;rec.amount=Number(document.getElementById("f2").value)||0;rec.date=document.getElementById("f3").value;rec.bank=document.getElementById("f4").value;rec.type=document.getElementById("f5").value;rec.client=document.getElementById("f6").value;rec.projetoId=document.getElementById("f7").value;var _ps=(document.getElementById("f_pais")||{}).value||"";if(_ps)rec.pais=_ps;else delete rec.pais;var _nt=((document.getElementById("f_nota")||{}).value||"").trim();if(_nt)rec.nota=_nt;else delete rec.nota;if(!e){D.expenses.push(rec);logAct("Despesa",(rec.desc||"").slice(0,40)+" — "+fmt(rec.amount));}else{logAct("Despesa","Despesa editada — "+(rec.desc||"").slice(0,40));}save();clM();ren()}
 function _despNum(v){var s=String(v==null?"":v).trim();if(!s)return NaN;if(s.indexOf(",")>=0&&s.indexOf(".")>=0)s=s.replace(/\./g,"").replace(",",".");else if(s.indexOf(",")>=0)s=s.replace(",",".");return parseFloat(s);}function _despDate(v){if(v==null||v==="")return "";var s=String(v).trim();var m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);if(m){var dd=("0"+m[1]).slice(-2),mm=("0"+m[2]).slice(-2),yy=m[3].length===2?"20"+m[3]:m[3];if(+mm>=1&&+mm<=12&&+dd>=1&&+dd<=31)return yy+"-"+mm+"-"+dd;}var m2=s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);if(m2)return m2[1]+"-"+("0"+m2[2]).slice(-2)+"-"+("0"+m2[3]).slice(-2);var d=new Date(s);if(!isNaN(d)&&d.getFullYear()>2000)return d.toISOString().slice(0,10);return s.slice(0,10);}
@@ -2191,16 +2219,17 @@ function initHC(){
   }catch(e){}
 }
 
-function syncPayload(){var d={};for(var k in D){if(k==="_log"||k==="_redo")continue;d[k]=D[k];}return d;}
+function syncPayload(){var d={};for(var k in D){if(k==="_log"||k==="_redo")continue;d[k]=D[k];}return (D._rhSplit&&typeof window.__rhStrip==="function")?window.__rhStrip(d):d;} // dados pessoais de RH vão para a linha privada
 function tombDel(cat,id){if(!D._tomb)D._tomb={cli:[],deal:[],inv:[],exp:[],spec:[]};if(!D._tomb[cat])D._tomb[cat]=[];if(D._tomb[cat].indexOf(id)<0)D._tomb[cat].push(id);}
-function ren(){try{window.__ahCache=null;_idxClear();}catch(e){}rTabs();rPnl()}
+function ren(){try{window.__ahCache=null;_idxClear();window.__expIdxTick=(window.__expIdxTick||0)+1;}catch(e){}rTabs();rPnl()}
 function autoBackup(){try{
   var days=(D.autoBackupDays===undefined?7:D.autoBackupDays);
   if(!days||days<=0)return;
   var last=localStorage.getItem("mw26bk");
   var today=new Date();var todayStr=today.toISOString().slice(0,10);
   if(last){var diff=Math.floor((today-new Date(last))/86400000);if(diff<days)return}
-  var b=new Blob([JSON.stringify(D,null,2)],{type:"application/json"});
+  if(window.__mwOnline&&!window.__mwLoaded){setTimeout(autoBackup,5000);return;} // espera pelos dados do servidor: antes podia guardar a cópia local antiga
+  var b=new Blob([JSON.stringify(D,function(k,v){return (k==="_log"||k==="_redo")?undefined:v;})],{type:"application/json"});
   var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="mobilwave_backup_auto_"+todayStr+".json";a.click();
   localStorage.setItem("mw26bk",todayStr);D.lastBackup=todayStr;save();
 }catch(e){}}
@@ -2724,6 +2753,76 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     document.body.classList.toggle("role-viewer",currentRole!=="admin"&&currentRole!=="editor");
   }
 
+
+  // ===================== DADOS PESSOAIS DE RH NUMA LINHA À PARTE (out 2026) =====================
+  // Salários, encargos, gratificações, custo base, contrato e documentos de cada colaborador, e o detalhe das baixas médicas
+  // deixam de viajar na linha geral (que todos os utilizadores com login recebem). Passam para a linha «<id>__rh»,
+  // que o servidor só entrega a administradores e a quem tem RH, Direção, Financeiro ou Vencimentos (ver o SQL rh_privado.sql).
+  // Em memória, para quem tem acesso, D fica exatamente como antes — os ecrãs não mudam.
+  var RH_KEYS=["salarios","salCfg","gratificacoes","horasDirecao"];
+  var RH_PP=["custoBase","contrato","documentos","admissao","avaliacoes","nif","iban","morada","nascimento"];
+  var RH_ABS=["note","nota","anexo","anexos","motivo","doc","entidade"];
+  var RH={ok:false,rev:null,last:null,timer:null,busy:false,noRow:false,blocked:false};window.__RH=RH;
+  function rhId(){return String(stateId())+"__rh";}
+  function rhAccess(){if(currentRole==="admin")return true;var d=currentDepts;return !!(d&&typeof d==="object"&&(d.rh||d.direcao||d.financeiro||d.vencimentos));}
+  window.rhAccess=rhAccess;
+  // tira de um estado a parte privada e devolve-a
+  function rhExtract(S){var o={k:{},pp:{},abs:{}};if(!S)return o;
+    RH_KEYS.forEach(function(k){if(S[k]!==undefined)o.k[k]=S[k];});
+    var hp=S.hrPeople;if(hp&&typeof hp==="object"&&!Array.isArray(hp))Object.keys(hp).forEach(function(em){var p=hp[em];if(!p||typeof p!=="object")return;var x={},n=0;RH_PP.forEach(function(f){if(p[f]!==undefined){x[f]=p[f];n++;}});if(n)o.pp[em]=x;});
+    (Array.isArray(S.absences)?S.absences:[]).forEach(function(a){if(!a||a.id==null)return;if(a.tipo==="baixa"||a._priv){var x={tipo:a.tipo};RH_ABS.forEach(function(f){if(a[f]!==undefined)x[f]=a[f];});o.abs[a.id]=x;}});
+    return o;}
+  function rhHasData(o){return !!(o&&(Object.keys(o.k||{}).length||Object.keys(o.pp||{}).length||Object.keys(o.abs||{}).length));}
+  // versão «pública» de um estado: sem a parte privada (não altera o original)
+  function rhStrip(S){if(!S||!S._rhSplit)return S;var d={};for(var k in S){if(RH_KEYS.indexOf(k)>=0)continue;d[k]=S[k];}
+    var hp=S.hrPeople;if(hp&&typeof hp==="object"&&!Array.isArray(hp)){var nh={};Object.keys(hp).forEach(function(em){var p=hp[em];if(!p||typeof p!=="object"){nh[em]=p;return;}var c={};for(var f in p){if(RH_PP.indexOf(f)<0)c[f]=p[f];}nh[em]=c;});d.hrPeople=nh;}
+    if(Array.isArray(S.absences))d.absences=S.absences.map(function(a){if(!a||!(a.tipo==="baixa"||a._priv))return a;var c={};for(var f in a){if(RH_ABS.indexOf(f)<0)c[f]=a[f];}c.tipo="ausencia";c._priv=true;return c;});
+    return d;}
+  window.__rhStrip=rhStrip;
+  // volta a pôr a parte privada em D (só para quem a recebeu do servidor)
+  function rhAttach(o){o=o||RH.cache;if(!o||!D)return;
+    Object.keys(o.k||{}).forEach(function(k){D[k]=o.k[k];});
+    var hp=D.hrPeople;if(hp&&typeof hp==="object")Object.keys(o.pp||{}).forEach(function(em){if(hp[em]&&typeof hp[em]==="object"){var x=o.pp[em];for(var f in x)hp[em][f]=x[f];}});
+    if(Array.isArray(D.absences))D.absences.forEach(function(a){var x=a&&(o.abs||{})[a.id];if(x){for(var f in x)a[f]=x[f];delete a._priv;}});}
+  window.__rhAttach=function(){if(RH.ok)rhAttach();};
+  async function rhFetch(){var r=await sb.from("app_state").select("data").eq("id",rhId()).maybeSingle();if(r&&r.error)throw r.error;return (r&&r.data&&r.data.data)||null;}
+  async function rhWrite(o,create){var body={k:o.k,pp:o.pp,abs:o.abs,_rev:Date.now().toString(36)+Math.random().toString(36).slice(2,7),updatedAt:new Date().toISOString(),updatedBy:currentEmail||""};var r;
+    if(create){r=await sb.from("app_state").upsert({id:rhId(),data:body}).select("id");}
+    else{var q=sb.from("app_state").update({data:body}).eq("id",rhId());q=RH.rev?q.eq("data->>_rev",RH.rev):q.is("data->>_rev",null);r=await q.select("id");}
+    if(r&&r.error)throw r.error;if(!r||!r.data||!r.data.length)return false;RH.rev=body._rev;RH.last=JSON.stringify({k:o.k,pp:o.pp,abs:o.abs});RH.cache=JSON.parse(RH.last);return true;}
+  // chamado depois de carregar a linha geral
+  async function rhAfterLoad(){RH.ok=false;RH.blocked=false;
+    if(!sb||!D)return;
+    if(!rhAccess()){ // sem acesso: se a separação já foi feita, garante que nada privado fica em memória
+      if(D._rhSplit){RH_KEYS.forEach(function(k){delete D[k];});D=rhStrip(D);}
+      return;}
+    try{var row=await rhFetch();
+      if(row){RH.rev=row._rev||null;RH.cache={k:row.k||{},pp:row.pp||{},abs:row.abs||{}};RH.last=JSON.stringify(RH.cache);rhAttach();RH.ok=true;
+        if(!D._rhSplit){D._rhSplit=true;window.__migrateChanged=true;RH.needPush=true;}return;}
+      // primeira vez: cria a linha privada a partir do que ainda está na linha geral, confirma, e só depois limpa a geral
+      var o=rhExtract(D);
+      var okW=await rhWrite(o,true);if(!okW){RH.blocked=true;return;}
+      var back=await rhFetch();if(!back||JSON.stringify({k:back.k,pp:back.pp,abs:back.abs})!==RH.last){RH.blocked=true;try{console.warn("[RH] a linha privada não ficou igual ao enviado; a separação fica adiada.");}catch(e){}return;}
+      RH.ok=true;D._rhSplit=true;window.__migrateChanged=true;RH.needPush=true;
+      try{if(typeof logAct==="function"&&rhHasData(o))logAct("RH","Dados pessoais de RH passaram para uma área de acesso restrito");}catch(e){}
+    }catch(e){RH.blocked=true;try{console.warn("[RH] sem acesso à linha privada:",e&&e.message||e);}catch(_){}
+      if(D._rhSplit){RH_KEYS.forEach(function(k){delete D[k];});D=rhStrip(D);}}
+  }
+  // grava a parte privada quando mudou (só quem a carregou)
+  function rhQueueSave(){if(!RH.ok||!ready)return;clearTimeout(RH.timer);RH.timer=setTimeout(rhPush,900);}
+  async function rhPush(){if(!RH.ok||RH.busy)return;var o=rhExtract(D);var js=JSON.stringify({k:o.k,pp:o.pp,abs:o.abs});if(js===RH.last)return;
+    RH.busy=true;try{var okW=await rhWrite(JSON.parse(js),false);
+      if(!okW){ // outra pessoa alterou os dados de RH entretanto: fica a versão do servidor
+        var row=await rhFetch();if(row){RH.rev=row._rev||null;RH.cache={k:row.k||{},pp:row.pp||{},abs:row.abs||{}};RH.last=JSON.stringify(RH.cache);rhAttach();try{if(typeof ren==="function")ren();}catch(e){}
+          try{if(typeof window.mwSnack==="function")window.mwSnack("Outra pessoa alterou os dados de RH entretanto. Recarreguei a versão mais recente: confirma e repete a tua alteração.");}catch(e){}}}
+    }catch(e){try{console.warn("[RH] gravação falhou:",e&&e.message||e);}catch(_){}RH.timer=setTimeout(rhPush,8000);}
+    finally{RH.busy=false;}}
+  // de 30 em 30 s: se a linha privada mudou no servidor e não tenho alterações minhas, atualizo
+  async function rhPoll(){if(!RH.ok||RH.busy||RH.timer&&false)return;try{var c=await sb.from("app_state").select("rev:data->>_rev").eq("id",rhId()).maybeSingle();var rv=c&&c.data?c.data.rev:null;if(!rv||rv===RH.rev)return;
+      var o=rhExtract(D);if(JSON.stringify({k:o.k,pp:o.pp,abs:o.abs})!==RH.last)return; // tenho alterações por gravar
+      var row=await rhFetch();if(!row)return;RH.rev=row._rev||null;RH.cache={k:row.k||{},pp:row.pp||{},abs:row.abs||{}};RH.last=JSON.stringify(RH.cache);rhAttach();
+      try{if(typeof ren==="function"&&!(typeof modalOpen==="function"&&modalOpen())&&!(typeof editingInline==="function"&&editingInline()))ren();}catch(e){}}catch(e){}}
+
   // ---------- carregar / gravar dados no Supabase ----------
   async function loadFromSB(){
     ready=false;
@@ -2734,9 +2833,12 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
       if(d&&Object.keys(d).length){D=d;}
       else if(currentRole!=="viewer"){await sb.from("app_state").upsert({id:stateId(),data:syncPayload()});} // semeia 1ª vez (linha da organização)
     }catch(e){toastSafe("Erro a carregar dados: "+(e.message||e));}
+    try{await rhAfterLoad();}catch(e){}
     try{if(typeof migrate==="function")migrate();}catch(e){}
-    ready=true;
+    try{mwSanitize();}catch(e){}
+    ready=true;window.__mwLoaded=true;
     // se a migração limpou dados (ex.: projeto-fantasma da exemplo), grava já a versão limpa no servidor
+    try{if(RH.needPush){RH.needPush=false;window.__migrateChanged=true;}}catch(e){}
     try{if(window.__migrateChanged&&currentRole!=="viewer"){window.__migrateChanged=false;pushToSB();}}catch(e){}
     if(typeof ren==="function")ren();
     applyRoleGating();
@@ -2875,7 +2977,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     if(!force&&(modalOpen()||editingInline()))return; // não interrompo edição a decorrer
     try{
       __revChecks++;
-      if(!force&&__lastRev&&__revChecks%5!==0){var _rr=await mwRemoteRev();if(_rr&&_rr===__lastRev)return;}
+      if(!force&&__lastRev&&__revChecks%60!==0){var _rr=await mwRemoteRev();if(_rr&&_rr===__lastRev)return;} // antes: descarregava tudo de 2,5 em 2,5 min mesmo sem alterações
       var r=await sb.from("app_state").select("data").eq("id",stateId()).single();
       if(r.error||!r.data)return;
       if(saveTimer||__pushing||__saveSeq!==__savedSeq)return;   // gravei entretanto: não substituo
@@ -2885,7 +2987,9 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
       if(js===__lastData)return;                // nada mudou
       __lastData=js;
       var _ll=D._log,_lr=D._redo;D=d;if(!Array.isArray(D._log))D._log=_ll||[];if(!Array.isArray(D._redo))D._redo=_lr||[];
+      try{if(RH.ok)rhAttach();else if(D._rhSplit){RH_KEYS.forEach(function(k){delete D[k];});D=rhStrip(D);if(!Array.isArray(D._log))D._log=_ll||[];if(!Array.isArray(D._redo))D._redo=_lr||[];}}catch(e){}
       try{if(typeof migrate==="function")migrate();}catch(e){}
+      try{mwSanitize();}catch(e){}
       try{if(typeof ren==="function")ren();}catch(e){}
       try{applyRoleGating();}catch(e){}
       try{prevSnap=snapClone();}catch(e){}
@@ -2899,7 +3003,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     try{document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible")reloadState(false);});}catch(e){}
     try{window.addEventListener("focus",function(){reloadState(false);});}catch(e){}
     // 2) sondagem periódica (30s) enquanto o separador está visível; se ficou algo por gravar, tenta de novo
-    try{setInterval(function(){if(__saveSeq!==__savedSeq&&!__pushing&&!saveTimer){pushToSB();return;}if(document.visibilityState==="visible")reloadState(false);},30000);}catch(e){}
+    try{setInterval(function(){if(__saveSeq!==__savedSeq&&!__pushing&&!saveTimer){pushToSB();return;}if(document.visibilityState==="visible"){reloadState(false);try{rhPoll();}catch(e){}}},30000);}catch(e){}
     // 3) tempo-real (se estiver ativado no Supabase para a tabela app_state)
     try{sb.channel("app_state_rt").on("postgres_changes",{event:"UPDATE",schema:"public",table:"app_state",filter:"id=eq."+stateId()},function(){reloadState(false);}).subscribe();}catch(e){}
     // 4) a ligação voltou: grava já o que ficou pendente
@@ -2931,6 +3035,13 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     return out;
   }
   function mwMergeStates(base,theirs,ours){
+    if(ours&&ours._rhSplit&&RH.ok){var _priv=rhExtract(ours);var _log=ours._log,_redo=ours._redo;var pub=rhStrip(ours);pub._log=_log;pub._redo=_redo;
+      var res=mwMergeStates0(base,theirs,pub);RH_KEYS.forEach(function(k){if(_priv.k[k]!==undefined)res[k]=_priv.k[k];});
+      var hp=res.hrPeople;if(hp&&typeof hp==="object")Object.keys(_priv.pp).forEach(function(em){if(hp[em]&&typeof hp[em]==="object"){hp[em]=Object.assign({},hp[em],_priv.pp[em]);}});
+      if(Array.isArray(res.absences))res.absences=res.absences.map(function(a){var x=a&&_priv.abs[a.id];if(!x)return a;var c=Object.assign({},a,x);delete c._priv;return c;});
+      mwMergeStates._lastMerged=mwMergeStates0._lastMerged;return res;}
+    var r0=mwMergeStates0(base,theirs,ours);mwMergeStates._lastMerged=mwMergeStates0._lastMerged;return r0;}
+  function mwMergeStates0(base,theirs,ours){
     var out=JSON.parse(JSON.stringify(theirs||{}));
     var merged=0;
     Object.keys(ours||{}).forEach(function(k){
@@ -2943,7 +3054,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     });
     out._log=(ours&&ours._log)||(theirs&&theirs._log)||[];
     out._redo=(ours&&ours._redo)||[];
-    mwMergeStates._lastMerged=merged;
+    mwMergeStates0._lastMerged=merged;
     return out;
   }
   async function pushToSB(_retry){
@@ -3028,7 +3139,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   // reverte uma alteração local que não foi autorizada (evita "mudanças fantasma" que só aparecem a quem editou)
   function revertToSnap(){
     if(!prevSnap)return;
-    try{var keep={_log:D._log,_redo:D._redo,attachments:D.attachments};var nd=JSON.parse(JSON.stringify(prevSnap));nd._log=keep._log;nd._redo=keep._redo;if(keep.attachments)nd.attachments=keep.attachments;D=nd;}catch(e){}
+    try{var keep={_log:D._log,_redo:D._redo,attachments:D.attachments};var nd=snapParse(prevSnap);nd._log=keep._log;nd._redo=keep._redo;if(keep.attachments)nd.attachments=keep.attachments;D=nd;}catch(e){}
   }
   function canLogHours(){return typeof currentRole!=="undefined"&&currentRole!=="viewer";}
   window.canLogHours=canLogHours;
@@ -3053,6 +3164,8 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
       return false;
     }
     window.__selfSave=false;
+    try{mwSanitize();}catch(e){}
+    try{rhQueueSave();}catch(e){}
     __saveSeq++;
     clearTimeout(saveTimer);saveTimer=setTimeout(pushToSB,450);
     mwSaveStatus();
@@ -3093,7 +3206,8 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   // ===================== LOGS / AUDITORIA + ANULAÇÃO (só admin) =====================
   var prevSnap=null, __suppressRedoClear=false;
   // cópia do estado (sem os próprios registos nem anexos, para não inchar)
-  function snapClone(){var d={};for(var k in D){if(k==="_log"||k==="_redo"||k==="attachments")continue;d[k]=D[k];}return JSON.parse(JSON.stringify(d));}
+  function snapClone(){var d={};for(var k in D){if(k==="_log"||k==="_redo"||k==="attachments")continue;d[k]=D[k];}return JSON.stringify(d);} // guardada como texto: metade da memória e sem a segunda passagem (auditoria out 2026)
+  function snapParse(x){return typeof x==="string"?JSON.parse(x):JSON.parse(JSON.stringify(x));}
 
   // carimba email + hora e guarda a cópia "antes" a cada movimento registado por logAct
   if(typeof window.logAct==="function"){
@@ -3104,8 +3218,9 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
         if(!__suppressRedoClear)D._redo=[];
         if(!Array.isArray(D._log))D._log=[];
         var lid=(typeof uid==="function"?uid():String(Math.random()).slice(2));
-        D._log.unshift({id:lid,ts:new Date().toISOString(),email:currentEmail||"",type:type,desc:desc,before:prevSnap});
+        D._log.unshift({id:lid,ts:new Date().toISOString(),email:currentEmail||"",type:type,desc:desc,before:(currentRole==="admin"?prevSnap:null)}); // só o administrador pode anular: os outros perfis não acumulam cópias
         if(D._log.length>8)D._log=D._log.slice(0,8);
+        var _nb=0;D._log.forEach(function(l){if(l.before){_nb++;if(_nb>5)l.before=null;}}); // no máximo 5 cópias completas em memória
         if(D.activities&&D.activities[0]){D.activities[0].email=currentEmail||"";D.activities[0].ts=new Date().toISOString();D.activities[0]._logId=lid;}
       }catch(e){}
     };
@@ -3120,7 +3235,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
       var keep=(D._log||[]).slice();
       var redo=(D._redo||[]).slice();
       var afterSnap=snapClone(); // estado atual (o que vamos anular) — para poder refazer
-      var restored=JSON.parse(JSON.stringify(entry.before));
+      var restored=snapParse(entry.before);
       restored.attachments=D.attachments||[];
       restored._log=keep;restored._redo=redo;
       D=restored;
@@ -3143,7 +3258,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     if(!item||!item.after){toastSafe("Nada para refazer.");return;}
     var doIt=function(){
       var keep=(D._log||[]).slice();var redo=(D._redo||[]).slice(1);
-      var restored=JSON.parse(JSON.stringify(item.after));
+      var restored=snapParse(item.after);
       restored.attachments=D.attachments||[];restored._log=keep;restored._redo=redo;
       D=restored;
       __suppressRedoClear=true;
@@ -3531,7 +3646,8 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   function projTsCusto(r){var did=r&&r.dealId;if(!did)return 0;return (D.timesheets||[]).filter(function(t){return t.dealId===did;}).reduce(function(a,t){return a+(Number(t.horas)||0)*((t.valorHora!=null&&t.valorHora!=="")?Number(t.valorHora):hrRate());},0);}
   function projHoras(r){return Math.round(((r.horas||[]).reduce(function(a,x){return a+(Number(x.horas)||0);},0)+projTsHoras(r))*100)/100;}
   function projMaoObra(r){return (r.horas||[]).reduce(function(a,x){return a+(Number(x.horas)||0)*((x.valorHora!=null&&x.valorHora!=="")?Number(x.valorHora):hrRate());},0)+projTsCusto(r);}
-  function projDespesasFat(r){return (D.expenses||[]).filter(function(e){return r&&e.projetoId&&e.projetoId===r.dealId;});}
+  var __expIdx=null;
+  function projDespesasFat(r){if(!r)return [];var ex=D.expenses||[];if(!__expIdx||__expIdx.a!==ex||__expIdx.n!==ex.length||__expIdx.t!==window.__expIdxTick){var m={};for(var i=0;i<ex.length;i++){var e=ex[i];if(e&&e.projetoId)(m[e.projetoId]=m[e.projetoId]||[]).push(e);}__expIdx={a:ex,n:ex.length,m:m,t:window.__expIdxTick};}return __expIdx.m[r.dealId]||[];}
   function projAvulsos(r){return (r.custosAvulsos||[]).reduce(function(a,x){return a+(Number(x.valor)||0);},0)+projDespesasFat(r).reduce(function(a,e){return a+(Number(e.amount)||0);},0)+(typeof reuCustosProj==="function"?reuCustosProj(r):0)+(typeof projEquipCusto==="function"?projEquipCusto(r):0);}
   function projCusto(r){return projMaoObra(r)+projAvulsos(r);}
   function taskProcs(t){var a=(t&&Array.isArray(t.procedencias))?t.procedencias.slice():[];if(!a.length&&t&&t.seguimentoDe)a=[t.seguimentoDe];return a;}
@@ -6570,7 +6686,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   window.printProposta=function(id){
     var d=propList().filter(function(x){return x.id===id;})[0];if(!d)return;var t=propCalc(d.linhas,d.iva);
     var f=(D.fiscal&&D.fiscal.empresa)||{};var cli=(D.clients||[]).filter(function(c){return c.id===d.clientId;})[0]||{};
-    var rows=(d.linhas||[]).map(function(l){var lb=(Number(l.qtd)||0)*(Number(l.preco)||0);return '<tr><td>'+esc(l.desc||"")+'</td><td style="text-align:right">'+(Number(l.qtd)||0)+'</td><td style="text-align:right">'+(Number(l.preco)||0).toFixed(2)+' €</td><td style="text-align:right">'+lb.toFixed(2)+' €</td></tr>';}).join("");
+    var rows=(d.linhas||[]).map(function(l){var lb=(Number(l.qtd)||0)*(Number(l.preco)||0);return '<tr><td>'+(window.fotoTd?window.fotoTd(l.desc):"")+esc(l.desc||"")+'</td><td style="text-align:right">'+(Number(l.qtd)||0)+'</td><td style="text-align:right">'+(Number(l.preco)||0).toFixed(2)+' €</td><td style="text-align:right">'+lb.toFixed(2)+' €</td></tr>';}).join("");
     var html='<!doctype html><html><head><meta charset="utf-8"><title>'+esc(d.numero)+'</title><style>'
       +'body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12px;margin:28px;max-width:760px}h1{font-size:17px;margin:0 0 2px}.mut{color:#666;font-size:12px}'
       +'table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border-bottom:1px solid #ddd;padding:6px;text-align:left}th{background:#f3f3f3;font-size:11px;text-transform:uppercase;letter-spacing:.4px}'
@@ -6850,6 +6966,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     function numKey(i){var n=(i.num!=null&&String(i.num).trim()!=="")?String(i.num):("FT"+(seqMap[i.id]||"0"));var m=n.match(/\d+/g);return m?(parseInt(m.join("").slice(0,15),10)||0):0;}
     function cliOf(i){var d=_dById(i.dealId);return d?cn(d.clientId):(i.clienteNome||"—");}
     function fdY(iso){if(!iso)return "—";var p=String(iso).split("-");return p.length===3?(p[2]+"/"+p[1]+"/"+p[0]):iso;}
+    if(window.__fatY===undefined)window.__fatY=String(new Date().getFullYear());
     var fY=window.__fatY||"",fC=window.__fatC||"",fU=!!window.__fatUnpaid;
     var years={};invs.forEach(function(i){var y=(i.date||"").slice(0,4);if(y)years[y]=1;});
     var yrOpts=Object.keys(years).sort().reverse();
@@ -6903,11 +7020,12 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   function injectPropostasPipeline(){
     var app=document.getElementById("app");if(!app)return;
     var stages=["proposta","projeto","ganho","concluido","perdido"];
-    var deals=(D.deals||[]).filter(function(d){return stages.indexOf(d.stage)>=0;});
+    var props=(typeof propList==="function")?propList():(D.propostas||[]);
+    var _pBy={};props.forEach(function(p){if(p&&p.dealId&&!_pBy[p.dealId])_pBy[p.dealId]=p;});
+    function propOf(id){return _pBy[id];}
+    var deals=(D.deals||[]).filter(function(d){return stages.indexOf(d.stage)>=0&&(isCrmDeal(d)||!!_pBy[d.id]);}); // as linhas do Faturação não são oportunidades: ficam de fora
     if(!deals.length)return;
     var canEdit=(currentRole==="admin"||canSeeTab("comercial")||canSeeTab("propostas"))&&!isReadOnlyNow();
-    var props=(typeof propList==="function")?propList():(D.propostas||[]);
-    function propOf(id){return props.filter(function(p){return p.dealId===id;})[0];}
     var nAssoc=deals.filter(function(d){return !!propOf(d.id);}).length;
     var h='<div class="cd"><div class="ct2" style="margin-bottom:6px">Propostas no pipeline ('+deals.length+')</div><div style="font-size:11.5px;color:#6B7680;margin-bottom:8px">Negócios já no pipeline — propostas, em projeto, ganhas, concluídas e perdidas. '+nAssoc+' já com proposta associada; cria uma proposta em PDF a partir dos que ainda não têm.</div><div style="overflow-x:auto"><table><thead><tr><th>Cliente</th><th>Produto / Serviço</th><th style="text-align:right">Valor</th><th>Estado</th><th>Proposta</th>'+(canEdit?'<th></th>':'')+'</tr></thead><tbody>';
     deals.slice().sort(function(a,b){return (b.date||"").localeCompare(a.date||"");}).forEach(function(d){
@@ -8077,7 +8195,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
     if(!items.length)h+='<div style="font-size:12.5px;color:#6B7680">Sem itens. Regista servidores, hardware, licenças e consumíveis.</div>';
     else{h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px">';
       items.slice().sort(function(a,b){return (a.nome||"").localeCompare(b.nome||"");}).forEach(function(i){
-        var img=i.foto?'<div style="height:118px;background:#EFF1F4 center/cover no-repeat;background-image:url(\''+i.foto+'\');border-radius:11px 11px 0 0"></div>':'<div style="height:118px;background:#EFF1F4;border-radius:11px 11px 0 0;display:flex;align-items:center;justify-content:center;font-size:34px;color:#C6CDD4">📦</div>';
+        var img=i.foto?'<div data-fp="'+esc(i.fotoPath||"")+'" title="Ver foto em grande" onclick="event.stopPropagation();invFotoBig(\''+i.id+'\')" style="height:118px;cursor:zoom-in;background:#EFF1F4 center/cover no-repeat;background-image:url(\''+i.foto+'\');border-radius:11px 11px 0 0"></div>':'<div style="height:118px;background:#EFF1F4;border-radius:11px 11px 0 0;display:flex;align-items:center;justify-content:center;font-size:34px;color:#C6CDD4">📦</div>';
         h+='<div data-inv="'+esc(((i.nome||"")+" "+invLbl(INV_CAT,i.categoria)+" "+(i.localizacao||"")+" "+(i.serial||"")+" "+(i.notas||"")).toLowerCase())+'" style="border:1px solid #E4E8EB;border-radius:12px;overflow:hidden;background:#fff'+(canEdit?';cursor:pointer':'')+'"'+(canEdit?' onclick="openInvItem(\''+i.id+'\')"':'')+'>'+img+'<div style="padding:10px 11px"><div style="font-weight:700;font-size:13px;margin-bottom:4px">'+esc(i.nome||"—")+'</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">'+bdg(invLbl(INV_CAT,i.categoria),SL)+bdg(invLbl(INV_EST,i.estado),INV_EST_COL[i.estado]||SL)+'</div>'+((i.precoCusto||i.precoVenda)?'<div style="font-size:12px;color:#5F6B75;display:flex;justify-content:space-between;gap:6px"><span>Custo <b>'+fmt(i.precoCusto||0)+'</b></span><span>Venda <b style="color:'+GRN+'">'+fmt(i.precoVenda||0)+'</b></span></div>':'')+'<div style="font-size:12px;color:#6B7680;margin-top:4px">Qtd: '+(Number(i.qtd)||0)+(i.localizacao?" · "+esc(i.localizacao):"")+'</div>'+(canEdit?'<div style="text-align:right;margin-top:7px"><button class="btn bs" style="background:#fff;color:'+DNG+';border:1px solid '+rgba(DNG,.3)+'" onclick="event.stopPropagation();delInvItem(\''+i.id+'\')">Remover</button></div>':'')+'</div></div>';
       });
       h+='</div>';}
@@ -9389,7 +9507,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
   window.relatorioMensal=function(){
     var S2=(typeof S!=="undefined"&&S)?S:((typeof st==="function")?st():{inv:0,exp:0,col:0,cf2:0});
     var pess=(typeof tsPessoalAno==="function")?tsPessoalAno():0;
-    var res=(Number(S2.inv)||0)-(Number(S2.exp)||0)-(Number(pess)||0);
+    var expR=(S2.expPL!=null?Number(S2.expPL):Number(S2.exp))||0;var res=(Number(S2.inv)||0)-expR;
     var yr=(typeof activeYear==="function")?activeYear():"2026";
     var e2=function(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");};
     // horas por cliente (ano ativo)
@@ -9409,9 +9527,9 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
       +'<h2>Resumo financeiro</h2><div class="kpis">'
       +'<div class="k"><div class="n">'+e2(fmt(S2.inv||0))+'</div><div class="l">Faturado</div></div>'
       +'<div class="k"><div class="n">'+e2(fmt(S2.col||0))+'</div><div class="l">Cobrado</div></div>'
-      +'<div class="k"><div class="n" style="color:#2E8C93">-'+e2(fmt((S2.exp||0)+pess))+'</div><div class="l">Custos (despesas + pessoal)</div></div>'
+      +'<div class="k"><div class="n" style="color:#2E8C93">-'+e2(fmt(expR))+'</div><div class="l">Custos (como no P&amp;L)</div></div>'
       +'<div class="k"><div class="n" style="color:'+(res<0?"#C0564A":"#3E9E7A")+'">'+e2(fmt(res))+'</div><div class="l">Resultado</div></div></div>'
-      +'<table>'+row("Faturação",fmt(S2.inv||0))+row("Despesas diretas",fmt(S2.exp||0),"#2E8C93")+row("Custo de pessoal (horas)",fmt(pess),"#2E8C93")+row("ARR contratado (subscrições/manutenção + contratos)",fmt(arrTot),"#3E9E7A")+'</table>'
+      +'<table>'+row("Faturação",fmt(S2.inv||0))+row("Custos (como no P&amp;L)",fmt(expR),"#2E8C93")+row("Horas registadas × valor-hora — informativo, fora do resultado",fmt(pess),"#6B7680")+row("ARR contratado (subscrições/manutenção + contratos)",fmt(arrTot),"#3E9E7A")+'</table>'
       +'<h2>Horas por cliente ('+e2(yr)+')</h2>';
     if(!cliRows.length)html+='<div style="font-size:12px;color:#6B7680">Sem horas registadas.</div>';
     else{html+='<table><thead><tr><th>Cliente</th><th style="text-align:right">Horas</th></tr></thead><tbody>';cliRows.forEach(function(k){html+='<tr><td>'+e2(k)+'</td><td style="text-align:right;font-weight:700">'+e2(fmtH(byCli[k]))+'</td></tr>';});html+='</tbody></table>';}
@@ -9874,7 +9992,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
   var INTG_PRIO_COL={P1:DNG,P2:GD,P3:BLU,P4:SL,P0:SL,"S/P":SL};
   var INTG_EST=["Por Fazer","Em Curso","Concluído"];
   var INTG_EST_COL={"Por Fazer":SL,"Em Curso":BLU,"Concluído":GRN};
-  var INTG_SEC=["Projetos","AT / BH","Deploys","BackLog"];
+  var INTG_SEC=["Projetos","AT / BH","Deploys","BackLog"];function secLbl(x){return x==="AT / BH"?"Manutenção / BH":x;}
   function intgColabs(){var s={};intgList().forEach(function(p){if(p.colaborador)s[p.colaborador]=1;});return Object.keys(s).sort();}
   function intgClis(){var s={};intgList().forEach(function(p){if(p.cliente)s[p.cliente]=1;});return Object.keys(s).sort();}
   function intgChip(p){var pr=p||"S/P";return '<span style="display:inline-block;font-size:11px;font-weight:800;color:#fff;background:'+(INTG_PRIO_COL[pr]||SL)+';border-radius:6px;padding:1px 6px">'+esc(pr)+'</span>';}
@@ -9900,7 +10018,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     var done=(p.estado==="Concluído");
     return '<div class="intgrow" style="display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid #E4E8EB;border-radius:9px;margin-bottom:6px;flex-wrap:wrap">'+
       intgChip(p.prioridade)+
-      '<div style="flex:1;min-width:170px"><div style="font-weight:600;font-size:12.5px;color:#28313A">'+esc(p.projeto||"(sem descrição)")+'</div><div style="font-size:12px;color:#6B7680">'+esc(p.cliente||"—")+(p.seccao?' · '+esc(p.seccao):'')+(p.mesConcl&&done?' · concluído '+esc(p.mesConcl):'')+'</div></div>'+
+      '<div style="flex:1;min-width:170px"><div style="font-weight:600;font-size:12.5px;color:#28313A">'+esc(p.projeto||"(sem descrição)")+'</div><div style="font-size:12px;color:#6B7680">'+esc(p.cliente||"—")+(p.seccao?' · '+esc(secLbl(p.seccao)):'')+(p.mesConcl&&done?' · concluído '+esc(p.mesConcl):'')+'</div></div>'+
       intgColTag(p.colaborador)+intgEstB(p.estado)+
       (canEdit?'<span style="display:flex;gap:4px">'+(!done?'<button class="btn bs" style="background:'+GRN+'" onclick="intgConcluir(\''+p.id+'\')">✓ Concluir</button>':'')+'<button class="btn bs" style="background:'+SL+'" onclick="openIntgProj(\''+p.id+'\')">Editar</button><button class="btn bs" style="background:#fff;color:'+DNG+';border:1px solid '+rgba(DNG,.3)+'" onclick="delIntgProj(\''+p.id+'\')">×</button></span>':'')+
       '</div>';
@@ -9927,7 +10045,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
       h+='<div class="cd"><div class="ch"><div class="ct2">Distribuição</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+intgSel("colab",f.colab,intgColabs(),"Colaborador")+intgSel("estado",f.estado,INTG_EST,"Estado")+intgSel("prio",f.prio,INTG_PRIO.map(function(p){return {v:p,l:INTG_PRIO_LBL[p]};}),"Prioridade")+'</div></div>';
       var flt=intgApply(all,view);
       h+='<div style="overflow-x:auto"><table><thead><tr><th>Secção</th><th style="text-align:right">Por fazer</th><th style="text-align:right">Em curso</th><th style="text-align:right">Concluído</th><th style="text-align:right">Total</th></tr></thead><tbody>';
-      INTG_SEC.concat(["—"]).forEach(function(sec){var rows=flt.filter(function(p){return (p.seccao||"—")===sec;});if(!rows.length)return;var pf=rows.filter(function(p){return p.estado==="Por Fazer";}).length,ec=rows.filter(function(p){return p.estado==="Em Curso";}).length,cc=rows.filter(function(p){return p.estado==="Concluído";}).length;h+='<tr><td style="font-weight:600">'+esc(sec)+'</td><td style="text-align:right;color:#5F6B75">'+pf+'</td><td style="text-align:right;color:'+BLU+'">'+ec+'</td><td style="text-align:right;color:'+GRN+'">'+cc+'</td><td style="text-align:right;font-weight:700">'+rows.length+'</td></tr>';});
+      INTG_SEC.concat(["—"]).forEach(function(sec){var rows=flt.filter(function(p){return (p.seccao||"—")===sec;});if(!rows.length)return;var pf=rows.filter(function(p){return p.estado==="Por Fazer";}).length,ec=rows.filter(function(p){return p.estado==="Em Curso";}).length,cc=rows.filter(function(p){return p.estado==="Concluído";}).length;h+='<tr><td style="font-weight:600">'+esc(secLbl(sec))+'</td><td style="text-align:right;color:#5F6B75">'+pf+'</td><td style="text-align:right;color:'+BLU+'">'+ec+'</td><td style="text-align:right;color:'+GRN+'">'+cc+'</td><td style="text-align:right;font-weight:700">'+rows.length+'</td></tr>';});
       h+='</tbody></table></div></div>';
       // por prioridade barra
       h+='<div class="cd"><div class="ct2" style="margin-bottom:10px">Por prioridade (ativos)</div>';
@@ -9941,7 +10059,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     var flt=intgApply(base,view);
     // filters bar per view
     var fbar="";
-    if(view==="colab")fbar=intgSel("sec",f.sec,INTG_SEC,"Secção")+intgSel("prio",f.prio,INTG_PRIO.map(function(p){return {v:p,l:INTG_PRIO_LBL[p]};}),"Prioridade");
+    if(view==="colab")fbar=intgSel("sec",f.sec,INTG_SEC.map(function(x){return {v:x,l:secLbl(x)};}),"Secção")+intgSel("prio",f.prio,INTG_PRIO.map(function(p){return {v:p,l:INTG_PRIO_LBL[p]};}),"Prioridade");
     else if(view==="cliente")fbar=intgSel("colab",f.colab,intgColabs(),"Colaborador")+intgSel("prio",f.prio,INTG_PRIO.map(function(p){return {v:p,l:INTG_PRIO_LBL[p]};}),"Prioridade");
     else if(view==="concluidos"){var meses={};all.forEach(function(p){if(p.mesConcl)meses[p.mesConcl]=1;});fbar=intgSel("colab",f.colab,intgColabs(),"Colaborador")+intgSel("mes",f.mes,Object.keys(meses).sort(),"Mês");}
     h+='<div class="cd"><div class="ch"><div class="ct2">'+flt.length+' projeto'+(flt.length===1?"":"s")+'</div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+intgSearch()+fbar+((f.colab||f.prio||f.sec||f.mes||f.q)?'<button class="btn bs" style="background:#EFF1F4;color:#5F6B75" onclick="window.__iF={};rPnl()">Limpar</button>':'')+'</div></div>';
@@ -9970,7 +10088,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     var cliDL=(D.clients||[]).map(function(c){return '<option value="'+esc(c.name)+'"></option>';}).join("")+intgClis().map(function(c){return '<option value="'+esc(c)+'"></option>';}).join("");
     var body='<div class="r2">'+fld("Colaborador *",'<input id="ip_col" list="ip_coll" value="'+esc(x.colaborador||"")+'" placeholder="ex: JPC"><datalist id="ip_coll">'+colDL+'</datalist>')+fld("Cliente *",'<input id="ip_cli" list="ip_clil" value="'+esc(x.cliente||"")+'" placeholder="cliente ou interno"><datalist id="ip_clil">'+cliDL+'</datalist>')+'</div>'+
       fld("Projeto / Descrição *",'<input id="ip_proj" value="'+esc(x.projeto||"")+'" placeholder="descrição do projeto ou tarefa">')+
-      '<div class="r2">'+fld("Prioridade",sel("ip_prio",INTG_PRIO.map(function(p){return {v:p,t:INTG_PRIO_LBL[p]};}),x.prioridade||"P3"))+fld("Secção",sel("ip_sec",INTG_SEC.map(function(s){return {v:s,t:s};}),x.seccao||"Projetos"))+'</div>'+
+      '<div class="r2">'+fld("Prioridade",sel("ip_prio",INTG_PRIO.map(function(p){return {v:p,t:INTG_PRIO_LBL[p]};}),x.prioridade||"P3"))+fld("Secção",sel("ip_sec",INTG_SEC.map(function(s){return {v:s,t:secLbl(s)};}),x.seccao||"Projetos"))+'</div>'+
       '<div class="r2">'+fld("Estado",sel("ip_est",INTG_EST.map(function(e){return {v:e,t:e};}),x.estado||"Por Fazer"))+fld("Data de fecho prevista",'<input type="date" id="ip_df" value="'+esc(x.dataFecho||"")+'">')+'</div>'+
       '<div style="display:flex;gap:8px;margin-top:8px">'+(id?'<button class="btn bs" style="background:#fff;color:'+DNG+';border:1px solid '+rgba(DNG,.3)+'" onclick="delIntgProj(\''+id+'\')">Apagar</button>':'')+'<button class="btn" style="background:'+R+';flex:1" onclick="svIntgProj(\''+(id||"")+'\')">Guardar</button></div>';
     document.getElementById("mArea").innerHTML=mWrap(id?"Editar projeto":"Novo projeto de integração",body);
@@ -10139,11 +10257,118 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     if(typeof confirmM==="function")confirmM('Remover o anexo "'+esc(a.name)+'"?',doIt,{yesLabel:"Remover"});else doIt();
   };
 
+  // ---------- FOTOS DO INVENTÁRIO (out 2026): ficheiro grande no Storage, miniatura no estado ----------
+  var FOTO={dir:"inventario/",urls:{},busy:false,blocked:false,big:null,TH:220};
+  window.__FOTO=FOTO;
+  function fotoNorm(s){return String(s==null?"":s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ").trim();}
+  function fotoEsc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+  function fotoInv(){return (typeof D!=="undefined"&&D&&Array.isArray(D.inventory))?D.inventory:[];}
+  function fotoItem(ref){if(!ref)return null;var inv=fotoInv();var a=inv.filter(function(i){return i&&i.id===ref;})[0];if(a)return a;var n=fotoNorm(ref);if(!n)return null;
+    var m=inv.filter(function(i){return i&&fotoNorm(i.nome)===n;});return m.filter(function(i){return i.foto;})[0]||m[0]||null;}
+  window.fotoDe=function(ref){var it=fotoItem(ref);return (it&&it.foto)?it:null;};
+  function fotoScale(src,mx,q){return new Promise(function(res,rej){var img=new Image();img.onload=function(){try{var w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;if(!w||!h){rej(new Error("imagem vazia"));return;}var sc=Math.min(1,mx/Math.max(w,h));var c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*sc));c.height=Math.max(1,Math.round(h*sc));var g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);res(c.toDataURL("image/jpeg",q));}catch(e){rej(e);}};img.onerror=function(){rej(new Error("imagem inválida"));};img.src=src;});}
+  function fotoBlob(dataUrl){var k=dataUrl.indexOf(",");var mime=(dataUrl.slice(0,k).match(/data:([^;]+)/)||[])[1]||"image/jpeg";var bin=atob(dataUrl.slice(k+1));var a=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:mime});}
+  function fotoExt(dataUrl){var m=(dataUrl.slice(0,40).match(/data:image\/([a-z0-9+]+)/i)||[])[1]||"jpeg";m=m.toLowerCase();return m==="jpeg"?"jpg":(m==="svg+xml"?"svg":m);}
+  // envia e confirma que o ficheiro ficou mesmo lá (só depois é que a app larga a imagem original)
+  async function fotoUp(path,dataUrl){var b=fotoBlob(dataUrl);var r=await sb.storage.from(ATT_BUCKET).upload(path,b,{contentType:b.type,upsert:false});
+    if(r&&r.error&&!/exist|duplicate/i.test(String(r.error.message||r.error)))throw r.error;
+    var s=await sb.storage.from(ATT_BUCKET).createSignedUrl(path,3600);if(!s||s.error||!s.data||!s.data.signedUrl)throw (s&&s.error)||new Error("ficheiro não confirmado");
+    FOTO.urls[path]={u:s.data.signedUrl,exp:Date.now()+50*60000};return true;}
+  async function fotoUrls(paths){var seen={},need=[];paths.forEach(function(p){if(p&&!seen[p]){seen[p]=1;if(!(FOTO.urls[p]&&FOTO.urls[p].exp>Date.now()))need.push(p);}});
+    if(need.length&&sb){try{var st=sb.storage.from(ATT_BUCKET);
+        if(typeof st.createSignedUrls==="function"){var r=await st.createSignedUrls(need,3600);((r&&r.data)||[]).forEach(function(x){if(x&&x.signedUrl&&!x.error&&x.path)FOTO.urls[x.path]={u:x.signedUrl,exp:Date.now()+50*60000};});}
+        else{for(var i=0;i<need.length;i++){var s=await st.createSignedUrl(need[i],3600);if(s&&s.data&&s.data.signedUrl)FOTO.urls[need[i]]={u:s.data.signedUrl,exp:Date.now()+50*60000};}}
+      }catch(e){}}
+    var o={};Object.keys(seen).forEach(function(p){if(FOTO.urls[p])o[p]=FOTO.urls[p].u;});return o;}
+  // passagem das fotos antigas (guardadas dentro dos dados) para o Storage — uma vez, por quem pode gravar
+  async function fotoMigrate(){
+    if(FOTO.busy||FOTO.blocked||!sb||!ready||typeof D==="undefined"||!D)return;
+    try{if(isReadOnlyNow())return;}catch(e){return;}
+    var todo=fotoInv().filter(function(i){return i&&i.id&&!i.fotoPath&&typeof i.foto==="string"&&/^data:image\/[a-z0-9+]+;base64,/i.test(i.foto);});
+    if(!todo.length)return;FOTO.busy=true;var n=0;
+    try{for(var k=0;k<todo.length;k++){var it=todo[k],orig=it.foto;
+        var path=FOTO.dir+String(it.id).replace(/[^\w.\-]+/g,"_")+"."+fotoExt(orig);
+        await fotoUp(path,orig);
+        var th=await fotoScale(orig,FOTO.TH,0.72);
+        if(it.foto!==orig)continue; // alguém mudou a foto entretanto
+        it.fotoPath=path;if(th.length<orig.length)it.foto=th;n++;}
+    }catch(e){FOTO.blocked=true;try{console.warn("[Fotos] passagem para o Storage interrompida:",e&&e.message||e);}catch(_){}}
+    finally{FOTO.busy=false;}
+    if(n){FOTO.migradas=(FOTO.migradas||0)+n;try{if(typeof logAct==="function")logAct("Inventário",n+" foto(s) passaram para o armazenamento de ficheiros");}catch(e){}
+      try{window.__selfSave=true;save();}catch(e){}try{fotoUpgrade();}catch(e){}}
+  }
+  window.__fotoMigrate=fotoMigrate;
+  setInterval(function(){try{if(window.__mwLoaded&&!(document.getElementById("mArea")||{}).innerHTML)fotoMigrate();}catch(e){}},7000);
+  // foto nova: imagem grande para o Storage + miniatura nos dados
+  window.invFotoPreview=function(input){var f=input.files&&input.files[0];if(!f)return;var r=new FileReader();
+    r.onload=async function(e){try{var big=await fotoScale(e.target.result,1600,0.86);var th=await fotoScale(big,FOTO.TH,0.72);FOTO.big=big;
+        var hid=document.getElementById("iv_foto");if(hid)hid.value=th;var pv=document.getElementById("iv_foto_prev");if(pv)pv.innerHTML='<img src="'+big+'" style="max-height:150px;max-width:100%;border-radius:8px">';
+      }catch(er){toastSafe("Não consegui ler essa imagem. Experimenta JPG ou PNG.");}};
+    r.readAsDataURL(f);};
+  if(typeof window.openInvItem==="function"){var _opInv=window.openInvItem;window.openInvItem=function(){FOTO.big=null;return _opInv.apply(this,arguments);};}
+  async function fotoAttach(it,big,th){var old=it.fotoPath;var path=FOTO.dir+String(it.id).replace(/[^\w.\-]+/g,"_")+"-"+Date.now().toString(36)+".jpg";
+    try{await fotoUp(path,big);}catch(e){if(it.foto===th&&old){delete it.fotoPath;try{window.__selfSave=true;save();}catch(_){}}
+      toastSafe("A foto ficou guardada só em tamanho pequeno: não consegui enviar o ficheiro ("+((e&&e.message)||e)+").");return;}
+    if(it.foto!==th)return;it.fotoPath=path;try{window.__selfSave=true;save();}catch(e){}
+    if(old&&old!==path){delete FOTO.urls[old];try{await sb.storage.from(ATT_BUCKET).remove([old]);}catch(e){}}
+    try{fotoUpgrade();}catch(e){}}
+  if(typeof window.svInvItem==="function"){var _svInv=window.svInvItem;window.svInvItem=function(id){
+      var big=FOTO.big;var hid=document.getElementById("iv_foto");var th=hid?hid.value:"";
+      var r=_svInv.apply(this,arguments);
+      if(big&&th&&sb){var it=id?fotoInv().filter(function(i){return i.id===id;})[0]:fotoInv().filter(function(i){return i.foto===th;}).pop();
+        if(it&&it.foto===th){FOTO.big=null;fotoAttach(it,big,th);}}
+      return r;};}
+  // ver em grande (mostra já a miniatura e troca pela imagem completa quando chega)
+  window.invFotoBig=function(ref){var it=window.fotoDe(ref);if(!it)return;var old=document.getElementById("fotoOv");if(old)old.remove();
+    var ov=document.createElement("div");ov.id="fotoOv";ov.style.cssText="position:fixed;inset:0;z-index:100000;background:rgba(20,26,32,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;cursor:zoom-out";
+    ov.onclick=function(){ov.remove();};
+    var pv=Number(it.precoVenda)||0;
+    ov.innerHTML='<img alt="" src="'+it.foto+'" style="width:min(92vw,980px);max-height:78vh;object-fit:contain;border-radius:10px;background:#fff"><div style="color:#fff;font:600 15px/1.35 inherit;margin-top:12px;text-align:center;max-width:92vw">'+fotoEsc(it.nome||"")+'<div style="font-weight:400;font-size:12.5px;opacity:.82;margin-top:3px">'+(pv&&typeof fmt==="function"?"Venda "+fmt(pv)+" · ":"")+"Stock "+(Number(it.qtd)||0)+(it.localizacao?" · "+fotoEsc(it.localizacao):"")+' · clica para fechar</div></div>';
+    document.body.appendChild(ov);
+    if(it.fotoPath)fotoUrls([it.fotoPath]).then(function(m){var u=m[it.fotoPath];var im=ov.querySelector("img");if(u&&u!=="#"&&im){var pre=new Image();pre.onload=function(){im.src=u;};pre.src=u;}});};
+  document.addEventListener("keydown",function(e){if(e.key==="Escape"){var o=document.getElementById("fotoOv")||document.getElementById("fotoGal");if(o){o.remove();e.stopPropagation();}}},true);
+  // lista do inventário: troca as miniaturas pela imagem completa (um só pedido ao servidor)
+  function fotoUpgrade(){var els=[].slice.call(document.querySelectorAll("[data-fp]")).filter(function(e){return e.getAttribute("data-fp")&&!e.getAttribute("data-fpok");});if(!els.length)return;
+    fotoUrls(els.map(function(e){return e.getAttribute("data-fp");})).then(function(m){els.forEach(function(e){var u=m[e.getAttribute("data-fp")];if(!u||u==="#")return;e.setAttribute("data-fpok","1");var pre=new Image();pre.onload=function(){e.style.backgroundImage='url("'+u+'")';};pre.src=u;});});}
+  window.fotoUpgrade=fotoUpgrade;
+  if(typeof rPnl==="function"){var _rPf=rPnl;rPnl=function(){var r=_rPf.apply(this,arguments);try{fotoUpgrade();}catch(e){}return r;};}
+  // miniatura ao lado do artigo escolhido (orçamento, linhas de fatura e de proposta)
+  window.fotoSel=function(sel,nome){if(!sel)return;var w=sel.parentNode;if(!w||!w.classList||!w.classList.contains("mw-fwrap")){w=document.createElement("span");w.className="mw-fwrap";w.style.cssText="display:flex;align-items:center;gap:5px;min-width:0";sel.parentNode.insertBefore(w,sel);
+      var im=document.createElement("img");im.className="mw-fthumb";im.alt="";im.title="Ver foto em grande";im.style.cssText="width:30px;height:30px;flex:none;object-fit:cover;border-radius:6px;border:1px solid #E4E8EB;cursor:zoom-in;display:none;margin-bottom:3px";im.onclick=function(ev){ev.stopPropagation();window.invFotoBig(im.getAttribute("data-fn"));};
+      w.appendChild(im);w.appendChild(sel);sel.style.flex="1";sel.style.minWidth="0";}
+    var img=w.querySelector(".mw-fthumb");var it=window.fotoDe(nome);if(it){img.src=it.foto;img.setAttribute("data-fn",it.id);img.style.display="";}else{img.removeAttribute("src");img.style.display="none";}};
+  // proposta impressa / PDF
+  window.fotoTd=function(desc){var it=window.fotoDe(desc);return it?'<img alt="" src="'+it.foto+'" style="width:46px;height:46px;object-fit:cover;border-radius:5px;vertical-align:middle;margin-right:9px;border:1px solid #ddd">':"";};
+  // cartão da oportunidade: fotos dos artigos do orçamento
+  window.fotoStrip=function(arts){var seen={},o=[];(Array.isArray(arts)?arts:[]).forEach(function(a){var it=window.fotoDe(a&&a.desc);if(it&&!seen[it.id]){seen[it.id]=1;o.push(it);}});if(!o.length)return "";
+    return '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+o.map(function(it){return '<div onclick="invFotoBig(\''+fotoEsc(it.id)+'\')" title="'+fotoEsc(it.nome)+' — ver em grande" style="width:86px;cursor:zoom-in"><div style="height:64px;border-radius:8px;border:1px solid #E4E8EB;background:#EFF1F4 center/cover no-repeat;background-image:url(\''+it.foto+'\')" data-fp="'+fotoEsc(it.fotoPath||"")+'"></div><div style="font-size:10.5px;color:#5F6B75;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+fotoEsc(it.nome)+'</div></div>';}).join("")+'</div>';};
+  // catálogo com fotos, para escolher artigos a olhar para eles
+  window.fotoGaleria=function(){var old=document.getElementById("fotoGal");if(old)old.remove();
+    var cat={};try{(typeof window.catItems==="function"?window.catItems():[]).forEach(function(c){cat[fotoNorm(c.nome)]=Number(c.precoVenda)||0;});}catch(e){}
+    var its=fotoInv().filter(function(i){return i&&i.nome;}).map(function(i){return {it:i,pv:Number(i.precoVenda)||cat[fotoNorm(i.nome)]||0};}).sort(function(a,b){return (b.it.foto?1:0)-(a.it.foto?1:0)||String(a.it.nome).localeCompare(String(b.it.nome));});
+    var ov=document.createElement("div");ov.id="fotoGal";ov.style.cssText="position:fixed;inset:0;z-index:99990;background:rgba(20,26,32,.6);display:flex;align-items:center;justify-content:center;padding:16px";
+    ov.onclick=function(e){if(e.target===ov)ov.remove();};
+    var tiles=its.map(function(x){var i=x.it;return '<div class="fg_t" data-q="'+fotoEsc(fotoNorm((i.nome||"")+" "+(i.categoria||"")+" "+(i.notas||"")))+'" style="border:1px solid #E4E8EB;border-radius:12px;overflow:hidden;background:#fff;display:flex;flex-direction:column">'
+        +(i.foto?'<div onclick="invFotoBig(\''+fotoEsc(i.id)+'\')" title="Ver em grande" data-fp="'+fotoEsc(i.fotoPath||"")+'" style="height:130px;cursor:zoom-in;background:#EFF1F4 center/cover no-repeat;background-image:url(\''+i.foto+'\')"></div>':'<div style="height:130px;background:#EFF1F4;display:flex;align-items:center;justify-content:center;font-size:34px;color:#C6CDD4">📦</div>')
+        +'<div style="padding:9px 10px;display:flex;flex-direction:column;gap:5px;flex:1"><div style="font-weight:700;font-size:12.5px;line-height:1.3">'+fotoEsc(i.nome)+'</div><div style="font-size:12px;color:#5F6B75;margin-top:auto">'+(x.pv&&typeof fmt==="function"?'<b style="color:#2B3540">'+fmt(x.pv)+'</b> · ':'')+'stock '+(Number(i.qtd)||0)+'</div>'
+        +'<button type="button" class="btn bs" style="background:#2E8C93" onclick="fotoPick(\''+fotoEsc(i.id)+'\',this)">+ Adicionar</button></div></div>';}).join("");
+    ov.innerHTML='<div style="background:#F6F7F9;border-radius:16px;width:min(1040px,100%);max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3)"><div style="display:flex;gap:10px;align-items:center;padding:14px 16px;border-bottom:1px solid #E4E8EB"><div style="font-weight:800;font-size:15px;white-space:nowrap">Artigos com foto</div><input id="fg_q" placeholder="Procurar artigo…" style="flex:1;min-width:0;border:1px solid #D5DBE0;border-radius:9px;padding:8px 11px;font-size:13px;font-family:inherit"><span id="fg_n" style="font-size:12px;color:#2E8C93;font-weight:700;white-space:nowrap"></span><button type="button" class="btn bs" style="background:#5F6B75" onclick="document.getElementById(\'fotoGal\').remove()">Fechar</button></div>'
+      +'<div style="padding:14px 16px;overflow:auto"><div id="fg_grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px">'+(tiles||'<div style="font-size:13px;color:#6B7680">O inventário ainda não tem artigos.</div>')+'</div><div style="font-size:11.5px;color:#6B7680;margin-top:12px">Aqui aparecem os artigos do inventário. Para um artigo do catálogo ter foto, cria-o no inventário com o mesmo nome e junta a imagem.</div></div></div>';
+    document.body.appendChild(ov);
+    var q=document.getElementById("fg_q");q.oninput=function(){var v=fotoNorm(q.value);[].forEach.call(ov.querySelectorAll(".fg_t"),function(t){t.style.display=(!v||t.getAttribute("data-q").indexOf(v)>=0)?"flex":"none";});};
+    try{q.focus();}catch(e){}try{fotoUpgrade();}catch(e){}};
+  window.fotoPick=function(id,btn){var it=fotoItem(id);var box=document.getElementById("dm_arts");if(!it||!box||typeof dmArtRowHTML!=="function")return;
+    var cat=0;try{(typeof window.catItems==="function"?window.catItems():[]).forEach(function(c){if(!cat&&fotoNorm(c.nome)===fotoNorm(it.nome))cat=Number(c.precoVenda)||0;});}catch(e){}
+    box.insertAdjacentHTML("beforeend",dmArtRowHTML(box.querySelectorAll(".dm_art").length,{desc:it.nome,qtd:1,precoUnit:Number(it.precoVenda)||cat||0,iva:23}));
+    try{if(typeof dmArtCalc==="function")dmArtCalc();}catch(e){}
+    FOTO.picked=(FOTO.picked||0)+1;if(btn){btn.textContent="✓ Adicionado";setTimeout(function(){btn.textContent="+ Adicionar";},1400);}
+    var n=document.getElementById("fg_n");if(n)n.textContent=box.querySelectorAll(".dm_art").length+" no orçamento";};
+
   // ---------- arranque ----------
   async function boot(){
     hideSplash();
     if(!window.supabase){showLogin("Sem ligação ao servidor. Verifica a Internet e recarrega.");return;}
-    sb=window.supabase.createClient(SB_URL,SB_KEY);
+    sb=window.supabase.createClient(SB_URL,SB_KEY);window.__mwOnline=true;
     var s=await sb.auth.getSession();
     if(s.data&&s.data.session){await afterLogin(s.data.session.user);}
     else{showLogin("");}
@@ -10383,7 +10608,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
   /* ---------- tabelas paginadas (50 linhas) ---------- */
   var PG=50;window.__mwPg=window.__mwPg||{};
   function paginate(){var app=$("#app");if(!app)return;
-    $$("table",app).forEach(function(tb,ti){if(tb.closest(".mdl"))return;var rows=$$("tbody > tr",tb).filter(function(r){return !r.querySelector("th");});if(rows.length<=PG+10)return;
+    $$("table",app).forEach(function(tb,ti){if(tb.closest(".mdl"))return;var rows=$$("tbody > tr",tb).filter(function(r){var c=r.firstElementChild;return !(c&&c.tagName==="TH")&&!(r.cells.length<12&&r.querySelector("th"));});if(rows.length<=PG+10)return;
       var key=cTab+":"+ti;var pg=window.__mwPg[key]||0;
       var searching=rows.some(function(r){return r.style.display==="none";});
       var pages=Math.ceil(rows.length/PG);if(pg>=pages)pg=pages-1;
@@ -10401,6 +10626,8 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     pager.innerHTML='<span>'+(pg*PG+1)+'–'+Math.min(rows.length,(pg+1)*PG)+' de '+rows.length+'</span><button type="button" data-d="-1"'+(pg===0?" disabled":"")+'>‹ Anterior</button><button type="button" data-d="1"'+(pg>=pages-1?" disabled":"")+'>Seguinte ›</button><button type="button" data-d="all">Mostrar todos</button>';
     pager.onclick=function(ev){var b=ev.target.closest("button");if(!b||b.disabled)return;var d=b.getAttribute("data-d");if(d==="all"){rows.forEach(function(r){r.classList.remove("mw-pg-hide");});pager.innerHTML='<span>'+rows.length+' movimentos</span>';return;}window.__mwPg[key]=Math.max(0,Math.min(pages-1,pg+Number(d)));paginateList();box.scrollIntoView({block:"start",behavior:"smooth"});};}
   var _pgT=paginate;paginate=function(){_pgT();try{paginateList();}catch(e){}};
+  // ao mudar de página ou «ver mais», trata as linhas que ficaram visíveis
+  document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest(".mw-pager button, .mw-kmore");if(b)setTimeout(function(){try{moreMenus();}catch(e){}try{iconize();}catch(e){}},0);},true); // em captura: o botão é redesenhado pelo próprio clique
   // a pesquisa de cada página continua a funcionar: ao escrever mostra todos os resultados
   document.addEventListener("input",function(ev){if(ev.target&&ev.target.closest&&ev.target.closest("#app")&&/search|text/.test(ev.target.type||"")){setTimeout(paginate,30);}},true);
 
@@ -10420,7 +10647,8 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
   function isDestr(b){var t=(b.textContent||"").trim();if(!t)return false;if(b.closest(".dc")&&/^(→|➜|✎)/.test(t))return true;if(/^(×|✕)$/.test(t))return true;return /(^|\s)(remover|eliminar|apagar)\b/i.test(t)||/^✗\s*perdido$/i.test(t);}
   function moreMenus(){var app=$("#app");if(!app)return;
     var hosts=$$(".dc",app).concat($$("tbody tr",app));
-    hosts.forEach(function(h){if(h.querySelector(".mw-more"))return;var btns=$$("button",h).filter(function(b){return !b.__mwM&&!b.closest(".mw-more")&&isDestr(b);});
+    hosts.forEach(function(h){if(h.__mwMM||h.classList.contains("mw-pg-hide")||h.classList.contains("mw-kan-hide"))return;h.__mwMM=1; // linhas escondidas pela paginação tratam-se quando aparecem
+      if(h.querySelector(".mw-more"))return;var btns=$$("button",h).filter(function(b){return !b.__mwM&&!b.closest(".mw-more")&&isDestr(b);});
       btns=btns.filter(function(b){return !b.closest(".mdl");});if(!btns.length)return;
       var wrap=document.createElement("span");wrap.className="mw-more";wrap.innerHTML='<button type="button" title="Mais ações" aria-label="Mais ações">⋯</button><div class="mw-more-menu"></div>';
       var menu=wrap.querySelector(".mw-more-menu");
@@ -10554,14 +10782,15 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
       if(EQUIP_IDS[id]){inp.__mwPick=1;var it=invItems();var cur4=inp.value.trim();var m4=it.filter(function(i){return norm2(i.nome)===norm2(cur4);})[0];if(m4)cur4=m4.nome;
         var sel4=mkSelect(inp,it.map(function(i){return {v:i.nome,t:i.nome+((Number(i.qtd)||0)>0?" · stock "+i.qtd:"")};}),cur4,"— escolher equipamento do inventário —");sel4.onchange=function(){inp.value=sel4.value;fire(inp);};if(m4)inp.value=m4.nome;return;}
       var isArt=inp.classList.contains("dma_desc")||/^fl_desc_\d+$/.test(id)||/^ql_d_\d+$/.test(id);
-      if(isArt){inp.__mwPick=1;var its=invItems();var cur5=inp.value.trim();var m5=its.filter(function(i){return norm2(i.nome)===norm2(cur5);})[0];
+      if(isArt){inp.__mwPick=1;var its=invItems().map(function(i){return {nome:i.nome,precoVenda:i.precoVenda,grp:"Inventário"};});try{(typeof window.catItems==="function"?window.catItems():[]).forEach(function(c){var ex=its.filter(function(i){return norm2(i.nome)===norm2(c.nome);})[0];if(!ex)its.push(c);else{ex.cat=1;if(!(Number(ex.precoVenda)>0))ex.precoVenda=c.precoVenda;}});}catch(e){}var cur5=inp.value.trim();var m5=its.filter(function(i){return norm2(i.nome)===norm2(cur5);})[0];
         var sel5=document.createElement("select");sel5.className="mw-pick";sel5.style.cssText="width:100%;margin-bottom:3px";
-        sel5.innerHTML='<option value="">— escolher artigo —</option>'+its.map(function(i,k){var pv=Number(i.precoVenda)||0;return '<option value="i'+k+'"'+(m5===i?" selected":"")+'>'+E(i.nome)+(pv?" · "+F(pv):"")+'</option>';}).join("")+'<option value="__outro"'+(!m5&&cur5?" selected":"")+'>✎ Outro (descrição livre)…</option>';
-        inp.parentNode.insertBefore(sel5,inp);inp.style.display=(!m5&&cur5)?"":"none";
-        sel5.onchange=function(){var v=sel5.value;if(v==="__outro"){inp.style.display="";inp.focus();return;}if(!v){inp.value="";inp.style.display="none";fire(inp);return;}
+        var _gr={},_go=[];its.forEach(function(i,k){var g=i.grp||"Outros";if(!_gr[g]){_gr[g]=[];_go.push(g);}var pv=Number(i.precoVenda)||0;_gr[g].push('<option value="i'+k+'"'+(m5===i?" selected":"")+'>'+E(i.nome)+(pv?" · "+F(pv):"")+'</option>');});
+        sel5.innerHTML='<option value="">— escolher artigo —</option>'+_go.map(function(g){return '<optgroup label="'+E(g)+' ('+_gr[g].length+')">'+_gr[g].join("")+'</optgroup>';}).join("")+'<option value="__outro"'+(!m5&&cur5?" selected":"")+'>✎ Outro (descrição livre)…</option>';
+        inp.parentNode.insertBefore(sel5,inp);inp.style.display=(!m5&&cur5)?"":"none";try{if(window.fotoSel)window.fotoSel(sel5,m5?m5.nome:"");}catch(e){}
+        sel5.onchange=function(){var v=sel5.value;try{if(window.fotoSel)window.fotoSel(sel5,(v&&v!=="__outro")?its[Number(v.slice(1))].nome:"");}catch(e){}if(v==="__outro"){inp.style.display="";inp.focus();return;}if(!v){inp.value="";inp.style.display="none";fire(inp);return;}
           var item=its[Number(v.slice(1))];inp.value=item.nome;inp.style.display="none";
           var row=inp.closest(".dm_art, tr");var pr=row&&(row.querySelector(".dma_preco")||row.querySelector('input[id^="fl_preco_"]')||row.querySelector('input[id^="ql_p_"]'));
-          var pv=Number(item.precoVenda)||0;if(pr&&pv>0&&!(Number(pr.value)>0)){pr.value=pv;fire(pr);}fire(inp);};return;}
+          var pv=Number(item.precoVenda)||0;if(pr&&(pv>0||item.cat)){pr.value=pv;fire(pr);}fire(inp);};return;}
     });}
   window.mwEnhanceFields=enhanceFields;
   var mo2=new MutationObserver(function(){var a=document.getElementById("mArea");if(a&&a.querySelector("input"))enhanceFields(a);});
@@ -10646,9 +10875,16 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
       if(pick)used[pick.id]=1;
       var ch=[];if(pick){if(pick.crmEtapa!==o.et)ch.push("etapa");if(Math.abs((Number(pick.value)||0)-o.val)>=0.01)ch.push("valor");if(fold(pick.vendedor)!==fold(vd))ch.push("vendedor");if(Math.abs((Number(pick.mrr)||0)-o.mrr)>=0.01)ch.push("MRR");}
       plan.push({o:o,d:pick,ch:ch});});
+    // oportunidade do ficheiro que parece ser uma já criada no ERP (não veio do Odoo): não se cria outra vez
+    var erpOps=(D.deals||[]).filter(function(d){return d&&d.src!=="crm"&&isCrmDeal(d)&&d.stage!=="perdido"&&d.stage!=="concluido";});var usedE={};
+    function tk(x){var o={};fold(x).split(" ").forEach(function(t){if(t.length>=3)o[t]=1;});return o;}
+    function simT(a,b){var A=tk(a),B=tk(b),i=0,u=0,k;for(k in A){u++;if(B[k])i++;}for(k in B)if(!A[k])u++;return u?i/u:0;}
+    if(erpOps.length)plan.forEach(function(p){if(p.d)return;var o=p.o;var cl=null;try{cl=matchClient(o.op)||(o.ct?matchClient(o.ct):null);}catch(e){}
+      var hit=erpOps.filter(function(d){if(usedE[d.id])return false;if(fold(d.product)===fold(o.op))return true;return !!(cl&&d.clientId===cl.id&&simT(d.product,o.op)>=0.5);})[0];
+      if(hit){usedE[hit.id]=1;p.erp=hit;}});
     var missing=old.filter(function(d){return !used[d.id];});
-    return {plan:plan,missing:missing,
-      novas:plan.filter(function(p){return !p.d;}).length,
+    return {plan:plan,missing:missing,jaErp:plan.filter(function(p){return !!p.erp;}).length,
+      novas:plan.filter(function(p){return !p.d&&!p.erp;}).length,
       alteradas:plan.filter(function(p){return p.d&&p.ch.length;}).length,
       iguais:plan.filter(function(p){return p.d&&!p.ch.length;}).length};};
 
@@ -10659,6 +10895,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
         d.product=o.op;d.value=o.val;d.mrr=o.mrr;d.arr=Math.round(o.mrr*12*100)/100;d.stage=o.st;d.crmEtapa=o.et;d.vendedor=o.vd;
         if(p.ch.indexOf("etapa")>=0||!d.crmEntradaEtapa){d.date=o.ent;d.crmEntradaEtapa=o.ent;}
         if(o.ua)d.crmUltAtividade=o.ua;d.crmSync=_hojeLocal();if(p.ch.length)n.alteradas++;return;}
+      if(p.erp){p.erp.odooVisto=_hojeLocal();p.erp.odooEtapa=o.et;n.jaErp=(n.jaErp||0)+1;return;} // já existe no ERP: fica como está cá
       var typ=/\bAT\s*20\d\d|\bAT\b/.test(o.op)?"AT":(/\bBH\b|bolsa|banco de horas|horas/i.test(o.op)?"SV":"NV");
       var id="crm_"+hash(fold(o.op)+"|"+fold(o.ct)+"|"+fold(o.em)+"|"+fold(o.vd)+"|"+(D.deals||[]).length);
       var cl=null,how="";try{cl=matchClient(o.op)||(o.ct?matchClient(o.ct):null);}catch(e){}
@@ -10685,10 +10922,12 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
       window.__crmP=P;window.__crmF=f.name;
       var tot=recs.reduce(function(a,o){return a+o.val;},0);
       var mv=P.missing.filter(function(d){return d.stage!=="concluido";}).length;
-      var lst=P.plan.filter(function(p){return !p.d||p.ch.length;}).slice(0,60).map(function(p){var o=p.o;
+      var lst=P.plan.filter(function(p){return !p.d||p.ch.length;}).sort(function(a,b){return (b.erp?1:0)-(a.erp?1:0);}).slice(0,60).map(function(p){var o=p.o;
+        if(p.erp)return '<div style="font-size:12px;padding:4px 0;border-top:1px solid #EFF1F4;color:#8a5a08"><b>Já existe no ERP</b> · '+escH(o.op.slice(0,60))+' · '+escH(o.et)+' <span style="color:#6B7680">→ «'+escH(String(p.erp.product||"").slice(0,50))+'» ('+escH(SL2[p.erp.stage]||p.erp.stage)+')</span></div>';
         return '<div style="font-size:12px;padding:4px 0;border-top:1px solid #EFF1F4"><b>'+(p.d?"Alterada":"Nova")+'</b> · '+escH(o.op.slice(0,70))+' · '+money(o.val)+' · '+escH(o.et)+(p.d?' <span style="color:#6B7680">('+p.ch.join(", ")+(p.ch.indexOf("etapa")>=0?": era "+escH(p.d.crmEtapa):"")+')</span>':'')+'</div>';}).join("");
       var body='<div style="font-size:13px;line-height:1.8">Ficheiro <b>'+escH(f.name)+'</b>: <b>'+recs.length+'</b> oportunidades · '+money(tot)+'<br>'+
         'Novas: <b>'+P.novas+'</b> · com alterações: <b>'+P.alteradas+'</b> · iguais: '+P.iguais+'</div>'+
+        (P.jaErp?'<div class="ins w" style="margin:10px 0;font-size:12.5px"><b>'+P.jaErp+'</b> oportunidade(s) do ficheiro parecem ser as mesmas que já foram criadas aqui no ERP. <b>Não são criadas outra vez</b> e a versão do ERP fica como está. Confirma na lista abaixo se a correspondência está certa.</div>':'')+
         (P.missing.length?'<div class="ins" style="margin:10px 0;font-size:12.5px">Há <b>'+P.missing.length+'</b> oportunidades na app que não vêm neste ficheiro ('+mv+' ainda abertas). Por defeito ficam como estão. Se o ficheiro é a <b>lista completa</b> do Odoo (sem filtros), marca a opção para as tirar do pipeline. Ficam guardadas no arquivo e nada é apagado.'+
           '<label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:600"><input type="checkbox" id="crmArq"> O ficheiro é a lista completa: arquivar as '+P.missing.length+' que não vêm nele</label></div>':'')+
         (lst?'<div style="max-height:260px;overflow:auto;margin-top:8px">'+lst+'</div>':'')+
@@ -11083,7 +11322,7 @@ document.addEventListener("change",function(ev){var t=ev.target;if(!t||t.id!=="f
     lista("Agenda","agenda",function(n){if(n.linkId){if(n.linkType==="cliente")n.linkId=mc(n.linkId)||n.linkId;else if(n.linkType==="deal"||n.linkType==="venda")n.linkId=md(n.linkId)||n.linkId;}});
     lista("Horas (registos)","timesheets",function(n){n.dealId=md(n.dealId)||"";n.clientId=mc(n.clientId)||"";if(n.ticketId)n.ticketId=eid(n.ticketId);if(n.reuniaoId)n.reuniaoId=eid(n.reuniaoId);});
     lista("Anexos","attachments",function(n){n.dealId=md(n.dealId)||n.dealId;},function(n){return n.path?"p|"+n.path:null;});
-    lista("Especialidades","clientSpecs",function(n){n.clientId=mc(n.clientId);},function(n){return n.clientId+"|"+nrm(n.specialty);});
+    lista("Especialidades","clientSpecs",function(n){n.clientId=mc(n.clientId);if(!n.clientId)return false;},function(n){return n.clientId+"|"+nrm(n.specialty);});
     lista("Tickets","tickets",function(n){n.clientId=mc(n.clientId)||"";if(n.dealId)n.dealId=md(n.dealId)||"";},function(n){return nrm(n.titulo)+"|"+String(n.createdAt||"").slice(0,10);});
     lista("Upsells","upsells",function(n){n.clientId=mc(n.clientId)||"";});
     lista("Compras","compras",null,function(n){return nrm(n.item)+"|"+(n.pedidoEm||"");});
@@ -11275,7 +11514,7 @@ document.addEventListener("change",function(ev){var t=ev.target;if(!t||t.id!=="f
   document.head.appendChild(css);
   function init(){paint();}
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
-  setInterval(function(){if(on())paint();},4000);
+  setInterval(function(){if(on()&&document.visibilityState==="visible")paint();},15000);
 })();
 
 </script>
@@ -11380,6 +11619,7 @@ document.addEventListener("change",function(ev){var t=ev.target;if(!t||t.id!=="f
       +info("Especialidade",SPEC_CLIN.indexOf(dl.specialty)>=0?esc(dl.specialty):"")
       +info("Tipo de venda",'<select onchange="cardSet(\''+id+'\',\'tipoVenda\',this.value)" style="border:1px solid #E4E8EB;border-radius:6px;padding:3px 6px;font-size:12.5px;font-family:inherit;background:#fff"><option value="">Por classificar</option>'+TIPOS_VENDA.map(function(t){return '<option'+(tipoVendaOf(dl)===t?" selected":"")+'>'+t+'</option>';}).join("")+'</select>')
       +'</div>';
+    try{b+=(window.fotoStrip?window.fotoStrip(dl.artigos):"");}catch(e){}
     b+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">'
       +'<button class="btn" style="background:'+R+'" onclick="editDl(\''+id+'\')">'+(nart?"Orçamento ("+nart+" artigos)":"Criar orçamento")+'</button>'
       +'<button class="btn" style="background:#2E8C93" onclick="openAcao(\''+id+'\')">Definir ação</button>'
@@ -11391,7 +11631,7 @@ document.addEventListener("change",function(ev){var t=ev.target;if(!t||t.id!=="f
       +(dl.nextAction||dl.nextDate?'<div style="font-size:13.5px;font-weight:600">'+esc(dl.nextAction||"follow-up")+(dl.nextDate?' · <span style="color:'+(ov?R:"#414D57")+'">'+fmtD(dl.nextDate)+(ov?" (em atraso)":"")+'</span>':'')+(dl.nextResp?' · '+esc(dl.nextResp):'')+'</div>'+(dl.nextResumo?'<div style="font-size:12px;color:#5F6B75;margin-top:2px">'+esc(dl.nextResumo)+'</div>':''):'<div style="font-size:13px;color:#8a8478">Sem ação definida.</div>')
       +'</div>'+(dl.nextAction||dl.nextDate?'<button class="btn bs" style="background:#1a6b45" onclick="acaoFeita(\''+id+'\')">✓ Concluída</button>':'')+'</div>';
     if(reus.length){b+='<div style="margin-bottom:14px"><div class="ct2" style="margin-bottom:6px">Visitas e reuniões ('+reus.length+')</div>';
-      reus.slice(0,6).forEach(function(r){b+='<div onclick="openReuniao(\''+r.id+'\')" style="display:flex;justify-content:space-between;gap:10px;padding:7px 2px;border-bottom:1px solid #F0F2F4;font-size:12.5px;cursor:pointer"><span><b>'+(r.data?fmtD(r.data):"—")+'</b> · '+esc(r.assunto||r.tipo||"")+'</span><span style="color:#6B7680;white-space:nowrap">'+(r.ambito==="projeto"?"custo do projeto":r.ambito==="proposta"?"esforço de proposta":"")+'</span></div>';});b+='</div>';}
+      reus.slice(0,6).forEach(function(r){b+='<div onclick="openReuniao(\''+r.id+'\')" style="display:flex;justify-content:space-between;gap:10px;padding:7px 2px;border-bottom:1px solid #F0F2F4;font-size:12.5px;cursor:pointer"><span><b>'+(r.data?fmtD(r.data):"—")+'</b> · '+esc(r.assunto||r.tipo||"")+'</span><span style="color:#6B7680;white-space:nowrap">'+(r.ambito==="projeto"?"custo do projeto":r.ambito==="proposta"?"esforço de proposta":"")+' <a onclick="event.stopPropagation();reuICS(\''+r.id+'\')" style="color:#00669E;cursor:pointer;font-weight:600;margin-left:6px" title="Descarregar convite de calendário">📅 convite</a></span></div>';});b+='</div>';}
     b+='<div class="ct2" style="margin-bottom:6px">Notas</div><div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px"><textarea id="card_nota" rows="2" placeholder="Escreve uma nota sobre esta oportunidade…" style="flex:1;min-width:0"></textarea><button class="btn" style="background:'+R+'" onclick="cardNota(\''+id+'\')">Adicionar</button></div>';
     var ns=A(dl.notas);if(!ns.length)b+='<div style="font-size:12.5px;color:#8a8478">Ainda sem notas.</div>';
     ns.slice(0,60).forEach(function(n){b+='<div style="padding:8px 0;border-bottom:1px solid #F0F2F4"><div style="font-size:11px;color:#6B7680">'+new Date(n.ts).toLocaleString("pt-PT",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})+(n.por?' · '+esc(n.por):'')+'</div><div style="font-size:13px;color:'+(n.auto?"#5F6B75":"#28313A")+';white-space:pre-wrap;overflow-wrap:anywhere">'+esc(n.txt)+'</div></div>';});
@@ -11515,6 +11755,117 @@ document.addEventListener("change",function(ev){var t=ev.target;if(!t||t.id!=="f
   var css=document.createElement("style");
   css.textContent=".dc-op:hover{box-shadow:0 4px 14px rgba(31,45,55,.14)}.dc-op .mw-more{display:none!important}";
   document.head.appendChild(css);
+})();
+
+</script>
+<script>
+/* ===================== CATÁLOGO, IMPORTADORES E CONVITES · out 2026 =====================
+   · Catálogo de artigos do Odoo (nome, referência, preço, custo, unidade) para o orçamento da oportunidade.
+     O tipo de venda de cada artigo é deduzido do nome até chegar a exportação com a categoria.
+   · Importar contactos do Odoo; importar gestor de conta e tipo de cliente a partir de um Excel.
+   · Convite de calendário (.ics) para visitas e reuniões. */
+(function(){
+  var CAT=[["Magewell USB Capture HDMI Gen 2","32060",447.0,298.0,"Unidades","Equipamentos"],["Magewell USB Capture SDI","320700000",447.0,298.0,"Unidades","Equipamentos"],["SHARE BOX - ETHERNET","",447.0,0.0,"Unidades","Equipamentos"],["SHARE BOX - ROCK PI S METAL","",447.0,0.0,"Unidades","Equipamentos"],["SHARE BOX - USB","",447.0,0.0,"Unidades","Equipamentos"],["15 WAY VGA SOLDER","",1.0,0.0,"Unidades","Equipamentos"],["1>2 Splitter 2 Port HDMI","38357",36.0,24.0,"Unidades","Equipamentos"],["2 Port HDMI 4K60 Splitter Cable","",58.11,38.74,"Unidades","Equipamentos"],["3>1 Switch HDMI 2.0 18G - 3 Portas HDR LINDY","38232",111.0,74.0,"Unidades","Equipamentos"],["4002888367745","",1.0,0.0,"Unidades","Equipamentos"],["8716065155174","",1.0,0.0,"Unidades","Equipamentos"],["8x1 BNC Switcher","",1.0,0.0,"Unidades","Equipamentos"],["ACT 10 meters High Quality audio Cable 3.5mm M/M 10.00m - Jack","AC3613",1.0,0.0,"Unidades","Equipamentos"],["AUDIO VIDEO EXTENDER CAT5e/6","",1.0,0.0,"Unidades","Equipamentos"],["AVERMEDIA CE310B","",1.0,0.0,"Unidades","Equipamentos"],["AVERMEDIA CL311-M1","",1.0,0.0,"Unidades","Equipamentos"],["AVERMEDIA CL311-MN","",1.0,0.0,"Unidades","Equipamentos"],["AVERMEDIA DVD EZMAKER 7","",1.0,85.0,"Unidades","Equipamentos"],["Adafruit TRRS Trinkey","5954",16.09,10.73,"Unidades","Equipamentos"],["Adafruit TRRS Trinkey + Snap-on Enclosure for Adafruit","P5981 + P5954",20.98,13.98,"Unidades","Equipamentos"],["Adaptador (união) BNC F- BNC F","011-6020",1.66,1.11,"Unidades","Equipamentos"],["Adaptador BNC 1x -M  BNC-F 2x (Y)","011-0437",4.78,3.19,"Unidades","Equipamentos"],["Adaptador BNC M - BNC F 90º","011-0998",3.9,2.6,"Unidades","Equipamentos"],["Adaptador BNC M - RCA F Dourado","",1.0,8.62,"Unidades","Equipamentos"],["Adaptador BNC M - RCA M","011-0941",1.0,0.65,"Unidades","Equipamentos"],["Adaptador BNC-M 2x BNC-F (T)","",1.0,1.42,"Unidades","Equipamentos"],["Adaptador DVI-D (F) > HDMI (M) 20Cms LINDY","41227",1.0,9.29,"Unidades","Equipamentos"],["Adaptador DVI-D M TO HDMI F","41228",1.0,7.57,"Unidades","Equipamentos"],["Adaptador DVI-I 24+5 fêmea - VGA HD15 SUB-D macho","",3.8,3.8,"Unidades","Equipamentos"],["Adaptador HDMI Dual Port","",1.0,0.0,"Unidades","Equipamentos"],["Adaptador Jack2.5 macho - Jack3.5 fêmea - STEREO","011-0147",1.0,0.63,"Unidades","Equipamentos"],["Adaptador RCA F - BNC M","VDA735",5.52,3.68,"Unidades","Equipamentos"],["Adaptador RCA F - RCA F","",1.0,0.79,"Unidades","Equipamentos"],["Adaptador RCA M - BNC F","VDA745",5.52,3.68,"Unidades","Equipamentos"],["Adaptador RCA M - Jack 3.5mm - metal","011-3186",1.0,0.57,"Unidades","Equipamentos"],["Adaptador USB 3.2 Type C Male > Type A Female ACT","SB0037",7.24,4.83,"Unidades","Equipamentos"],["Adaptador jack 3.5 fêmea - 2.5 macho","",10.09,6.73,"Unidades","Equipamentos"],["Adaptador micro-BNC > BNC","",49.17,32.78,"Unidades","Equipamentos"],["Alimentador/carregador 1xUSB 1.0A - Branco - GSC Evolution","",1.0,5.15,"Unidades","Equipamentos"],["Assistência técnica 8x5","SRV-AT-8X5",0.0,0.0,"Unidades","Manutenção"],["BLUETOOTH USB ADAPTER","047-3740",17.55,11.7,"Unidades","Equipamentos"],["Banco de horas","",0.0,0.0,"Unidades","Serviços"],["Blackmagic Decklink Mini Recorder","",1.0,0.0,"Unidades","Equipamentos"],["Blackmagic Multiview 4HD","",269.0,179.0,"Unidades","Equipamentos"],["Bolsa de horas","",80.0,0.0,"Horas","Serviços"],["CABLE USB TO JACK 10 METROS","",220.0,0.0,"Unidades","Equipamentos"],["CABLE USB TO JACK 10 METROS - cabo de punho","",1.0,0.0,"Unidades","Equipamentos"],["CABLE USB TO JACK 15 METROS - Cabo de Punho","",1.0,0.0,"Unidades","Equipamentos"],["CABLE USB TO JACK 2 METROS - Cabo de Punho","",1.0,0.0,"Unidades","Equipamentos"],["CABLE USB TO JACK 20 METROS","",1.0,0.0,"Unidades","Equipamentos"],["CABLE USB TO JACK 20 METROS - cabo de punho","",220.0,0.0,"Unidades","Equipamentos"],["CABLE USB TO JACK 5 METROS","",220.0,0.0,"Unidades","Equipamentos"],["CABLE USB TO JACK 5 METROS - cabo de punho","",1.0,0.0,"Unidades","Equipamentos"],["CABO HDMI 0.5M - ANTHRA LINE","36961",26.28,0.0,"Unidades","Equipamentos"],["CABO HDMI 5.0M - ANTHRA LINE","36965",26.28,17.52,"Unidades","Equipamentos"],["CONEXÃO VGA SOLDER","",1.0,0.0,"Unidades","Equipamentos"],["Cabo 05.0m HDMI - BLACK LINE 8K LINDY","36774",26.08,17.39,"Unidades","Equipamentos"],["Cabo 10,0m HDMI - BLACK LINE 4K LSZH LINDY","36507",45.91,30.61,"Unidades","Equipamentos"],["Cabo 10.0m HDMI - ANTHRA LINE LINDY","36697",134.15,0.0,"Unidades","Equipamentos"],["Cabo 20.0m HDMI - ANTHRA LINE LINDY","36969",134.15,89.43,"Unidades","Equipamentos"],["Cabo BNC 10MT","Q7110M",33.21,22.14,"Unidades","Equipamentos"],["Cabo BNC 15MT","Q7115M",55.35,36.9,"Unidades","Equipamentos"],["Cabo BNC 20MT","",22.5,15.0,"Unidades","Equipamentos"],["Cabo BNC 2MT","Q71200",16.86,11.24,"Unidades","Equipamentos"],["Cabo BNC 3MT","Q71300",17.91,11.94,"Unidades","Equipamentos"],["Cabo BNC 5MT","Q71500",29.77,19.85,"Unidades","Equipamentos"],["Cabo BNC m/m RG58 50Ω - 1.0m","019-0354",5.13,3.42,"Unidades","Equipamentos"],["Cabo BNC m/m RG58 50Ω - 10.0m","019-0357",11.38,7.59,"Unidades","Equipamentos"],["Cabo BNC m/m RG58 50Ω - 5.0m","019-0356",5.35,3.57,"Unidades","Equipamentos"],["Cabo BNC+DC 2.1/5.5mm - 30.0m","013-1341",15.09,10.06,"Unidades","Equipamentos"],["Cabo DVI-D Dual Link 02.0m","36252",31.5,0.0,"Unidades","Equipamentos"],["Cabo DVI-D Dual Link 05.0m","36254",31.5,21.0,"Unidades","Equipamentos"],["Cabo DVI-D Dual Link 20.0m","36228",289.5,193.0,"Unidades","Equipamentos"],["Cabo Displayport > DVI-D 05.0m","41493",51.75,34.5,"Unidades","Equipamentos"],["Cabo Ethernet - 5.0m","",1.0,0.0,"Unidades","Equipamentos"],["Cabo HDMI - DVI 15MT","36199",179.0,119.35,"Unidades","Equipamentos"],["Cabo HDMI 1.4 macho «» macho - 15.0m","047-0091",1.0,12.37,"Unidades","Equipamentos"],["Cabo HDMI 15mts","",27.84,18.56,"Unidades","Equipamentos"],["Cabo HDMI 2.0 (4K/60Hz) c/ revestimento têxtil macho «» macho - 10m - Goobay","019-1271",1.0,30.55,"Unidades","Equipamentos"],["Cabo HDMI 2.0 (4K@60Hz) c/ filtros macho «» macho - 10m","019-1244",1.0,11.6,"Unidades","Equipamentos"],["Cabo HDMI 2.0 macho «» macho - 1.0m","047-2962",1.0,2.7,"Unidades","Equipamentos"],["Cabo HDMI 2.0 macho «» macho - 10.0m","047-2845",1.0,10.74,"Unidades","Equipamentos"],["Cabo HDMI 2.0 macho «» macho - 2m","047-3005",1.0,3.05,"Unidades","Equipamentos"],["Cabo HDMI 2.0 macho «» macho - 5m","",1.0,0.0,"Unidades","Equipamentos"],["Cabo HDMI 2.0 macho «» macho - 7.5m","047-2960",1.0,7.61,"Unidades","Equipamentos"],["Cabo HDMI 2.0b c/ filtros, macho «» macho - 3.0m - Nimo","019-1095",1.0,9.88,"Unidades","Equipamentos"],["Cabo HDMI TO DVI 10MT","36275",77.99,51.99,"Unidades","Equipamentos"],["Cabo HDMI TO DVI 2MT","36272",18.0,12.0,"Unidades","Equipamentos"],["Cabo HDMI TO DVI 3MT","36273",31.15,0.0,"Unidades","Equipamentos"],["Cabo HDMI TO DVI 5MT","36274",31.15,20.77,"Unidades","Equipamentos"],["Cabo HDMI-DVI M/M 1.8MT","",13.37,8.91,"Unidades","Equipamentos"],["Cabo Jack 3.5mm stereo macho-macho - Preto - 1.5m","",1.0,1.8,"Unidades","Equipamentos"],["Cabo RG59 + DC Video/Alimentação BNC 10m","013-1027",10.05,6.7,"Unidades","Equipamentos"],["Cabo S-Video M/M 10MT","TCTV41",7.04,4.69,"Unidades","Equipamentos"],["Cabo S-Video M/M 15MT","TCTV41",9.66,6.44,"Unidades","Equipamentos"],["Cabo Splitter DVI-M / 2x DVI F","41215",35.03,23.35,"Unidades","Equipamentos"],["Cabo Stereo 3.5mm M/M 05.00m - Jack","35644",1.0,0.0,"Unidades","Equipamentos"],["Cabo Stereo 3.5mm M/M 10.00m - Jack","",1.0,0.0,"Unidades","Equipamentos"],["Cabo Stereo 3.5mm M/M 20.00m - Jack","35648",1.0,0.0,"Unidades","Equipamentos"],["Cabo USB-A para USB-C - 1.2m","",1.0,0.0,"Unidades","Equipamentos"],["Cabo USB-A para USB-C - 3.0m","",9.65,6.43,"Unidades","Equipamentos"],["Cabo de Áudio 3.5mm M>M - 10m","",1.0,0.0,"Unidades","Equipamentos"],["Cabo de Áudio 3.5mm M>M - 20m","",1.0,0.0,"Unidades","Equipamentos"],["Cabo de Áudio 3.5mm M>M - 5m","",1.0,0.0,"Unidades","Equipamentos"],["Cabo extensão activo USB 2.0 A macho - A fêmea 10.0m - Logilink UA0143","047-0778",1.0,23.47,"Unidades","Equipamentos"],["Cabo/Adaptador Audio 2 x RCA M > 1 x 3.5 F","35677",7.68,5.12,"Unidades","Equipamentos"],["Carregamento adicional de SMS","SRV-SMS-REC",100.0,0.0,"Unidades","Serviços"],["Carregamento inicial de SMS","SRV-SMS-1",50.0,0.0,"Unidades","Serviços"],["Cartão SD 32GB","",26.85,17.9,"Unidades","Equipamentos"],["Cartão SD 64GB","047-6027",45.0,30.0,"Unidades","Equipamentos"],["Conversor VGA M - HDMI F","38284",1.0,24.38,"Unidades","Equipamentos"],["Conversor Video Composto/S-Video e Audio para HDMI","8394",36.57,24.38,"Unidades","Equipamentos"],["DOCBase Especialidade","DOCBase",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Agendamento — Componente da solução","D360-COMP-AGEND",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Anestesia — Componente da solução","D360-COMP-ANES",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Atestado ACC — Componente da solução","D360-COMP-ACC",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Atestado ACC — Licenciamento trienal","D360-MOD-ACC-LIC3",1080.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Atestado ACC — Subscrição anual","D360-MOD-ACC-SUB",360.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Atestado CIT — Componente da solução","D360-COMP-CIT",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Atestado CIT — Licenciamento trienal","D360-MOD-CIT-LIC3",1080.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Atestado CIT — Subscrição anual","D360-MOD-CIT-SUB",360.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Cloud 10 GB — Componente da solução","D360-CLOUD-INCL-10",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Cardiologia — Licenciamento trienal","D360-CLIN-CE-CARD-LIC3",9720.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Cardiologia — Subscrição anual","D360-CLIN-CE-CARD-SUB",3240.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Gastroenterologia — Licenciamento trienal","D360-CLIN-CE-GAST-LIC3",9720.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Gastroenterologia — Subscrição anual","D360-CLIN-CE-GAST-SUB",3240.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Ginecologia — Licenciamento trienal","D360-CLIN-CE-GINE-LIC3",9720.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Ginecologia — Subscrição anual","D360-CLIN-CE-GINE-SUB",3240.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Oftalmologia — Licenciamento trienal","D360-CLIN-CE-OFTAL-LIC3",9720.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Oftalmologia — Subscrição anual","D360-CLIN-CE-OFTAL-SUB",3240.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Otorrinolaringologia — Licenciamento trienal","D360-CLIN-CE-ORL-LIC3",9720.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Otorrinolaringologia — Subscrição anual","D360-CLIN-CE-ORL-SUB",3240.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Pneumologia — Licenciamento trienal","D360-CLIN-CE-PNEU-LIC3",9720.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Pneumologia — Subscrição anual","D360-CLIN-CE-PNEU-SUB",3240.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Urologia — Licenciamento trienal","D360-CLIN-CE-URO-LIC3",9720.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica com exames especiais — Urologia — Subscrição anual","D360-CLIN-CE-URO-SUB",3240.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica sem exames especiais — Licenciamento trienal","D360-CLIN-SE-LIC3",9180.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Clínica sem exames especiais — Subscrição anual","D360-CLIN-SE-SUB",3060.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Consulta Ambulatório — Componente da solução","D360-COMP-AMB",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Consultório — Licenciamento trienal","D360-CONS-LIC3",5400.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Consultório — Subscrição anual","D360-CONS-SUB",1800.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Desinfeção de Equipamentos — Componente da solução","D360-MOD-DESINF-COMP",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Desinfeção de Equipamentos — Licenciamento trienal","D360-MOD-DESINF-LIC3",1080.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Desinfeção de Equipamentos — Subscrição anual","D360-MOD-DESINF-SUB",360.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Enfermagem — Componente da solução","D360-COMP-ENF",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Especialidade Médica — Componente da solução","D360-COMP-ESP-MED",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Exames sem Papel — Componente da solução","D360-COMP-ESP",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Exames sem Papel — Licenciamento trienal","D360-MOD-ESP-LIC3",2880.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Exames sem Papel — Subscrição anual","D360-MOD-ESP-SUB",960.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Faturação — Componente da solução","D360-COMP-FAT",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Cardiologia — Licenciamento trienal","D360-GRUPO-CARD-LIC3",12600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Cardiologia — Subscrição anual","D360-GRUPO-CARD-SUB",4200.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Gastroenterologia — Licenciamento trienal","D360-GRUPO-GAST-LIC3",12600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Gastroenterologia — Subscrição anual","D360-GRUPO-GAST-SUB",4200.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Ginecologia — Licenciamento trienal","D360-GRUPO-GINE-LIC3",12600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Ginecologia — Subscrição anual","D360-GRUPO-GINE-SUB",4200.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Oftalmologia — Licenciamento trienal","D360-GRUPO-OFTAL-LIC3",12600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Oftalmologia — Subscrição anual","D360-GRUPO-OFTAL-SUB",4200.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Otorrinolaringologia — Licenciamento trienal","D360-GRUPO-ORL-LIC3",12600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Otorrinolaringologia — Subscrição anual","D360-GRUPO-ORL-SUB",4200.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Pneumologia — Licenciamento trienal","D360-GRUPO-PNEU-LIC3",12600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Pneumologia — Subscrição anual","D360-GRUPO-PNEU-SUB",4200.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Urologia — Licenciamento trienal","D360-GRUPO-URO-LIC3",12600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Grupo de Saúde — Urologia — Subscrição anual","D360-GRUPO-URO-SUB",4200.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração AD / Single Sign-On — Licenciamento trienal","D360-INT-SSO-LIC3",1845.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração AD / Single Sign-On — Subscrição anual","D360-INT-SSO-SUB",615.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração Anatomia Patológica — Licenciamento trienal","D360-INT-AP-LIC3",1845.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração Anatomia Patológica — Subscrição anual","D360-INT-AP-SUB",615.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração Lista de Inscritos em Cirurgia — Licenciamento trienal","D360-INT-LIC-LIC3",1845.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração Lista de Inscritos em Cirurgia — Subscrição anual","D360-INT-LIC-SUB",615.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração PACS — Licenciamento trienal","D360-INT-PACS-LIC3",1845.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração PACS — Subscrição anual","D360-INT-PACS-SUB",615.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração Processo Clínico — Componente da solução","D360-COMP-INT-PCE",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração Processo Clínico — Licenciamento trienal","D360-INT-PCE-LIC3",1845.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração Processo Clínico — Subscrição anual","D360-INT-PCE-SUB",615.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração Sistema de Gestão Hospitalar — Componente da solução","D360-COMP-INT-SGH",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração Sistema de Gestão Hospitalar — Licenciamento trienal","D360-INT-SGH-LIC3",1845.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração Sistema de Gestão Hospitalar — Subscrição anual","D360-INT-SGH-SUB",615.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração com Equipamento — Licenciamento trienal","D360-INT-EQUIP-LIC3",480.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Integração com Equipamento — Subscrição anual","D360-INT-EQUIP-SUB",160.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Agendamento — Licenciamento trienal","D360-MOD-AGEND-LIC3",1260.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Agendamento — Subscrição anual","D360-MOD-AGEND-SUB",420.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Anestesia — Licenciamento trienal","D360-MOD-ANES-LIC3",2520.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Anestesia — Subscrição anual","D360-MOD-ANES-SUB",840.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Consulta Ambulatório — Licenciamento trienal","D360-MOD-AMB-LIC3",2160.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Consulta Ambulatório — Subscrição anual","D360-MOD-AMB-SUB",720.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Enfermagem — Licenciamento trienal","D360-MOD-ENF-LIC3",2520.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Enfermagem — Subscrição anual","D360-MOD-ENF-SUB",840.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Especialidade Médica — Licenciamento trienal","D360-MOD-ESP-MED-LIC3",3600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Especialidade Médica — Subscrição anual","D360-MOD-ESP-MED-SUB",1200.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Faturação — Licenciamento trienal","D360-MOD-FAT-LIC3",1800.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Faturação — Subscrição anual","D360-MOD-FAT-SUB",600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Requisição AP/SNS — Licenciamento trienal","D360-MOD-AP-LIC3",1080.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Requisição AP/SNS — Subscrição anual","D360-MOD-AP-SUB",360.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo SMS — Licenciamento trienal","D360-MOD-SMS-LIC3",360.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo SMS — Subscrição anual","D360-MOD-SMS-SUB",120.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Sinais Vitais — Licenciamento trienal","D360-MOD-SV-LIC3",1080.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Módulo Sinais Vitais — Subscrição anual","D360-MOD-SV-SUB",360.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Prescrição de MCDT — Componente da solução","D360-COMP-M",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Prescrição de MCDT — Licenciamento trienal","D360-MOD-M-LIC3",1080.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Prescrição de MCDT — Subscrição anual","D360-MOD-M-SUB",360.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Prescrição de Receituário — Componente da solução","D360-COMP-R",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Prescrição de Receituário — Licenciamento trienal","D360-MOD-R-LIC3",1080.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Prescrição de Receituário — Subscrição anual","D360-MOD-R-SUB",360.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Requisição AP/SNS — Componente da solução","D360-COMP-AP",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — SMS — Componente da solução","D360-COMP-SMS",0.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Cardiologia — Licenciamento trienal","D360-ULS-CARD-LIC3",10800.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Cardiologia — Subscrição anual","D360-ULS-CARD-SUB",3600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Gastroenterologia — Licenciamento trienal","D360-ULS-GAST-LIC3",10800.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Gastroenterologia — Subscrição anual","D360-ULS-GAST-SUB",3600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Ginecologia — Licenciamento trienal","D360-ULS-GINE-LIC3",10800.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Ginecologia — Subscrição anual","D360-ULS-GINE-SUB",3600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Oftalmologia — Licenciamento trienal","D360-ULS-OFTAL-LIC3",10800.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Oftalmologia — Subscrição anual","D360-ULS-OFTAL-SUB",3600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Otorrinolaringologia — Licenciamento trienal","D360-ULS-ORL-LIC3",10800.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Otorrinolaringologia — Subscrição anual","D360-ULS-ORL-SUB",3600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Pneumologia — Licenciamento trienal","D360-ULS-PNEU-LIC3",10800.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Pneumologia — Subscrição anual","D360-ULS-PNEU-SUB",3600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Urologia — Licenciamento trienal","D360-ULS-URO-LIC3",10800.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — ULS — Urologia — Subscrição anual","D360-ULS-URO-SUB",3600.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizador Nomeado Administrativo — 1 a 4 — Subscrição anual","D360-USR-ADM-SUB-01-04",189.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizador Nomeado Administrativo — 10 a 19 — Subscrição anual","D360-USR-ADM-SUB-10-19",174.83,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizador Nomeado Administrativo — 20 a 49 — Subscrição anual","D360-USR-ADM-SUB-20-49",151.2,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizador Nomeado Administrativo — 5 a 9 — Subscrição anual","D360-USR-ADM-SUB-05-09",179.55,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizador Nomeado Administrativo — 50 ou mais — Subscrição anual","D360-USR-ADM-SUB-50+",132.3,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizador Nomeado Administrativo — Licenciamento trienal","D360-USR-ADM-LIC3",567.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizador Nomeado Clínico — 1 a 4 — Subscrição anual","D360-USR-CLIN-SUB-01-04",420.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizador Nomeado Clínico — 10 a 19 — Subscrição anual","D360-USR-CLIN-SUB-10-19",388.5,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizador Nomeado Clínico — 20 a 49 — Subscrição anual","D360-USR-CLIN-SUB-20-49",336.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizador Nomeado Clínico — 5 a 9 — Subscrição anual","D360-USR-CLIN-SUB-05-09",399.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizador Nomeado Clínico — 50 ou mais — Subscrição anual","D360-USR-CLIN-SUB-50+",294.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizador Nomeado Clínico — Licenciamento trienal","D360-USR-CLIN-LIC3",1260.0,0.0,"Unidades","Licenciamento"],["DOCbase 360 — Utilizadores nomeados — Componente da solução","D360-USR-INCL",0.0,0.0,"Unidades","Licenciamento"],["DOCbase Cloud — Espaço adicional 10 GB","D360-CLOUD-ADD-10",150.0,0.0,"Unidades","Licenciamento"],["DOCbase DICOM WL","",0.0,0.0,"Unidades","Licenciamento"],["DOCbase Enfermagem","",434.7,0.0,"Unidades","Licenciamento"],["DOCbase Imagebox","D360-HW-IMAGEBOX",1350.0,0.0,"Unidades","Licenciamento"],["DOCbase PDF Listener","",0.0,0.0,"Unidades","Licenciamento"],["DOCbase Sharebox","D360-HW-SHAREBOX",960.0,0.0,"Unidades","Licenciamento"],["DOCbase Task Scheduler","",0.0,0.0,"Unidades","Licenciamento"],["DVI A/V Switch 4 Port","",825.0,550.0,"Unidades","Equipamentos"],["DVI-A MALE TO VGA FEMALE ADAPTER","",1.0,4.56,"Unidades","Equipamentos"],["DVI-I M TO VGA F ADAPTER","",1.0,4.35,"Unidades","Equipamentos"],["DVI-I PORT ADAPTER","",1.0,0.0,"Unidades","Equipamentos"],["DeckLink Mini Recorder HD","BDLKMINIREC3G",1.0,119.0,"Unidades","Equipamentos"],["Decklink mini recorder 4k","BDLKMINIREC4K",1.0,179.0,"Unidades","Equipamentos"],["Deslocação","SRV-DESL-KM",0.5,0.0,"km","Serviços"],["Displayport M to HDMI F","",1.0,0.0,"Unidades","Equipamentos"],["Equipamento - kit de captura de imagem HD","4491",850.0,0.0,"Unidades","Equipamentos"],["Estadia — por noite","SRV-ESTADIA",100.0,0.0,"Unidades","Equipamentos"],["Ewent Video Grabber EW3707","",1.0,0.0,"Unidades","Equipamentos"],["Fonte USB-C 2m","",1.0,0.0,"Unidades","Equipamentos"],["Formação e apoio ao arranque (horas)","",80.0,0.0,"Horas","Serviços"],["Hub Flexível USB 2.0 4 Portas eWent","EW1110",1.0,9.08,"Unidades","Equipamentos"],["Hub USB 2.0 de 4 portas - Goobay 68879","047-0078",1.0,9.79,"Unidades","Equipamentos"],["INTENSITY SHUTTLE USB","",1.0,0.0,"Unidades","Equipamentos"],["Instalação, parametrizações e adaptações iniciais (horas)","",80.0,0.0,"Horas","Serviços"],["Integração HIS","",0.0,0.0,"Unidades","Serviços"],["Integração com equipamentos","",0.0,0.0,"Unidades","Serviços"],["JACK M TO F 10MT","",25.31,16.87,"Unidades","Equipamentos"],["JACK M TO F 5MT","",18.47,12.31,"Unidades","Equipamentos"],["LINDY HDMI Video Grabber","",1.0,116.83,"Unidades","Equipamentos"],["MAGEWELL PRO CAPTURE AIO","11020",732.0,488.0,"Unidades","Equipamentos"],["MAGEWELL PRO CAPTURE DVI","11030",477.0,318.0,"Unidades","Equipamentos"],["MAGEWELL PRO CAPTURE HDMI","11040",415.5,277.0,"Unidades","Equipamentos"],["MAGEWELL PRO CAPTURE SDI 4K Plus","",1482.0,988.0,"Unidades","Equipamentos"],["MAGEWELL PRO Capture SDI","",496.31,330.87,"Unidades","Equipamentos"],["MAGEWELL Pro Capture AIO 4K","",0.0,0.0,"Unidades","Equipamentos"],["MEIRIYFA BNC Male to 3.5mm Mono TTS Female Plug Stereo","",19.81,13.21,"Unidades","Equipamentos"],["MINI CONVERTER UPDOWNCROSS HD","CONVMUDCSTD/HD",1.0,155.0,"Unidades","Equipamentos"],["MINI GENDER CHANGER VGA M/M","",1.0,3.06,"Unidades","Equipamentos"],["MWResults — Especialidades clínicas","MWR-COMP-HIS",0.0,0.0,"Unidades","Licenciamento"],["MWResults — Imagiologia","MWR-COMP-RIS",0.0,0.0,"Unidades","Licenciamento"],["MWResults — Outras áreas clínicas","MWR-COMP-OUTRAS",0.0,0.0,"Unidades","Licenciamento"],["MWResults — Patologia Clínica","MWR-COMP-LIS",0.0,0.0,"Unidades","Licenciamento"],["MWResults — Solução — Licenciamento trienal","MWR-SOL-LIC3",0.0,0.0,"Unidades","Licenciamento"],["MWResults — Solução — Subscrição anual","MWR-SOL-SUB",0.0,0.0,"Unidades","Licenciamento"],["Magewell USB Capture DVI Plus","",709.5,473.0,"Unidades","Equipamentos"],["Modulo SMS","",250.0,0.0,"Unidades","Serviços"],["Passagem de base de dados para Cloud","SRV-BD-CLOUD",180.0,0.0,"Unidades","Serviços"],["Pedal Bluetooth","",160.0,0.0,"Unidades","Equipamentos"],["Pedal Por Bluetooth/USB","",1.0,0.0,"Unidades","Equipamentos"],["Pedal por Cabo","",1.0,0.0,"Unidades","Equipamentos"],["Pen USB 64GB - Qilive","",1.0,7.99,"Unidades","Equipamentos"],["Plafond de Horas","",55.0,0.0,"Horas","Serviços"],["Promoção","",1.0,0.0,"Unidades","Equipamentos"],["Repartidor HDMI 1/2 Full HD 1080p 3D 4K2K - Nedis VSPL34002BK","",1.0,19.75,"Unidades","Equipamentos"],["Repartidor HDMI 1/2 Full HD 2K 4K 3D","019-0971",1.0,17.64,"Unidades","Equipamentos"],["Rock Pi S 512Mb 1Gb Nand c/BT WIFI","",1.0,40.49,"Unidades","Equipamentos"],["Serviço técnico especializado","SRV-TEC-HORA",80.0,0.0,"Horas","Serviços"],["Snap-on Enclosure for Adafruit TRRS Trinkey","P5981",4.88,3.25,"Unidades","Equipamentos"],["Splitter DVI-D 24+1 pinos macho - 2x DVI-D 24+1 pinos fêmea - Goobay","",1.0,11.87,"Unidades","Equipamentos"],["Tool Kramer Amplifier","",1.0,0.0,"Unidades","Equipamentos"],["Tool Kramer Switch","",138.0,92.0,"Unidades","Equipamentos"],["UNIÕES JACK","",1.0,0.0,"Unidades","Equipamentos"],["USB 2.0 Extensor","",1.0,22.75,"Unidades","Equipamentos"],["USB Capture DVI Plus","32080",1.0,421.0,"Unidades","Equipamentos"],["USB FOOT SWITCH FS 2017","",160.0,0.0,"Unidades","Equipamentos"],["USB FOOT SWITCH FS2017BT2","",160.0,28.36,"Unidades","Equipamentos"],["USB VIDEO GRABBER","",1.0,43.03,"Unidades","Equipamentos"],["VGA -TV COMPOSITE VIDEO CONVERTER LIFE","",1.0,30.65,"Unidades","Equipamentos"],["VIDEO AUDIO SWITCH FJ-401AV","",1.0,0.0,"Unidades","Equipamentos"],["ZowieTEK 4K NDI Video","",1.0,0.0,"Unidades","Equipamentos"],["a","",1.0,0.0,"Unidades","Equipamentos"]];
+  function A(x){return Array.isArray(x)?x:[];}
+  function $id(i){return document.getElementById(i);}
+  function nrm(s){return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g," ").trim();}
+  var STOPN={hosp:1,hospital:1,hospitais:1,hospitales:1,clinica:1,centro:1,medico:1,lda:1,sa:1,the:1,del:1,dos:1,das:1,unipessoal:1};
+  function toks(s){var o={};nrm(s).split(" ").forEach(function(t){if(t.length>=3&&!STOPN[t])o[t]=1;});return o;}
+  function simN(a,b){if(nrm(a).replace(/ /g,"")===nrm(b).replace(/ /g,""))return 1;var X=toks(a),Y=toks(b),i=0,u=0,k;for(k in X){u++;if(Y[k])i++;}for(k in Y)if(!X[k])u++;return u?i/u:0;}
+  function findCli(nome,idx){var n=nrm(nome);if(!n)return null;if(idx.ex[n])return idx.ex[n];var best=null,bs=0;A(D.clients).forEach(function(c){var s=simN(nome,c.name);if(s>bs){bs=s;best=c;}});return bs>=0.6?best:null;}
+  function cliIdx(){var ex={};A(D.clients).forEach(function(c){ex[nrm(c.name)]=c;});return {ex:ex};}
+  function col(hdr,names){for(var j=0;j<names.length;j++)for(var i=0;i<hdr.length;i++){var h=nrm(hdr[i]);if(h===names[j]||h.indexOf(names[j])===0)return i;}return -1;}
+  function pickFile(cb){var inp=document.createElement("input");inp.type="file";inp.accept=".xlsx,.xls,.csv";inp.onchange=function(){var f=inp.files&&inp.files[0];if(!f)return;
+      if(typeof XLSX==="undefined"){toast("A biblioteca de Excel não carregou. Confirma a ligação à Internet e volta a tentar.",{type:"error"});return;}
+      var r=new FileReader();r.onload=function(e){try{var wb=XLSX.read(e.target.result,{type:"array"});var rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:""});cb(rows,f.name);}catch(x){toast("Não foi possível ler o ficheiro: "+(x&&x.message||x),{type:"error"});}};r.readAsArrayBuffer(f);};inp.click();}
+  function linha(l,n,x){return '<tr><td>'+l+'</td><td style="text-align:right;font-weight:700">'+n+'</td><td style="font-size:12px;color:#5F6B75">'+(x||"")+'</td></tr>';}
+  function wide(px){var m=document.querySelector("#mArea .mdl");if(m)m.style.maxWidth=px+"px";}
+
+  // ---------- catálogo ----------
+  window.catItems=function(){return CAT.map(function(c){return {nome:c[0],ref:c[1],precoVenda:c[2],custo:c[3],uom:c[4],grp:c[5],cat:1};});};
+  window.catTipoDe=function(nome){var n=nrm(nome);for(var i=0;i<CAT.length;i++)if(nrm(CAT[i][0])===n)return CAT[i][5];return "";};
+  // o tipo de venda da oportunidade sai do orçamento: o tipo com mais valor nas linhas (ou, a zeros, com mais linhas)
+  if(typeof svDl==="function"){var _svDl=svDl;window.svDl=svDl=function(editId){var n0=A(D.deals).length;var r=_svDl.apply(this,arguments);
+    try{var dl=editId?A(D.deals).filter(function(x){return x.id===editId;})[0]:(A(D.deals).length>n0?D.deals[D.deals.length-1]:null);
+      if(dl&&A(dl.artigos).length&&!dl.tipoVenda){var v={},c={};dl.artigos.forEach(function(a){var t=window.catTipoDe(a.desc);if(!t)return;v[t]=(v[t]||0)+(Number(a.qtd)||0)*(Number(a.precoUnit)||0)*(1-(Number(a.desconto)||0)/100);c[t]=(c[t]||0)+1;});
+        var ks=Object.keys(c);if(ks.length){ks.sort(function(a,b){return (v[b]-v[a])||(c[b]-c[a]);});dl.tipoVenda=ks[0];save();}}
+      if(editId&&window.__cardBack===editId&&typeof openDealCard==="function"&&!document.querySelector("#mArea .mdl"))openDealCard(editId);}catch(e){}
+    return r;};}
+  if(typeof openDM==="function"){var _oDM=openDM;window.openDM=openDM=function(){var r=_oDM.apply(this,arguments);try{if(document.getElementById("dm_arts"))wide(780);}catch(e){}return r;};}
+
+  // ---------- importar contactos do Odoo ----------
+  window.impContactosOdoo=function(){pickFile(function(rows,fn){
+    var hdr=rows[0]||[];var I={nome:col(hdr,["nome","name","nome completo","nome a apresentar"]),emp:col(hdr,["empresa relacionada","empresa","company","parceiro relacionado","empresa mae","entidade"]),fun:col(hdr,["funcao","cargo","posicao","job"]),tel:col(hdr,["telefone","phone"]),tlm:col(hdr,["telemovel","mobile"]),em:col(hdr,["email","e mail","correio"]),isC:col(hdr,["e uma empresa","is company","tipo de empresa"]),esp:col(hdr,["especialidade"])};
+    if(I.nome<0){toast('Não encontrei a coluna "Nome". Exporta os contactos do Odoo com, pelo menos, Nome, Empresa relacionada, Função, Telefone e Email.',{type:"error"});return;}
+    var idx=cliIdx(),novos=[],ja=0,sem=[],emp=0;
+    var kE={},kN={};A(D.contacts).forEach(function(c){if(c.email)kE[String(c.email).toLowerCase()]=1;kN[c.clientId+"|"+nrm(c.name)]=1;});
+    for(var r=1;r<rows.length;r++){var w=rows[r]||[];var nome=String(w[I.nome]||"").trim();if(!nome)continue;
+      if(I.isC>=0&&/^(true|verdadeiro|sim|1|empresa|company)$/i.test(String(w[I.isC]).trim())){emp++;continue;}
+      var empresa=I.emp>=0?String(w[I.emp]||"").trim():"";
+      if(!empresa&&nome.indexOf(",")>0){var pp=nome.split(",");empresa=pp[0].trim();nome=pp.slice(1).join(",").trim();} // «Empresa, Pessoa»
+      else if(empresa&&nome.toLowerCase().indexOf(empresa.toLowerCase()+",")===0)nome=nome.slice(empresa.length+1).trim();
+      if(!empresa){emp++;continue;}
+      var cl=findCli(empresa,idx);var em=I.em>=0?String(w[I.em]||"").trim():"";
+      if(!cl){sem.push(nome+" ("+empresa+")");continue;}
+      if((em&&kE[em.toLowerCase()])||kN[cl.id+"|"+nrm(nome)]){ja++;continue;}
+      var tel=[I.tel>=0?String(w[I.tel]||"").trim():"",I.tlm>=0?String(w[I.tlm]||"").trim():""].filter(Boolean).join(" / ");
+      var c={id:uid(),clientId:cl.id,name:nome,role:I.fun>=0?String(w[I.fun]||"").trim():"",phone:tel,email:em,notes:"",origem:"odoo"};
+      var sp=I.esp>=0?String(w[I.esp]||"").trim():"";if(sp&&SPEC_CLIN.indexOf(sp)>=0)c.specialty=sp;
+      if(em)kE[em.toLowerCase()]=1;kN[cl.id+"|"+nrm(nome)]=1;novos.push(c);}
+    window.__impCt=novos;
+    var h='<div style="font-size:12.5px;color:#5F6B75;margin-bottom:10px">Ficheiro <b>'+esc(fn)+'</b>. Cada contacto é ligado ao cliente pelo nome da empresa.</div><table style="width:100%;font-size:13px">'
+      +linha("Contactos novos",novos.length,"em "+Object.keys(novos.reduce(function(a,c){a[c.clientId]=1;return a;},{})).length+" clientes")
+      +linha("Já existiam",ja,"mesmo email, ou mesmo nome no mesmo cliente")
+      +linha("Sem cliente no ERP",sem.length,sem.length?"não entram: "+esc(sem.slice(0,12).join("; "))+(sem.length>12?" …":""):"")
+      +linha("Linhas ignoradas",emp,"empresas ou linhas sem empresa associada")+'</table>'
+      +(novos.length?'<button class="btn" style="background:#2E8C93;width:100%;margin-top:12px" onclick="impContactosGo()">Importar '+novos.length+' contactos</button>':'<div style="margin-top:12px;font-weight:600;color:#5F6B75">Nada de novo para importar.</div>');
+    $id("mArea").innerHTML=mWrap("Importar contactos do Odoo",h);wide(640);});};
+  window.impContactosGo=function(){var n=A(window.__impCt);if(!n.length)return;if(!Array.isArray(D.contacts))D.contacts=[];n.forEach(function(c){D.contacts.push(c);});window.__impCt=null;
+    logAct("Contacto",n.length+" contactos importados do Odoo");save();clM();ren();toast(n.length+" contactos importados.",{type:"ok"});};
+
+  // ---------- importar gestor de conta e tipo de cliente ----------
+  window.impCliAttrs=function(){pickFile(function(rows,fn){
+    var hdr=rows[0]||[];var I={cli:col(hdr,["cliente","nome","empresa","name"]),gc:col(hdr,["gestor de conta","gestor","account manager","vendedor"]),tp:col(hdr,["tipo de cliente","tipo de conta","tipo","prime","zona","classificacao"])};
+    if(I.cli<0||(I.gc<0&&I.tp<0)){toast('O Excel precisa de uma coluna "Cliente" e de, pelo menos, uma de "Gestor de conta" ou "Tipo de cliente".',{type:"error"});return;}
+    var idx=cliIdx(),ups=[],sem=[],ig=0;
+    for(var r=1;r<rows.length;r++){var w=rows[r]||[];var nome=String(w[I.cli]||"").trim();if(!nome)continue;
+      var gc=I.gc>=0?String(w[I.gc]||"").trim():"",tp=I.tp>=0?String(w[I.tp]||"").trim():"";if(!gc&&!tp)continue;
+      var cl=findCli(nome,idx);if(!cl){sem.push(nome);continue;}
+      var set={};if(gc&&cl.gestorConta!==gc)set.gestorConta=gc;if(tp&&cl.tipoCliente!==tp)set.tipoCliente=tp;
+      if(Object.keys(set).length)ups.push({cl:cl,set:set,de:nome});else ig++;}
+    window.__impCA=ups;
+    var h='<div style="font-size:12.5px;color:#5F6B75;margin-bottom:10px">Ficheiro <b>'+esc(fn)+'</b>.'+(I.gc>=0?' Coluna de gestor de conta: «'+esc(hdr[I.gc])+'».':'')+(I.tp>=0?' Coluna de tipo de cliente: «'+esc(hdr[I.tp])+'».':'')+'</div><table style="width:100%;font-size:13px">'
+      +linha("Clientes a atualizar",ups.length,ups.slice(0,6).map(function(u){return esc(u.cl.name)+(nrm(u.de)!==nrm(u.cl.name)?' <span style="color:#8a5a08">(no ficheiro: '+esc(u.de)+')</span>':'');}).join("; ")+(ups.length>6?" …":""))
+      +linha("Já estavam iguais",ig,"")
+      +linha("Não encontrados no ERP",sem.length,sem.length?esc(sem.slice(0,12).join("; "))+(sem.length>12?" …":""):"")+'</table>'
+      +(ups.length?'<button class="btn" style="background:#2E8C93;width:100%;margin-top:12px" onclick="impCliAttrsGo()">Atualizar '+ups.length+' clientes</button>':'<div style="margin-top:12px;font-weight:600;color:#5F6B75">Nada para atualizar.</div>');
+    $id("mArea").innerHTML=mWrap("Importar gestor de conta e tipo de cliente",h);wide(640);});};
+  window.impCliAttrsGo=function(){var u=A(window.__impCA);if(!u.length)return;u.forEach(function(x){Object.keys(x.set).forEach(function(k){x.cl[k]=x.set[k];});});window.__impCA=null;
+    logAct("Cliente","Gestor de conta / tipo de cliente atualizados em "+u.length+" clientes (Excel)");save();clM();ren();toast(u.length+" clientes atualizados.",{type:"ok"});};
+
+  // ---------- convite de calendário (.ics) ----------
+  function icsEsc(s){return String(s==null?"":s).replace(/\\/g,"\\\\").replace(/\r?\n/g,"\\n").replace(/([,;])/g,"\\$1");}
+  function icsFold(l){var o="";while(l.length>73){o+=l.slice(0,73)+"\r\n ";l=l.slice(73);}return o+l;}
+  window.reuICSText=function(r){
+    var TL={visita:"Visita",reuniao:"Reunião",call:"Chamada",demo:"Demonstração",formacao:"Formação",outro:"Reunião"};
+    var d=String(r.data||"").replace(/-/g,"");if(d.length!==8)return null;var cli=typeof cn==="function"?cn(r.clientId):"";
+    var L=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Mobilwave//ERP//PT","CALSCALE:GREGORIAN","METHOD:PUBLISH","BEGIN:VEVENT","UID:"+r.id+"@erp.mobilwave","DTSTAMP:"+new Date().toISOString().replace(/[-:]/g,"").slice(0,15)+"Z"];
+    if(r.hora&&/^\d{1,2}:\d{2}/.test(r.hora)){var hm=r.hora.split(":"),h=+hm[0],m=+hm[1];var p2=function(x){return String(x).padStart(2,"0");};var e=new Date(+d.slice(0,4),+d.slice(4,6)-1,+d.slice(6,8),h+1,m);
+      L.push("DTSTART:"+d+"T"+p2(h)+p2(m)+"00");L.push("DTEND:"+e.getFullYear()+p2(e.getMonth()+1)+p2(e.getDate())+"T"+p2(e.getHours())+p2(e.getMinutes())+"00");}
+    else{var n=new Date(+d.slice(0,4),+d.slice(4,6)-1,+d.slice(6,8)+1);L.push("DTSTART;VALUE=DATE:"+d);L.push("DTEND;VALUE=DATE:"+n.getFullYear()+String(n.getMonth()+1).padStart(2,"0")+String(n.getDate()).padStart(2,"0"));}
+    L.push("SUMMARY:"+icsEsc((TL[r.tipo]||"Reunião")+" — "+cli+(r.assunto?": "+r.assunto:"")));
+    if(r.local)L.push("LOCATION:"+icsEsc(r.local));
+    var desc=[];if(r.assunto)desc.push("Assunto: "+r.assunto);if(r.participantes)desc.push("Mobilwave: "+r.participantes);if(r.participantesCliente)desc.push("Cliente: "+r.participantesCliente);
+    if(desc.length)L.push("DESCRIPTION:"+icsEsc(desc.join("\n")));
+    L.push("END:VEVENT","END:VCALENDAR");return L.map(icsFold).join("\r\n")+"\r\n";};
+  window.reuICS=function(id){var r=A(D.reunioes).filter(function(x){return x.id===id;})[0];if(!r)return;var t=window.reuICSText(r);
+    if(!t){toast("Indica primeiro a data da reunião.",{type:"error"});return;}
+    var b=new Blob([t],{type:"text/calendar;charset=utf-8"});var a=document.createElement("a");a.href=URL.createObjectURL(b);
+    a.download=("convite_"+nrm(cn(r.clientId)).replace(/ /g,"_").slice(0,30)+"_"+(r.data||"")+".ics");document.body.appendChild(a);a.click();setTimeout(function(){try{document.body.removeChild(a);URL.revokeObjectURL(a.href);}catch(e){}},500);};
+  if(typeof window.openReuniao==="function"){var _or=window.openReuniao;window.openReuniao=function(id){var r=_or.apply(this,arguments);
+    try{var md=document.querySelector("#mArea .mdl");if(id&&md&&!md.querySelector(".mw-ics")){var d=document.createElement("div");d.className="mw-ics";d.style.cssText="margin-top:10px;padding-top:10px;border-top:1px solid #EFF1F4;display:flex;gap:10px;align-items:center;flex-wrap:wrap";
+      d.innerHTML='<button type="button" class="btn bs" style="background:#00669E" onclick="reuICS(\''+id+'\')">📅 Convite de calendário (.ics)</button><span style="font-size:11.5px;color:#6B7680">Abre no Outlook ou no Google Calendar. Guarda primeiro, se alteraste a data ou a hora.</span>';md.appendChild(d);}}catch(e){}
+    return r;};}
 })();
 
 </script>
