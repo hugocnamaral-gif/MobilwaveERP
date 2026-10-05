@@ -768,7 +768,8 @@ function expData(){var b=new Blob([JSON.stringify(D,function(k,v){return (k==="_
 function impData(ev){var f=ev.target.files[0];if(!f)return;var r=new FileReader();
   r.onload=function(e){try{var o=JSON.parse(e.target.result);
     if(!o||!Array.isArray(o.clients)||!Array.isArray(o.deals)){toast("Ficheiro inválido — não parece um backup desta app.",{type:"error"});return}
-    confirmM("Restaurar backup?\n\n"+o.clients.length+" clientes · "+o.deals.length+" deals · "+(o.invoices||[]).length+" faturas\n\nISTO SUBSTITUI todos os dados actuais ("+D.clients.length+" clientes, "+D.deals.length+" deals). Exporta primeiro se tiveres dúvidas.",function(){D=o;migrate();save();ren();toast("Backup restaurado com sucesso.",{type:"ok"})},{yesLabel:"Restaurar"});}
+    if(("kb" in o||"rgpd" in o||"erpSync" in o||"lang" in o)&&!("orc" in o)&&!("drOficial" in o)&&!("fatOficial" in o)){if(typeof confirmM==="function")confirmM("Este ficheiro é uma cópia do MW Espanha, não do ERP.\n\nRestaurá-lo aqui substituía o ERP inteiro só pelos dados de Espanha, por isso não foi carregado.\n\nPara trazer os dados de Espanha para o ERP usa «Juntar dados do MW Espanha», nesta mesma página: junta sem substituir e sem duplicar.",function(){},{yesLabel:"Percebi"});else toast("Este ficheiro é do MW Espanha: usa «Juntar dados do MW Espanha».",{type:"error"});return}
+    confirmM("Restaurar backup?\n\n"+o.clients.length+" clientes · "+o.deals.length+" deals · "+(o.invoices||[]).length+" faturas\n\nISTO SUBSTITUI todos os dados actuais ("+D.clients.length+" clientes, "+D.deals.length+" deals). Exporta primeiro se tiveres dúvidas.",function(){D=o;D._restoreId=Date.now().toString(36)+Math.random().toString(36).slice(2,7);window.__forceReplace=true;try{if(window.__RH&&window.__RH.ok){if(!("salarios" in o)&&window.__rhAttach)window.__rhAttach();D._rhSplit=true;}}catch(e){}migrate();save();ren();toast("Backup restaurado com sucesso.",{type:"ok"})},{yesLabel:"Restaurar"});}
   catch(err){toast("Erro a ler o backup: "+err.message,{type:"error"})}};
   r.readAsArrayBuffer?r.readAsText(f):r.readAsText(f);ev.target.value=""}
 function csvEsc(v){v=String(v==null?"":v);return '"'+v.replace(/"/g,'""')+'"'}
@@ -3066,13 +3067,27 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     try{
       // ler o estado atual do servidor e, se mudou desde a última sincronização, fundir por registo
       try{
-        var _skipFetch=false;if(__lastRev){var _rr2=await mwRemoteRev();if(_rr2&&_rr2===__lastRev)_skipFetch=true;}
+        var _skipFetch=false;
+        if(window.__forceReplace){_skipFetch=true;try{var _rrF=await mwRemoteRev();__lastRev=_rrF||null;}catch(e){}}   // restauro de cópia: substitui o que lá está, não se junta a nada
+        else if(__lastRev){var _rr2=await mwRemoteRev();if(_rr2&&_rr2===__lastRev)_skipFetch=true;}
         var cur=_skipFetch?null:await sb.from("app_state").select("data").eq("id",stateId()).single();
         var remote=cur&&cur.data&&cur.data.data;
         if(remote&&Object.keys(remote).length&&__lastData){
           var remoteJs=JSON.stringify(remote);
           if(remoteJs!==__lastData){
             var base=null;try{base=JSON.parse(__lastData);}catch(e){}
+            if(remote._restoreId&&remote._restoreId!==((base&&base._restoreId)||null)){
+              // outra pessoa restaurou uma cópia de segurança: fico com o que está no servidor, não junto o meu estado antigo (era isto que duplicava)
+              var _rl=D._log,_rd=D._redo;D=remote;if(!Array.isArray(D._log))D._log=_rl||[];if(!Array.isArray(D._redo))D._redo=_rd||[];
+              __lastData=remoteJs;__lastRev=remote._rev||null;
+              try{if(RH.ok)rhAttach();else if(D._rhSplit){RH_KEYS.forEach(function(k){delete D[k];});D=rhStrip(D);if(!Array.isArray(D._log))D._log=_rl||[];}}catch(e){}
+              try{if(typeof migrate==="function")migrate();}catch(e){}
+              try{if(typeof ren==="function")ren();}catch(e){}
+              try{prevSnap=snapClone();}catch(e){}
+              __savedSeq=__saveSeq;__pushAgain=false;
+              try{if(typeof window.mwSnack==="function")window.mwSnack("Foi restaurada uma cópia de segurança noutro dispositivo. Esta janela passou a mostrar esses dados; o que estava por gravar aqui foi descartado.");}catch(e){}
+              return;
+            }
             var _mll=D._log,_mlr=D._redo;D=mwMergeStates(base,remote,D);if(!Array.isArray(D._log))D._log=_mll||[];if(!Array.isArray(D._redo))D._redo=_mlr||[];
             __lastData=remoteJs;__lastRev=remote._rev||null;   // a versão do servidor passa a ser a base da próxima gravação
             try{if(typeof migrate==="function")migrate();}catch(e){}
@@ -3101,7 +3116,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
       }
       __conflicts=0;
       if(window.__saveBlocked){window.__saveBlocked=false;var _sb=document.getElementById("saveBlockedBar");if(_sb)_sb.remove();}
-      __lastData=payloadJs;__lastRev=payload._rev;
+      __lastData=payloadJs;__lastRev=payload._rev;window.__forceReplace=false;
       __savedSeq=seq;__pushFails=0;
     }
     catch(e){
