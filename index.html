@@ -9451,9 +9451,8 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     if(w)w.style.display=on?"":"none";app.style.display=on?"none":"";if(on&&w){var fit=function(){try{if(w.style.display==="none")return;var t=w.getBoundingClientRect().top;w.style.height=Math.max(420,window.innerHeight-Math.max(0,t))+"px";w.style.flex="none";}catch(e){}};fit();if(!window.__pesqFit){window.__pesqFit=1;window.addEventListener("resize",fit);}}
     if(on&&w){try{var cw=document.getElementById("pesqFrame").contentWindow;if(cw&&cw.__pesqRefresh)cw.__pesqRefresh();}catch(e){}}}
   (function(){
-    try{var com=NAV.filter(function(n){return n.group==="Comercial";})[0];if(com&&!com.items.some(function(it){return it.id==="pesquisa";}))com.items.push({id:"pesquisa",l:"Pesquisa & apresentações"});
-      if(!TABS.some(function(t){return t.id==="pesquisa";}))TABS.push({id:"pesquisa"});}catch(e){}
-    var _rPq=rPnl;rPnl=function(){var on=(typeof cTab!=="undefined"&&cTab==="pesquisa");try{pesqShow(on);}catch(e){if(window.__scrErr)window.__scrErr(e,"pesquisa");}if(on)return;return _rPq.apply(this,arguments);};
+    try{if(!TABS.some(function(t){return t.id==="pesqmod";}))TABS.push({id:"pesqmod"});}catch(e){}
+    var _rPq=rPnl;rPnl=function(){var on=(typeof cTab!=="undefined"&&cTab==="pesqmod");try{pesqShow(on);}catch(e){if(window.__scrErr)window.__scrErr(e,"pesquisa");}if(on)return;return _rPq.apply(this,arguments);};
     try{if(typeof rTabs==="function")rTabs();}catch(e){}
   })();
 
@@ -9489,7 +9488,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     {group:"Direção",i:"🧭",dept:"direcao",items:[
       {id:"dashboard",l:"Visão geral"},{id:"estrategia",l:"Análise & insights"},{id:"objexec",l:"Objetivos & Execução"},{id:"projecao",l:"Projeção do ano"},{id:"orc2027",l:"Orçamento próximo ano",dept:"orcamento"},{id:"arr",l:"ARR",dept:"orcamento"}]},
     {group:"Comercial",i:"🏥",dept:"comercial",items:[
-      {id:"pipeline",l:"Pipeline"},{id:"followup",l:"Follow-up"},{id:"reunioes",l:"Visitas & Reuniões"},{id:"propostas",l:"Propostas"},{id:"subscricoes",l:"Subscrições/AT"},{id:"forecast",l:"Forecast"},{id:"clientes",l:"Vendas"},{id:"objetivos",l:"Objetivos comerciais"},{id:"roicomercial",l:"Retorno comercial"},{id:"perdidas",l:"Perdidas"}]},
+      {id:"pipeline",l:"Pipeline"},{id:"followup",l:"Follow-up"},{id:"reunioes",l:"Visitas & Reuniões"},{id:"propostas",l:"Propostas"},{id:"subscricoes",l:"Subscrições/AT"},{id:"forecast",l:"Forecast"},{id:"clientes",l:"Vendas"},{id:"objetivos",l:"Objetivos comerciais"},{id:"roicomercial",l:"Retorno comercial"},{id:"perdidas",l:"Perdidas"},{id:"pesqmod",l:"Pesquisa & apresentações"}]},
     {group:"Clientes",i:"🏢",dept:"clientesg",always:true,items:[
       {id:"clientesTotais",l:"Diretório"},{id:"contactos",l:"Contactos"},{id:"carteira",l:"Região & Carteira"},{id:"mapa",l:"Mapa"}]},
     {group:"Suporte",i:"🎧",dept:"suporte",always:true,items:[
@@ -9551,7 +9550,7 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
   }
   // reconstrói o menu por departamentos (substitui o NAV antigo)
   if(typeof NAV!=="undefined"){NAV.length=0;DEPT_GROUPS.forEach(function(g){NAV.push({group:g.group,i:g.i,always:g.always,items:g.items});});}
-  if(typeof TABS!=="undefined"){["followup","logs","colaboradores","projetos","suporte","ferias","agenda","rh","minhaarea","forecast","tesouraria","carteira","rentabilidade","faturacao","rgpd","seguranca","horas","dunning","contratos","propostas","pesquisa","reembolsos","kb","cronograma","inventario","comparacao","salarios2024","salarios2025","salarios2026","vendasproj","horasTodas","horasCustos","vencimentos","manual","projecao","objetivos","novasvendas","objexec"].forEach(function(id){if(!TABS.some(function(t){return t.id===id;}))TABS.push({id:id});});}
+  if(typeof TABS!=="undefined"){["followup","logs","colaboradores","projetos","suporte","ferias","agenda","rh","minhaarea","forecast","tesouraria","carteira","rentabilidade","faturacao","rgpd","seguranca","horas","dunning","contratos","propostas","pesquisa","pesqmod","reembolsos","kb","cronograma","inventario","comparacao","salarios2024","salarios2025","salarios2026","vendasproj","horasTodas","horasCustos","vencimentos","manual","projecao","objetivos","novasvendas","objexec"].forEach(function(id){if(!TABS.some(function(t){return t.id===id;}))TABS.push({id:id});});}
 
   // menu: admin vê tudo; membro vê os seus departamentos + os grupos de acesso geral (Férias)
   if(typeof rTabs==="function"){
