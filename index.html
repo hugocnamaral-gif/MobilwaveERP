@@ -2764,7 +2764,15 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   var RH_PP=["custoBase","contrato","documentos","admissao","avaliacoes","nif","iban","morada","nascimento"];
   var RH_ABS=["note","nota","anexo","anexos","motivo","doc","entidade"];
   var RH={ok:false,rev:null,last:null,timer:null,busy:false,noRow:false,blocked:false};window.__RH=RH;
-  function rhId(){return String(stateId())+"__rh";}
+  // linhas à parte (RH privado, pesquisa): se a coluna «id» da tabela for um número inteiro, usam um número derivado em vez de «1__rh»
+  var SIDE={num:null,probed:false,tab:"app_state"};window.__SIDE=SIDE;
+  function sideId(suf,n){var b=stateId();if(SIDE.tab==="app_extra")return String(b)+suf;if(SIDE.num&&/^\d+$/.test(String(b)))return Number(b)*1000+n;return String(b)+suf;}
+  async function sideProbe(){if(SIDE.probed||!sb)return;
+    // se existir a tabela «app_extra» (criada pelo linhas_extra.sql), as linhas à parte vivem lá e a tabela principal não é tocada
+    try{var x=await sb.from("app_extra").select("id").limit(1);if(x&&!x.error){SIDE.tab="app_extra";SIDE.num=false;SIDE.probed=true;return;}}catch(e){}
+    try{var r=await sb.from("app_state").select("id").eq("id",String(stateId())+"__sonda").maybeSingle();
+      if(r&&r.error){if(/integer|bigint|smallint|22P02/i.test(String(r.error.message||"")+String(r.error.code||""))){SIDE.num=true;SIDE.probed=true;}}else{SIDE.num=false;SIDE.probed=true;}}catch(e){}}
+  function rhId(){return sideId("__rh",901);}
   function rhAccess(){if(currentRole==="admin")return true;var d=currentDepts;return !!(d&&typeof d==="object"&&(d.rh||d.direcao||d.financeiro||d.vencimentos));}
   window.rhAccess=rhAccess;
   // tira de um estado a parte privada e devolve-a
@@ -2786,13 +2794,13 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     var hp=D.hrPeople;if(hp&&typeof hp==="object")Object.keys(o.pp||{}).forEach(function(em){if(hp[em]&&typeof hp[em]==="object"){var x=o.pp[em];for(var f in x)hp[em][f]=x[f];}});
     if(Array.isArray(D.absences))D.absences.forEach(function(a){var x=a&&(o.abs||{})[a.id];if(x){for(var f in x)a[f]=x[f];delete a._priv;}});}
   window.__rhAttach=function(){if(RH.ok)rhAttach();};
-  async function rhFetch(){var r=await sb.from("app_state").select("data").eq("id",rhId()).maybeSingle();if(r&&r.error)throw r.error;return (r&&r.data&&r.data.data)||null;}
+  async function rhFetch(){var r=await sb.from(SIDE.tab).select("data").eq("id",rhId()).maybeSingle();if(r&&r.error)throw r.error;return (r&&r.data&&r.data.data)||null;}
   async function rhWrite(o,create){var body={k:o.k,pp:o.pp,abs:o.abs,_rev:Date.now().toString(36)+Math.random().toString(36).slice(2,7),updatedAt:new Date().toISOString(),updatedBy:currentEmail||""};var r;
-    if(create){r=await sb.from("app_state").upsert({id:rhId(),data:body}).select("id");}
-    else{var q=sb.from("app_state").update({data:body}).eq("id",rhId());q=RH.rev?q.eq("data->>_rev",RH.rev):q.is("data->>_rev",null);r=await q.select("id");}
+    if(create){r=await sb.from(SIDE.tab).upsert({id:rhId(),data:body}).select("id");}
+    else{var q=sb.from(SIDE.tab).update({data:body}).eq("id",rhId());q=RH.rev?q.eq("data->>_rev",RH.rev):q.is("data->>_rev",null);r=await q.select("id");}
     if(r&&r.error)throw r.error;if(!r||!r.data||!r.data.length)return false;RH.rev=body._rev;RH.last=JSON.stringify({k:o.k,pp:o.pp,abs:o.abs});RH.cache=JSON.parse(RH.last);return true;}
   // chamado depois de carregar a linha geral
-  async function rhAfterLoad(){RH.ok=false;RH.blocked=false;
+  async function rhAfterLoad(){RH.ok=false;RH.blocked=false;try{await sideProbe();}catch(e){}
     if(!sb||!D)return;
     if(!rhAccess()){ // sem acesso: se a separação já foi feita, garante que nada privado fica em memória
       if(D._rhSplit){RH_KEYS.forEach(function(k){delete D[k];});D=rhStrip(D);}
@@ -2819,7 +2827,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     }catch(e){try{console.warn("[RH] gravação falhou:",e&&e.message||e);}catch(_){}RH.timer=setTimeout(rhPush,8000);}
     finally{RH.busy=false;}}
   // de 30 em 30 s: se a linha privada mudou no servidor e não tenho alterações minhas, atualizo
-  async function rhPoll(){if(!RH.ok||RH.busy||RH.timer&&false)return;try{var c=await sb.from("app_state").select("rev:data->>_rev").eq("id",rhId()).maybeSingle();var rv=c&&c.data?c.data.rev:null;if(!rv||rv===RH.rev)return;
+  async function rhPoll(){if(!RH.ok||RH.busy||RH.timer&&false)return;try{var c=await sb.from(SIDE.tab).select("rev:data->>_rev").eq("id",rhId()).maybeSingle();var rv=c&&c.data?c.data.rev:null;if(!rv||rv===RH.rev)return;
       var o=rhExtract(D);if(JSON.stringify({k:o.k,pp:o.pp,abs:o.abs})!==RH.last)return; // tenho alterações por gravar
       var row=await rhFetch();if(!row)return;RH.rev=row._rev||null;RH.cache={k:row.k||{},pp:row.pp||{},abs:row.abs||{}};RH.last=JSON.stringify(RH.cache);rhAttach();
       try{if(typeof ren==="function"&&!(typeof modalOpen==="function"&&modalOpen())&&!(typeof editingInline==="function"&&editingInline()))ren();}catch(e){}}catch(e){}}
@@ -3657,8 +3665,12 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
   function hrRateFor(nome,dOrY){var _yr=null;if(dOrY){var _mm=String(dOrY).match(/(\d{4})/);if(_mm)_yr=_mm[1];}if(_yr&&typeof salVHyear==="function"){var _yv=salVHyear(nome,_yr);if(_yv!=null&&_yv>0)return _yv;}var m=hrRates();if(nome&&m[nome]!=null&&m[nome]!=="")return Number(m[nome]);var sv=(typeof salLookupVH==="function")?salLookupVH(nome):null;return (sv!=null&&sv>0)?(Math.round(sv*100)/100):hrRate();}
   window.hrRateFor=hrRateFor;
   function collabNomes(){var out=[];try{Object.keys(D.hrPeople||{}).forEach(function(e){var n=(D.hrPeople[e]||{}).nome||e;if(n&&out.indexOf(n)<0)out.push(n);});var s=D.salarios||{};Object.keys(s).forEach(function(y){(s[y]||[]).forEach(function(x){if(x.nome&&out.indexOf(x.nome)<0)out.push(x.nome);});});}catch(e){}return out;}
-  function projTsHoras(r){var did=r&&r.dealId;if(!did)return 0;return (D.timesheets||[]).filter(function(t){return t.dealId===did;}).reduce(function(a,t){return a+(Number(t.horas)||0);},0);}
-  function projTsCusto(r){var did=r&&r.dealId;if(!did)return 0;return (D.timesheets||[]).filter(function(t){return t.dealId===did;}).reduce(function(a,t){return a+(Number(t.horas)||0)*((t.valorHora!=null&&t.valorHora!=="")?Number(t.valorHora):hrRate());},0);}
+  // vendas cujas horas do registo central contam para este projeto: a própria e as vendas ligadas que não têm projeto seu
+  // (ex.: a venda do CRM ligada ao projeto «Piloto 360» — as horas lançadas em Espanha caem nessa venda)
+  function projTsDeals(r){var o={};if(!r)return o;if(r.dealId)o[r.dealId]=1;if(Array.isArray(r.linkedDeals))r.linkedDeals.forEach(function(id){if(!id||o[id])return;var outro=(typeof _pByDeal==="function")?_pByDeal(id):null;if(!outro||outro===r)o[id]=1;});return o;}
+  window.projTsDeals=projTsDeals;
+  function projTsHoras(r){var did=r&&r.dealId;if(!did)return 0;var _pd=projTsDeals(r);return (D.timesheets||[]).filter(function(t){return _pd[t.dealId]===1;}).reduce(function(a,t){return a+(Number(t.horas)||0);},0);}
+  function projTsCusto(r){var did=r&&r.dealId;if(!did)return 0;var _pd=projTsDeals(r);return (D.timesheets||[]).filter(function(t){return _pd[t.dealId]===1;}).reduce(function(a,t){return a+(Number(t.horas)||0)*((t.valorHora!=null&&t.valorHora!=="")?Number(t.valorHora):hrRate());},0);}
   function projHoras(r){return Math.round(((r.horas||[]).reduce(function(a,x){return a+(Number(x.horas)||0);},0)+projTsHoras(r))*100)/100;}
   function projMaoObra(r){return (r.horas||[]).reduce(function(a,x){return a+(Number(x.horas)||0)*((x.valorHora!=null&&x.valorHora!=="")?Number(x.valorHora):hrRate());},0)+projTsCusto(r);}
   var __expIdx=null;
@@ -3681,7 +3693,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     }
   }
   function projGantt(r){
-    function taskRealRange(t){var arr=[];if(t.inicioReal)arr.push(t.inicioReal);if(t.fimReal)arr.push(t.fimReal);(r.horas||[]).forEach(function(x){if(x.tarefaId===t.id&&x.data)arr.push(x.data);});(D.timesheets||[]).forEach(function(x){if(x.dealId===r.dealId&&x.taskId===t.id&&x.data)arr.push(x.data);});if(!arr.length)return null;arr.sort();return {s:arr[0],e:arr[arr.length-1]};}
+    function taskRealRange(t){var arr=[];if(t.inicioReal)arr.push(t.inicioReal);if(t.fimReal)arr.push(t.fimReal);(r.horas||[]).forEach(function(x){if(x.tarefaId===t.id&&x.data)arr.push(x.data);});(function(){var _pd=projTsDeals(r);(D.timesheets||[]).forEach(function(x){if(_pd[x.dealId]===1&&x.taskId===t.id&&x.data)arr.push(x.data);});})();if(!arr.length)return null;arr.sort();return {s:arr[0],e:arr[arr.length-1]};}
     var ts=(r.tarefas||[]).filter(function(t){return t.dataInicio||t.dataFim||taskRealRange(t);});
     if(!ts.length)return '<div style="font-size:12.5px;color:#6B7680">Sem tarefas com datas. Define <b>início/fim previsto</b> — ou regista horas — nas tarefas para veres o cronograma.</div>';
     var starts=[],ends=[];
@@ -4071,7 +4083,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     });
     h+='</div><div style="font-size:12px;color:#6B7680;margin-top:6px">Clica numa tarefa para editar (fase, responsável, estado, horas estimadas).</div></div>';
     (function(){var tks=(r.tarefas||[]);if(tks.length){
-      var horasReais=function(tid){var a=(r.horas||[]).filter(function(x){return x.tarefaId===tid;}).reduce(function(s,x){return s+(Number(x.horas)||0);},0);a+=(D.timesheets||[]).filter(function(x){return x.dealId===r.dealId&&x.taskId===tid;}).reduce(function(s,x){return s+(Number(x.horas)||0);},0);return a;};
+      var horasReais=function(tid){var a=(r.horas||[]).filter(function(x){return x.tarefaId===tid;}).reduce(function(s,x){return s+(Number(x.horas)||0);},0);var _pd=projTsDeals(r);a+=(D.timesheets||[]).filter(function(x){return _pd[x.dealId]===1&&x.taskId===tid;}).reduce(function(s,x){return s+(Number(x.horas)||0);},0);return a;};
       var overrun=tks.filter(function(t){var est=Number(t.horasEst)||0;return est>0&&horasReais(t.id)>est;});
       h+='<div class="cd"><div class="ct2" style="margin-bottom:8px">Execução das tarefas — tempo previsto vs real</div>';
       if(overrun.length)h+='<div class="alert" style="margin-bottom:10px"><span>⚠️</span><span><b>'+overrun.length+' tarefa'+(overrun.length>1?"s":"")+' ultrapassou o tempo previsto</b> — '+overrun.map(function(t){return esc(t.titulo||"?");}).slice(0,4).join(", ")+(overrun.length>4?"…":"")+'.</span></div>';
@@ -4140,7 +4152,7 @@ if("serviceWorker" in navigator&&location.protocol!=="file:"){
     else{h+='<div style="overflow-x:auto"><table><thead><tr><th>Artigo</th><th style="text-align:right">Qtd</th><th style="text-align:right">Custo unit.</th><th style="text-align:right">Total</th><th>Data</th>'+(canEdit?'<th></th>':'')+'</tr></thead><tbody>';
       _eq.forEach(function(e){h+='<tr><td style="font-weight:600">'+esc(e.nome||"—")+'</td><td style="text-align:right">'+(Number(e.qtd)||0)+'</td><td style="text-align:right">'+fmt(e.custoUnit||0)+'</td><td style="text-align:right;font-weight:700">'+fmt((Number(e.qtd)||0)*(Number(e.custoUnit)||0))+'</td><td style="font-size:12px">'+(e.data?fmtD(e.data):"—")+'</td>'+(canEdit?'<td style="text-align:right"><button class="btn bs" style="background:#fff;color:'+DNG+';border:1px solid '+rgba(DNG,.3)+'" onclick="delProjEquip(\''+dealId+'\',\''+e.id+'\')" title="Remover e devolver ao stock">×</button></td>':'')+'</tr>';});
       h+='</tbody></table></div>';}
-    var regs=(r.horas||[]).map(function(x){return {data:x.data,colaborador:x.colaborador||(typeof emailToNome==="function"?emailToNome(x.email):"")||"—",tarefaId:x.tarefaId,horas:x.horas,valorHora:x.valorHora,nota:x.nota,_src:"proj",id:x.id};});(D.timesheets||[]).filter(function(t){return t.dealId===r.dealId;}).forEach(function(t){regs.push({data:t.data,colaborador:(t.nome||(typeof emailToNome==="function"?emailToNome(t.email):t.email))||"—",tarefaId:t.taskId,horas:t.horas,valorHora:t.valorHora,nota:t.descricao||"",_src:"ts",id:t.id});});regs.sort(function(a,b){return (b.data||"").localeCompare(a.data||"");});
+    var regs=(r.horas||[]).map(function(x){return {data:x.data,colaborador:x.colaborador||(typeof emailToNome==="function"?emailToNome(x.email):"")||"—",tarefaId:x.tarefaId,horas:x.horas,valorHora:x.valorHora,nota:x.nota,_src:"proj",id:x.id};});(function(){var _pd=projTsDeals(r);return (D.timesheets||[]).filter(function(t){return _pd[t.dealId]===1;});})().forEach(function(t){regs.push({data:t.data,colaborador:(t.nome||(typeof emailToNome==="function"?emailToNome(t.email):t.email))||"—",tarefaId:t.taskId,horas:t.horas,valorHora:t.valorHora,nota:t.descricao||"",_src:"ts",id:t.id});});regs.sort(function(a,b){return (b.data||"").localeCompare(a.data||"");});
     if(regs.length){
       h+='<div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Tarefa</th><th style="text-align:right">Horas</th><th style="text-align:right">Valor/h</th><th>Nota</th>'+(canEdit?'<th></th>':'')+'</tr></thead><tbody>';
       regs.forEach(function(x){
@@ -8738,7 +8750,7 @@ var invOpts='<option value="">— sem movimento associado —</option>'+(D.invoi
   var REU_MODOS=[["presencial","Presencial"],["online","Online"],["telefone","Telefónica"]];
   var REU_DESP_CAT=[["combustivel","Combustível"],["portagens","Portagens"],["refeicao","Refeição"],["alojamento","Alojamento"],["material","Material"],["telecom","Telecomunicações"],["outro","Outro"]];
   function reuCusto(r){if(!r)return 0;var km=(Number(r.km)||0)*((r.valorKm!=null&&r.valorKm!=="")?Number(r.valorKm):0.40);var hh=(Number(r.horas)||0)*((r.valorHora!=null&&r.valorHora!=="")?Number(r.valorHora):0);var ex=Number(r.despesaExtra)||0;return Math.round((km+hh+ex)*100)/100;}
-  function reuCustosProj(r){if(!r||!r.dealId)return 0;return reuList().filter(function(x){return x.custoAlocado&&!x.custoNoBanco&&x.dealId===r.dealId;}).reduce(function(a,x){return a+reuCusto(x);},0);}
+  function reuCustosProj(r){if(!r||!r.dealId)return 0;var _pd=(typeof projTsDeals==="function")?projTsDeals(r):(function(){var o={};o[r.dealId]=1;return o;})();return reuList().filter(function(x){return x.custoAlocado&&!x.custoNoBanco&&_pd[x.dealId]===1;}).reduce(function(a,x){return a+reuCusto(x);},0);}
   window.reuCusto=reuCusto;window.reuCustosProj=reuCustosProj;
   window.reuCostPrev=function(){var g=function(i){var e=document.getElementById(i);return e?(Number(e.value)||0):0;};var t=g("ru_km")*g("ru_vkm")+g("ru_horas")*g("ru_vh")+g("ru_despv");var el=document.getElementById("ru_costprev");if(el)el.innerHTML=t>0?("Custo total estimado da visita: <b>"+fmt(Math.round(t*100)/100)+"</b>"):"";};
   function reuTipoLbl(v){var m=REU_TIPOS.filter(function(x){return x[0]===v;})[0];return m?m[1]:(v||"Reunião");}
