@@ -10391,6 +10391,162 @@ window.subFaturar=function(id){if(typeof isReadOnlyNow==="function"&&isReadOnlyN
     FOTO.picked=(FOTO.picked||0)+1;if(btn){btn.textContent="✓ Adicionado";setTimeout(function(){btn.textContent="+ Adicionar";},1400);}
     var n=document.getElementById("fg_n");if(n)n.textContent=box.querySelectorAll(".dm_art").length+" no orçamento";};
 
+  // ===================== REVISÃO COMERCIAL (out 2026): pacotes, área de artigos, ruído, filtros, custo, apagar =====================
+  (function(){
+  function rvPriv(){try{return currentRole==="admin"||(function(){var d=(typeof userDepts==="function")?userDepts():{};return !!(d&&(d.direcao||d.financeiro||d.vencimentos));})();}catch(e){return currentRole==="admin";}}
+  function rvMe(){try{return (typeof myEmail==="function"?myEmail():(window.__mwEmail||""))||"";}catch(e){return "";}}
+  function rvAutor(rec){try{var me=rvMe().toLowerCase();if(!me)return false;return [rec&&rec.createdBy,rec&&rec.owner,rec&&rec.vendedor,rec&&rec.autor].some(function(x){return x&&String(x).toLowerCase()===me;});}catch(e){return false;}}
+  function rvPodeApagar(rec){return currentRole==="admin"||rvAutor(rec);}
+  window.__rvPodeApagar=rvPodeApagar;window.__rvPriv=rvPriv;
+  function rvNorm(s){return String(s==null?"":s).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/\s+/g," ").trim();}
+  function rvEsc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+
+  /* ---------- PACOTES: artigo-mãe → componentes a 0€ ---------- */
+  function cat(){try{return (typeof window.catItems==="function")?window.catItems():[];}catch(e){return [];}}
+  function pkgMap(){if(!D.catPacotes||typeof D.catPacotes!=="object")D.catPacotes={};return D.catPacotes;}
+  function pkgKey(nome,ref){ref=ref==null?"":String(ref).trim();return ref?("r:"+ref):("n:"+rvNorm(nome));}
+  function artByKey(k){var c=cat();for(var i=0;i<c.length;i++){if(pkgKey(c[i].nome,c[i].ref)===k)return c[i];}return null;}
+  // índice: desc livre → chave de pacote configurado
+  function pkgParentKeyOf(desc){var m=pkgMap();if(!desc)return null;var n=rvNorm(desc);
+    for(var k in m){var a=artByKey(k);var nome=(a&&a.nome)||(m[k]&&m[k].nome)||"";if(rvNorm(nome)===n)return k;}
+    return null;}
+  function pkgComps(k){var m=pkgMap();var p=m[k];return (p&&Array.isArray(p.comps))?p.comps:[];}
+  // 18 componentes base (prefixo D360-COMP / 0€) — oferta de preenchimento rápido
+  function pkgBase(){return cat().filter(function(a){return /Componente da solução/i.test(a.nome||"")||/^D360-COMP-/i.test(a.ref||"")||/^D360-(CLOUD-INCL|USR-INCL)/i.test(a.ref||"")||/-INCL\b/i.test(a.ref||"");}).map(function(a){return {ref:a.ref||"",nome:a.nome,qtd:1};});}
+
+  // reconciliação das linhas de artigos: garante componentes dos pacotes presentes, a 0€, e remove órfãos
+  function pkgReconcile(){
+    var box=document.getElementById("dm_arts");if(!box||window.__pkgBusy)return;window.__pkgBusy=1;
+    try{
+      var rows=[].slice.call(box.querySelectorAll(".dm_art"));
+      // pacotes-mãe presentes (linhas que NÃO são componentes)
+      var present={};rows.forEach(function(r){if(r.getAttribute("data-pkgcomp"))return;var d=(r.querySelector(".dma_desc")||{}).value||"";var k=pkgParentKeyOf(d);if(k)present[k]=r;});
+      // remove componentes cujo pacote-mãe já não está
+      rows.forEach(function(r){var pc=r.getAttribute("data-pkgcomp");if(pc&&!present[pc]){try{r.parentNode.removeChild(r);}catch(e){}}});
+      // acrescenta componentes em falta
+      Object.keys(present).forEach(function(k){
+        var comps=pkgComps(k);if(!comps.length)return;
+        comps.forEach(function(c){
+          var ck=pkgKey(c.nome,c.ref);
+          var ja=[].slice.call(box.querySelectorAll('.dm_art[data-pkgcomp="'+k+'"]')).some(function(r){return r.getAttribute("data-compkey")===ck;});
+          if(ja)return;
+          box.insertAdjacentHTML("beforeend",(typeof dmArtRowHTML==="function")?dmArtRowHTML(box.querySelectorAll(".dm_art").length,{desc:c.nome,qtd:c.qtd||1,precoUnit:0,iva:(cat().filter(function(a){return pkgKey(a.nome,a.ref)===ck;})[0]||{}).iva||0}):"");
+          var nr=box.querySelector(".dm_art:last-child");if(nr){nr.setAttribute("data-pkgcomp",k);nr.setAttribute("data-compkey",ck);}
+        });
+      });
+      // bloqueia/anota as linhas de componentes; destrava as que deixaram de ser
+      [].slice.call(box.querySelectorAll(".dm_art")).forEach(function(r){
+        var pc=r.getAttribute("data-pkgcomp");var dsc=r.querySelector(".dma_desc"),pr=r.querySelector(".dma_preco"),rm=r.querySelector("button");
+        if(pc){if(dsc){dsc.readOnly=true;dsc.style.opacity=".75";}if(pr){pr.value=0;pr.readOnly=true;pr.title="Incluído no pacote (0€)";pr.style.opacity=".6";}if(rm)rm.style.visibility="hidden";
+          if(!r.querySelector(".pkg-badge")&&dsc){var b=document.createElement("span");b.className="pkg-badge";b.textContent="incluído";b.style.cssText="position:absolute;right:2px;top:-8px;font-size:9px;font-weight:700;color:#2E8C93;background:#EAF4F4;border:1px solid #CFE6E8;border-radius:6px;padding:0 4px;pointer-events:none";r.style.position="relative";r.appendChild(b);}}
+        else{if(dsc)dsc.readOnly=false;if(pr)pr.readOnly=false;if(rm)rm.style.visibility="";var ob=r.querySelector(".pkg-badge");if(ob)ob.remove();}
+      });
+    }catch(e){try{if(window.__scrErr)window.__scrErr(e,"pacotes · reconciliar");}catch(_){}}
+    window.__pkgBusy=0;
+    try{if(window.__pkgBusy2)return;window.__pkgBusy2=1;if(typeof _rvDmCalc==="function")_rvDmCalc();window.__pkgBusy2=0;}catch(e){window.__pkgBusy2=0;}
+  }
+  var _rvDmCalc=window.dmArtCalc;
+  if(typeof _rvDmCalc==="function"){window.dmArtCalc=function(){var r=_rvDmCalc.apply(this,arguments);if(!window.__pkgBusy){pkgReconcile();}return r;};}
+  window.pkgReconcile=pkgReconcile;
+
+  /* ---------- + Deal: área de artigos em destaque + reconciliação ---------- */
+  if(typeof window.openDM==="function"){var _rvOpenDM=window.openDM;window.openDM=function(){var r=_rvOpenDM.apply(this,arguments);
+    try{var art=document.getElementById("dm_arts");var mdl=document.querySelector("#mArea .mdl");if(art&&mdl){
+      var block=art.parentNode;
+      // destaque: moldura, mais altura, logo a seguir ao Produto
+      block.style.cssText=(block.style.cssText||"")+";border:1px solid #CFE6E8;background:#F7FBFB;border-radius:12px;padding:12px 12px 10px;margin:10px 0 14px;";
+      art.style.maxHeight="320px";art.style.overflowY="auto";art.style.minHeight="90px";art.style.paddingRight="2px";
+      var prod=document.getElementById("f2");var anchor=prod?(prod.closest(".fld")||prod.parentNode):null;
+      if(anchor&&anchor.parentNode){anchor.parentNode.insertBefore(block,anchor.nextSibling);}
+      // "Mais detalhes": recolhe responsáveis
+      var vd=document.getElementById("f_vd");var row=vd?(vd.closest(".r2")||vd.parentNode):null;
+      if(row&&!document.getElementById("dm_dethdr")){var det=document.createElement("details");det.id="dm_det";det.style.cssText="margin:4px 0 8px;border-top:1px solid #EFF1F4;padding-top:6px";
+        var sm=document.createElement("summary");sm.id="dm_dethdr";sm.textContent="Mais detalhes (responsáveis)";sm.style.cssText="cursor:pointer;font-size:12px;color:#5F6B75;font-weight:600;outline:none";det.appendChild(sm);
+        var note=row.nextElementSibling&&/gestor de conta/i.test(row.nextElementSibling.textContent||"")?row.nextElementSibling:null;
+        row.parentNode.insertBefore(det,row);det.appendChild(row);if(note)det.appendChild(note);}
+      pkgReconcile();
+    }}catch(e){try{if(window.__scrErr)window.__scrErr(e,"+ Deal · layout");}catch(_){}}
+    return r;};}
+
+  /* ---------- Editor de pacotes (Definições → Pacotes) ---------- */
+  function renderPacotes(){var app=document.getElementById("app");if(!app)return;var ed=(currentRole==="admin");
+    var m=pkgMap();var sel=window.__pkgSel||"";
+    var arts=cat();var opts=arts.map(function(a){return '<option value="'+rvEsc(pkgKey(a.nome,a.ref))+'">'+rvEsc(a.nome)+(a.ref?" · "+rvEsc(a.ref):"")+'</option>';}).join("");
+    var h=(typeof pgHead==="function"?pgHead("📦","Pacotes — componentes incluídos",""):'<h2>Pacotes</h2>');
+    h+='<div class="cd"><div style="font-size:12.5px;color:#5F6B75;margin-bottom:10px">Define, para cada artigo-mãe (ex.: um licenciamento 360), os componentes que entram automaticamente a 0€ quando o escolhes num orçamento — como um pacote no Odoo.</div>';
+    // lista de pacotes já definidos
+    var keys=Object.keys(m).filter(function(k){return m[k]&&m[k].comps&&m[k].comps.length;});
+    if(keys.length){h+='<div style="overflow-x:auto;margin-bottom:14px"><table><thead><tr><th>Artigo-mãe</th><th>Componentes</th><th></th></tr></thead><tbody>';
+      keys.forEach(function(k){var a=artByKey(k);var nome=(a&&a.nome)||(m[k].nome)||k;h+='<tr><td style="font-weight:600">'+rvEsc(nome)+'</td><td style="font-size:12px;color:#5F6B75">'+m[k].comps.length+' · '+rvEsc(m[k].comps.slice(0,4).map(function(c){return c.nome;}).join(", "))+(m[k].comps.length>4?"…":"")+'</td><td style="text-align:right;white-space:nowrap"><button class="btn bs" style="background:'+SL+'" onclick="pkgEdit(\''+rvEsc(k)+'\')">Editar</button>'+(ed?' <button class="btn bs" style="background:#fff;color:#B94A3E;border:1px solid #E7C1BC" onclick="pkgDel(\''+rvEsc(k)+'\')">✕</button>':'')+'</td></tr>';});
+      h+='</tbody></table></div>';}
+    else h+='<div style="font-size:12.5px;color:#6B7680;margin-bottom:12px">Ainda não há pacotes definidos.</div>';
+    if(ed){
+      h+='<div style="border-top:1px solid #EFF1F4;padding-top:12px"><div style="font-weight:700;font-size:13px;margin-bottom:8px">'+(sel?"Editar pacote":"Novo pacote")+'</div>';
+      h+='<label style="display:block;font-size:11.5px;font-weight:700;color:#5F6B75;margin-bottom:4px">Artigo-mãe</label><select id="pkg_parent" style="width:100%;border:1px solid #E4E8EB;border-radius:9px;padding:9px 11px;font-size:13px;font-family:inherit;background:#fff;margin-bottom:10px"><option value="">— escolher artigo —</option>'+opts.replace('value="'+rvEsc(sel)+'"','value="'+rvEsc(sel)+'" selected')+'</select>';
+      var comps=sel&&m[sel]?m[sel].comps:[];
+      h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><label style="font-size:11.5px;font-weight:700;color:#5F6B75">Componente a 0€</label><select id="pkg_comp" style="flex:1;min-width:200px;border:1px solid #E4E8EB;border-radius:9px;padding:8px 11px;font-size:13px;font-family:inherit;background:#fff"><option value="">— escolher componente —</option>'+opts+'</select><button class="btn bs" style="background:#2E8C93" onclick="pkgAddComp()">+ Adicionar</button><button class="btn bs" style="background:'+SL+'" onclick="pkgPreBase()" title="Preenche com os componentes base da solução (0€)">Usar componentes base</button></div>';
+      h+='<div id="pkg_comps">'+(comps.length?comps.map(function(c,i){return '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #E4E8EB;border-radius:9px;margin-bottom:6px"><span style="flex:1;font-size:13px">'+rvEsc(c.nome)+'</span><span style="font-size:11.5px;color:#6B7680">qtd '+(c.qtd||1)+'</span><button class="btn bs" style="background:#fff;color:#B94A3E;border:1px solid #E7C1BC" onclick="pkgRmComp('+i+')">✕</button></div>';}).join(""):'<div style="font-size:12px;color:#6B7680">Sem componentes.</div>')+'</div>';
+      h+='<div style="font-size:11.5px;color:#6B7680;margin-top:8px">Os componentes entram sempre a 0€. Guardado automaticamente.</div></div>';
+    }
+    h+='</div>';app.innerHTML=h;
+    var ps=document.getElementById("pkg_parent");if(ps)ps.onchange=function(){window.__pkgSel=ps.value;renderPacotes();};
+  }
+  window.renderPacotes=renderPacotes;
+  window.pkgEdit=function(k){window.__pkgSel=k;renderPacotes();};
+  window.pkgDel=function(k){if(currentRole!=="admin")return;var m=pkgMap();confirmM("Remover este pacote?",function(){delete m[k];save();if(window.__pkgSel===k)window.__pkgSel="";renderPacotes();toastSafe("Pacote removido.","ok");},{yesLabel:"Remover"});};
+  function pkgEnsure(k){var m=pkgMap();if(!m[k]){var a=artByKey(k);m[k]={nome:(a&&a.nome)||"",comps:[]};}return m[k];}
+  window.pkgAddComp=function(){var k=window.__pkgSel;if(!k){toastSafe("Escolhe primeiro o artigo-mãe.");return;}var cs=document.getElementById("pkg_comp");var ck=cs&&cs.value;if(!ck)return;var a=artByKey(ck);if(!a)return;var p=pkgEnsure(k);if(p.comps.some(function(c){return pkgKey(c.nome,c.ref)===ck;})){toastSafe("Já está no pacote.");return;}p.comps.push({ref:a.ref||"",nome:a.nome,qtd:1});save();renderPacotes();};
+  window.pkgRmComp=function(i){var k=window.__pkgSel;var m=pkgMap();if(!m[k])return;m[k].comps.splice(i,1);if(!m[k].comps.length)delete m[k];save();renderPacotes();};
+  window.pkgPreBase=function(){var k=window.__pkgSel;if(!k){toastSafe("Escolhe primeiro o artigo-mãe.");return;}var p=pkgEnsure(k);var base=pkgBase();var ex={};p.comps.forEach(function(c){ex[pkgKey(c.nome,c.ref)]=1;});base.forEach(function(c){if(!ex[pkgKey(c.nome,c.ref)])p.comps.push(c);});save();renderPacotes();toastSafe(base.length+" componentes base adicionados.","ok");};
+
+  /* ---------- Custo visitas: só admin/direção/financeiro (feito no dispatch do rPnl) ---------- */
+  function rvStripCusto(){try{if(rvPriv())return;var app=document.getElementById("app");if(!app)return;
+    [].slice.call(app.querySelectorAll(".kr > *")).forEach(function(k){if(/custo visitas/i.test(k.textContent||""))k.remove();});
+    [].slice.call(app.querySelectorAll("select")).forEach(function(s){var oc=s.getAttribute("onchange")||"";if(/ruCusto|__ruCusto|'custo'|\"custo\"/.test(oc))s.remove();});
+    [].slice.call(app.querySelectorAll(".bdg,span")).forEach(function(e){if(e.children.length===0&&/^Custo\b/.test((e.textContent||"").trim())&&/€/.test(e.textContent||""))e.style.display="none";});
+    var tbl=app.querySelector("table");if(tbl){var ths=[].slice.call(tbl.querySelectorAll("thead th"));var ci=-1;ths.forEach(function(th,i){if(/custo/i.test(th.textContent||""))ci=i;});
+      if(ci>=0){[].slice.call(tbl.querySelectorAll("tr")).forEach(function(tr){var c=tr.children[ci];if(c)c.style.display="none";});}}
+  }catch(e){}}
+
+  /* ---------- Apagar: só admin + autor ---------- */
+  function guardDel(name,find){var orig=window[name];if(typeof orig!=="function")return;window[name]=function(id){try{var rec=find(id);if(rec&&!rvPodeApagar(rec)){toastSafe("Só o administrador ou quem criou o registo pode eliminar.");return;}}catch(e){}return orig.apply(this,arguments);};}
+  guardDel("delReuniao",function(id){return (typeof reuList==="function"?reuList():(D.reunioes||[])).filter(function(x){return x.id===id;})[0];});
+  guardDel("delAg",function(id){return (D.agenda||[]).filter(function(x){return x.id===id;})[0];});
+  guardDel("delDl",function(id){return (D.deals||[]).filter(function(x){return x.id===id;})[0];});
+
+  /* ---------- Reunião: menos ruído (recolher custos/logística) ---------- */
+  if(typeof window.openReuniao==="function"){var _rvOR=window.openReuniao;window.openReuniao=function(){var r=_rvOR.apply(this,arguments);
+    try{var mdl=document.querySelector("#mArea .mdl");if(mdl&&!document.getElementById("ru_dethdr")){
+      function boxOf(el){return el.closest(".r2")||el.closest(".fld")||el.parentNode;}
+      function wrapFields(ids,titulo,aberto){var first=null;for(var i=0;i<ids.length;i++){var e=document.getElementById(ids[i]);if(e){first=boxOf(e);if(first)break;}}
+        if(!first||!first.parentNode)return;var det=document.createElement("details");if(aberto)det.open=true;det.style.cssText="margin:6px 0;border-top:1px solid #EFF1F4;padding-top:6px";var sm=document.createElement("summary");sm.textContent=titulo;sm.style.cssText="cursor:pointer;font-size:12px;color:#5F6B75;font-weight:600;outline:none";det.appendChild(sm);first.parentNode.insertBefore(det,first);
+        ids.forEach(function(id){var el=document.getElementById(id);if(!el)return;var box=boxOf(el);if(box&&box!==det&&!det.contains(box)&&!box.contains(det))det.appendChild(box);});return det;}
+      var d1=wrapFields(["ru_km","ru_vkm","ru_horas","ru_vh","ru_despv","ru_aloc","ru_nobanco","ru_costprev"],"Custos e deslocação (opcional)",false);
+      if(d1)d1.querySelector("summary").id="ru_dethdr";
+      wrapFields(["ru_pnos","ru_pcli","ru_pp","ru_local"],"Participantes e próximos passos (opcional)",false);
+    }}catch(e){try{if(window.__scrErr)window.__scrErr(e,"reunião · recolher");}catch(_){}}
+    return r;};}
+
+  /* ---------- Pipeline + Follow-up: coerência visual dos filtros ---------- */
+  function rvFiltrosCoerentes(){try{var app=document.getElementById("app");if(!app)return;
+    if(typeof cTab!=="undefined"&&cTab==="pipeline"){var bar=app.querySelector('[style*="flex-wrap:wrap"]');
+      [].slice.call(app.querySelectorAll("select")).forEach(function(s){var oc=s.getAttribute("onchange")||"";if(/setPipeF|__pipeAll|setYear/.test(oc)){s.style.border="1px solid #E4E8EB";s.style.borderRadius="8px";s.style.padding="7px 10px";s.style.fontSize="12.5px";s.style.fontFamily="inherit";s.style.background="#fff";s.style.height="34px";}});}
+    if(typeof cTab!=="undefined"&&cTab==="followup"){
+      [].slice.call(app.querySelectorAll("select")).forEach(function(s){var oc=s.getAttribute("onchange")||"";if(/fuSet\('gc'/.test(oc)&&!s.getAttribute("data-lbl")){s.setAttribute("data-lbl","1");if(s.options[0]&&/todos|gestor/i.test(s.options[0].text))s.options[0].text="Todos os gestores de conta";}
+        if(/fuSet\('resp'/.test(oc)&&!s.getAttribute("data-lbl")){s.setAttribute("data-lbl","1");if(s.options[0]&&/todos|respons/i.test(s.options[0].text))s.options[0].text="Todos os responsáveis";}});
+    }}catch(e){}}
+  if(typeof rPnl==="function"){var _rvRPnl=rPnl;rPnl=function(){var r=_rvRPnl.apply(this,arguments);
+    if(typeof cTab!=="undefined"&&cTab==="pacotes"){try{renderPacotes();}catch(e){if(window.__scrErr)window.__scrErr(e,"pacotes");}try{if(typeof applyRoleGating==="function")applyRoleGating();}catch(e){}return r;}
+    try{rvFiltrosCoerentes();}catch(e){}
+    try{if(typeof cTab!=="undefined"&&cTab==="reunioes")rvStripCusto();}catch(e){}return r;};}
+
+  // menu + tabs
+  (function(){try{if(typeof TABS!=="undefined"&&!TABS.some(function(t){return t.id==="pacotes";}))TABS.push({id:"pacotes"});
+    if(typeof DEPT_GROUPS!=="undefined"){var g=DEPT_GROUPS.filter(function(x){return x.group==="Definições";})[0];if(g&&!g.items.some(function(it){return it.id==="pacotes";}))g.items.push({id:"pacotes",l:"Pacotes (componentes)",dept:"admin"});}
+    if(typeof TAB2DEPT!=="undefined")TAB2DEPT.pacotes="admin";
+    if(typeof rTabs==="function")rTabs();}catch(e){}})();
+  })();
+
   // ---------- arranque ----------
   async function boot(){
     hideSplash();
